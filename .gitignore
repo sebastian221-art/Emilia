@@ -1,0 +1,39 @@
+# ─── Credenciales y secretos (NUNCA subir) ───
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ─── Dependencias ───
+node_modules/
+
+# ─── Build / compilados ───
+dist/
+build/
+*.tsbuildinfo
+
+# ─── Logs ───
+*.log
+npm-debug.log*
+logs/
+
+# ─── Sistema operativo ───
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editores ───
+.vscode/
+.idea/
+*.swp
+*~
+
+# ─── Temporales / pruebas ───
+/tmp/
+probar_*.ts
+probar_*.mjs
+*.temp.ts
+
+# ─── ngrok ───
+ngrok.yml

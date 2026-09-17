@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ver agentes · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<link rel="stylesheet" href="/comun/lienzo.css" />
+<style>
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.controles { display: flex; gap: 8px; align-items: center; }
+.vista-toggle { display: flex; gap: 2px; background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 8px; padding: 2px; }
+.vista-toggle button { border: none; background: none; padding: 5px 12px; font-size: 12px; border-radius: 6px; color: var(--e-text-sec); }
+.vista-toggle button.on { background: var(--e-accent-bg); color: var(--e-accent); }
+.lienzo-cont { height: calc(100vh - 180px); }
+.ag-nodo { position: absolute; width: 190px; background: var(--e-surface); border: 1px solid var(--e-border-strong);
+  border-radius: 14px; padding: 14px; cursor: move; user-select: none; z-index: 2; transition: box-shadow .2s;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+.ag-nodo:hover { box-shadow: 0 4px 28px rgba(124,58,237,.35); border-color: var(--e-accent); }
+.ag-nodo.activo-estado { box-shadow: 0 0 24px rgba(124,58,237,.4); }
+.ag-cab { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.ag-ic { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  background: radial-gradient(circle at 35% 30%, #7c3aed, #4c1d95); box-shadow: 0 0 16px rgba(124,58,237,.5);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; }
+.ag-nom { font-family: var(--syne); font-size: 14px; font-weight: 600; }
+.ag-rol { font-size: 10px; color: var(--e-text-muted); }
+.ag-mision { font-size: 11px; color: var(--e-text-sec); margin: 6px 0; line-height: 1.4; max-height: 42px; overflow: hidden; }
+.ag-estado { position: absolute; top: 12px; right: 12px; font-size: 9px; padding: 2px 8px; border-radius: 8px;
+  display: flex; align-items: center; gap: 4px; }
+.punto { width: 6px; height: 6px; border-radius: 50%; }
+.st-activo { background: rgba(34,197,94,.15); color: #6ee7b7; } .st-activo .punto { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.st-pruebas { background: var(--e-warn-bg); color: var(--e-warn-tx); } .st-pruebas .punto { background: var(--e-warn-tx); }
+.st-pausado { background: rgba(180,140,255,.08); color: var(--e-text-muted); } .st-pausado .punto { background: var(--e-text-muted); }
+.ag-metas { font-size: 10px; color: var(--e-text-muted); display: flex; gap: 10px; margin-top: 4px; }
+.ag-abrir { font-size: 10px; color: var(--e-accent); margin-top: 6px; display: inline-block; cursor: pointer; }
+.hint-lienzo { position: absolute; top: 14px; left: 16px; font-size: 12px; color: var(--e-text-muted); z-index: 5; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.ag-card { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 12px; padding: 14px; cursor: pointer; position: relative; }
+.ag-card:hover { border-color: var(--e-accent); }
+.vacio { text-align: center; padding: 50px 20px; color: var(--e-text-muted); }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes" class="activo">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <div class="top">
+    <div>
+      <h1>Mis agentes</h1>
+      <p class="sub">Arrastrá agentes para acomodarlos. Rueda = zoom · arrastrar el fondo = mover. Tocá "abrir" para entrar.</p>
+    </div>
+    <div class="controles">
+      <div class="vista-toggle">
+        <button id="btnLienzo" class="on" onclick="setVista('lienzo')">✦ Lienzo</button>
+        <button id="btnGrilla" onclick="setVista('grilla')">▦ Grilla</button>
+      </div>
+      <button class="primario" onclick="location.href='/crear'">+ Nuevo agente</button>
+    </div>
+  </div>
+
+  <div id="vistaLienzo" class="lienzo-cont">
+    <div class="hint-lienzo" id="hintLienzo"></div>
+    <div class="mundo" id="mundo">
+      <svg id="svgLineas"></svg>
+      <div id="nodos"></div>
+    </div>
+    <div class="zoom-ctrl">
+      <button onclick="zoomOut()">−</button>
+      <span class="zoom-nivel" id="zoomNivel">100%</span>
+      <button onclick="zoomIn()">+</button>
+      <button onclick="centrar()" title="Centrar">⌂</button>
+    </div>
+  </div>
+  <div id="vistaGrilla" class="grid" style="display:none"></div>
+</main>
+
+<script>
+const ICO = { trabajo: "✦", administrador: "✧", companero: "☾" };
+let agentes = [], vista = "lienzo";
+const nuevoId = new URLSearchParams(location.search).get("nuevo");
+
+const cont = document.getElementById("vistaLienzo");
+const mundo = document.getElementById("mundo");
+
+// ── Zoom + paneo ──
+const cam = { escala: 1, x: 0, y: 0 };
+const Z_MIN = 0.3, Z_MAX = 2.5;
+function aplicarCamara() {
+  if (mundo) mundo.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.escala})`;
+  const n = document.getElementById("zoomNivel"); if (n) n.textContent = Math.round(cam.escala*100)+"%";
+}
+function aMundo(clientX, clientY) {
+  const r = cont.getBoundingClientRect();
+  return { x: (clientX - r.left - cam.x) / cam.escala, y: (clientY - r.top - cam.y) / cam.escala };
+}
+function zoomA(nueva, cx, cy) {
+  nueva = Math.min(Z_MAX, Math.max(Z_MIN, nueva));
+  cam.x = cx - (cx - cam.x) * (nueva / cam.escala);
+  cam.y = cy - (cy - cam.y) * (nueva / cam.escala);
+  cam.escala = nueva; aplicarCamara();
+}
+cont.addEventListener("wheel", (e)=>{ if(vista!=="lienzo")return; e.preventDefault(); const r=cont.getBoundingClientRect(); zoomA(cam.escala*(e.deltaY<0?1.12:0.89), e.clientX-r.left, e.clientY-r.top); }, {passive:false});
+function zoomIn(){ const r=cont.getBoundingClientRect(); zoomA(cam.escala*1.2, r.width/2, r.height/2); }
+function zoomOut(){ const r=cont.getBoundingClientRect(); zoomA(cam.escala*0.83, r.width/2, r.height/2); }
+function centrar(){ cam.escala=1; cam.x=0; cam.y=0; aplicarCamara(); }
+
+let paneando=false, panIni={x:0,y:0};
+cont.addEventListener("mousedown", (e)=>{
+  if (e.target.closest(".ag-nodo, .zoom-ctrl, button")) return;
+  paneando = true; cont.classList.add("paneando");
+  panIni = { x: e.clientX - cam.x, y: e.clientY - cam.y };
+});
+
+function estadoInfo(e) {
+  if (e === "activo") return { cls: "st-activo", txt: "activo" };
+  if (e === "pausado") return { cls: "st-pausado", txt: "en pausa" };
+  return { cls: "st-pruebas", txt: "en pruebas" };
+}
+
+function setVista(v) {
+  vista = v;
+  document.getElementById("btnLienzo").classList.toggle("on", v==="lienzo");
+  document.getElementById("btnGrilla").classList.toggle("on", v==="grilla");
+  document.getElementById("vistaLienzo").style.display = v==="lienzo" ? "block" : "none";
+  document.getElementById("vistaGrilla").style.display = v==="grilla" ? "grid" : "none";
+  if (v==="lienzo") renderLienzo(); else renderGrilla();
+}
+
+function renderLienzo() {
+  const c = document.getElementById("nodos");
+  const hint = document.getElementById("hintLienzo");
+  if (!agentes.length) { c.innerHTML=""; hint.textContent = "No hay agentes. Creá el primero."; return; }
+  hint.textContent = "";
+  c.innerHTML = agentes.map((a, i) => {
+    const est = estadoInfo(a.estado);
+    const x = a.pos_x ?? (30 + (i % 4) * 210);
+    const y = a.pos_y ?? (30 + Math.floor(i / 4) * 180);
+    a._x = x; a._y = y;
+    const mision = a.identidad?.mision || a.identidad?.personalidad || "Sin misión";
+    const nSkills = (a.skills?.items || []).length;
+    const nTools = (a.tools?.items || []).length;
+    return `<div class="ag-nodo ${a.estado==='activo'?'activo-estado':''}" id="nodo-${a.id}" style="left:${x}px;top:${y}px" onmousedown="empezarArrastre(event,'${a.id}')">
+      <span class="ag-estado ${est.cls}"><span class="punto"></span>${est.txt}</span>
+      <div class="ag-cab"><div class="ag-ic">${ICO[a.tipo]||ICO.trabajo}</div>
+        <div><div class="ag-nom">${a.nombre}</div><div class="ag-rol">${a.tipo}</div></div></div>
+      <div class="ag-mision">${mision.slice(0,80)}</div>
+      <div class="ag-metas"><span>◈ ${nSkills} skills</span><span>⚙ ${nTools} tools</span></div>
+      <span class="ag-abrir" onclick="event.stopPropagation();location.href='/agentes/${a.id}'">abrir espacio →</span>
+    </div>`;
+  }).join("");
+  renderLineas();
+}
+
+function renderLineas() {
+  const svg = document.getElementById("svgLineas");
+  svg.setAttribute("width", 6000); svg.setAttribute("height", 6000); svg.setAttribute("viewBox", "0 0 6000 6000");
+  const admin = agentes.find(a => a.tipo === "administrador");
+  if (!admin) { svg.innerHTML = ""; return; }
+  let lineas = "";
+  for (const a of agentes) {
+    if (a.tipo === "trabajo" && a._x != null && admin._x != null) {
+      const x1 = a._x+95, y1 = a._y+50, x2 = admin._x+95, y2 = admin._y+50;
+      lineas += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#b388ff" stroke-width="2" stroke-dasharray="5" opacity="0.6"/>`;
+    }
+  }
+  svg.innerHTML = lineas;
+}
+
+// ── Arrastrar nodos (agentes), con coordenadas del mundo ──
+let arrastrando = null, offset = {x:0,y:0};
+function empezarArrastre(e, id) {
+  if (e.target.classList.contains("ag-abrir")) return;
+  e.stopPropagation();
+  const a = agentes.find(x=>x.id===id);
+  const p = aMundo(e.clientX, e.clientY);
+  offset = { x: p.x - a._x, y: p.y - a._y };
+  arrastrando = id;
+}
+document.addEventListener("mousemove", e => {
+  if (arrastrando) {
+    const a = agentes.find(x=>x.id===arrastrando);
+    const p = aMundo(e.clientX, e.clientY);
+    a._x = Math.max(0, p.x - offset.x);
+    a._y = Math.max(0, p.y - offset.y);
+    const el = document.getElementById("nodo-"+arrastrando);
+    if (el) { el.style.left = a._x+"px"; el.style.top = a._y+"px"; }
+    renderLineas();
+  } else if (paneando) {
+    cam.x = e.clientX - panIni.x; cam.y = e.clientY - panIni.y; aplicarCamara();
+  }
+});
+document.addEventListener("mouseup", async () => {
+  if (arrastrando) {
+    const a = agentes.find(x=>x.id===arrastrando);
+    const id = arrastrando; arrastrando = null;
+    a.pos_x = a._x; a.pos_y = a._y;
+    fetch(`/api/agentes/${id}/posicion`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ x: a._x, y: a._y }) });
+  }
+  paneando = false; cont.classList.remove("paneando");
+});
+
+function renderGrilla() {
+  const c = document.getElementById("vistaGrilla");
+  if (!agentes.length) { c.innerHTML = `<div class="vacio" style="grid-column:1/-1">No hay agentes.</div>`; return; }
+  c.innerHTML = agentes.map(a => {
+    const est = estadoInfo(a.estado);
+    const mision = a.identidad?.mision || "Sin misión";
+    return `<div class="ag-card" onclick="location.href='/agentes/${a.id}'">
+      <span class="ag-estado ${est.cls}"><span class="punto"></span>${est.txt}</span>
+      <div class="ag-cab"><div class="ag-ic">${ICO[a.tipo]||ICO.trabajo}</div>
+        <div><div class="ag-nom">${a.nombre}</div><div class="ag-rol">${a.tipo}</div></div></div>
+      <div class="ag-mision">${mision.slice(0,80)}</div>
+    </div>`;
+  }).join("");
+}
+
+async function cargar() {
+  agentes = await (await fetch("/api/agentes")).json();
+  setVista("lienzo");
+  aplicarCamara();
+}
+cargar();
+</script>
+</body>
+</html>

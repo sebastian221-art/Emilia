@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Espacio del agente · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<link rel="stylesheet" href="/comun/lienzo.css" />
+<style>
+.hd { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.hd .ic { width: 42px; height: 42px; border-radius: 11px; background: var(--e-accent-bg); color: var(--e-accent);
+  display: flex; align-items: center; justify-content: center; font-size: 21px; flex-shrink: 0; }
+.hd h1 { font-size: 19px; margin: 0; }
+.hd .est { font-size: 12px; color: var(--e-text-sec); margin-top: 1px; }
+.hd .acciones { margin-left: auto; display: flex; gap: 8px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--e-border); margin-bottom: 16px; }
+.tab { font-size: 13px; padding: 9px 15px; cursor: pointer; color: var(--e-text-sec);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.activo { color: var(--e-accent); border-bottom-color: var(--e-accent); font-weight: 500; }
+.contenido { min-height: 300px; background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 18px; }
+/* Esqueleto */
+.grupo-tit { font-size: 11px; font-weight: 600; color: var(--e-text-muted); text-transform: uppercase;
+  letter-spacing: .04em; margin: 16px 0 8px; }
+.grupo-tit:first-child { margin-top: 0; }
+.piezas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.pieza { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 10px; padding: 12px 14px; }
+.pieza .nom { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 7px; }
+.pieza .val { font-size: 12px; color: var(--e-text-sec); margin-top: 5px; line-height: 1.4; }
+.pieza .badge { margin-left: auto; }
+.editar { font-size: 11px; color: var(--e-accent); cursor: pointer; margin-top: 8px; display: inline-block; }
+.placeholder { text-align: center; padding: 50px 20px; color: var(--e-text-muted); }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes" class="activo">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <a href="/agentes" style="font-size:13px;color:var(--e-text-sec);text-decoration:none">← volver a agentes</a>
+
+  <div class="hd" style="margin-top:12px">
+    <div class="ic" id="ag-ico">&#9679;</div>
+    <div>
+      <h1 id="ag-nombre">Cargando…</h1>
+      <div class="est" id="ag-est"></div>
+    </div>
+    <div class="acciones">
+      <button id="btn-estado" onclick="toggleEstado()">…</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <span class="tab activo" data-tab="chat" onclick="verTab('chat')">&#9993; Chat</span>
+    <span class="tab" data-tab="documentos" onclick="verTab('documentos')">&#9707; Documentos</span>
+    <span class="tab" data-tab="esqueleto" onclick="verTab('esqueleto')">&#9783; Esqueleto</span>
+    <span class="tab" data-tab="trazas" onclick="verTab('trazas')">&#9201; Trazas</span>
+  </div>
+
+  <div class="contenido" id="contenido"></div>
+</main>
+
+<div id="modal-ed" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center" onclick="if(event.target===this)cerrarEditor()"></div>
+
+<script src="/crear/piezas-1.js"></script>
+<script src="/crear/piezas-2.js"></script>
+<script>
+const PIEZAS_DEF = [...(typeof DEF_PIEZAS !== "undefined" ? DEF_PIEZAS : []), ...(typeof DEF_PIEZAS_2 !== "undefined" ? DEF_PIEZAS_2 : [])];
+const id = location.pathname.split("/").pop();
+let agente = null, tab = "chat";
+
+const ICO = { trabajo: "&#9679;", administrador: "&#9863;", companero: "&#9788;" };
+
+const GRUPOS = {
+  "Fundación": ["identidad", "cerebro"],
+  "Capacidades": ["skills", "tools", "memoria", "conocimiento"],
+  "Inteligencia": ["planeamiento", "descomposicion", "autocorreccion", "reflexion", "pensar_voz_alta", "subagentes", "escalamiento", "flujos"],
+  "Gobierno y operación": ["gobierno", "disparadores", "canales", "limites", "trazas"],
+};
+const NOMBRES = {
+  identidad:"Identidad y misión", cerebro:"Cerebro (modelo)", skills:"Skills", tools:"Tools",
+  memoria:"Memoria y RAG", conocimiento:"Base de conocimiento", planeamiento:"Planeamiento",
+  descomposicion:"Descomposición", autocorreccion:"Auto-corrección", reflexion:"Reflexión",
+  pensar_voz_alta:"Pensar en voz alta", subagentes:"Sub-agentes", escalamiento:"Escalamiento",
+  flujos:"Flujos de trabajo", gobierno:"Gobierno", disparadores:"Disparadores", canales:"Canales",
+  limites:"Límites y seguridad", trazas:"Trazas y verificación",
+};
+
+function resumenPieza(k, v) {
+  if (!v) return "—";
+  if (Array.isArray(v?.items)) return v.items.length ? v.items.join(", ") : "vacío";
+  if (typeof v === "object") {
+    if ("activo" in v) return v.activo ? "activado" : "desactivado";
+    if ("nombre" in v) return v.nombre || "—";
+    const vals = Object.entries(v).filter(([,x]) => x !== "" && x != null).slice(0,3).map(([kk,x]) => `${kk}: ${x}`);
+    return vals.length ? vals.join(" · ") : "sin configurar";
+  }
+  return String(v);
+}
+
+function verTab(t) {
+  tab = t;
+  document.querySelectorAll(".tab").forEach(el => el.classList.toggle("activo", el.dataset.tab === t));
+  if (t === "chat") { ultimoConteoMsgs = 0; iniciarRefrescoChat(); }
+  else detenerRefrescoChat();
+  if (t !== "esqueleto") piezasEnEsq = []; // se recalcula al volver a esqueleto
+  render();
+}
+
+function render() {
+  const c = document.getElementById("contenido");
+  if (!agente) { c.innerHTML = '<div class="placeholder">Cargando…</div>'; return; }
+
+  if (tab === "esqueleto") {
+    c.innerHTML = `
+      <p class="sub" style="margin-bottom:10px">El esqueleto de ${agente.nombre}. Arrastrá piezas nuevas desde la izquierda, movelas, y clic para editar. Los cambios se guardan al editar cada pieza.</p>
+      <div style="display:grid;grid-template-columns:190px 1fr;gap:12px;height:calc(100vh - 300px)">
+        <div class="izq-esq" id="paletaEsq" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto"></div>
+        <div class="lienzo-cont" id="lienzoEsq" style="height:100%">
+          <div class="mundo" id="mundoEsq">
+            <svg id="svgEsq"></svg>
+            <div class="central-esq" style="position:absolute;left:500px;top:350px;width:170px;background:var(--e-surface);border:2px solid var(--e-accent);border-radius:16px;padding:14px;z-index:3;box-shadow:0 0 40px rgba(124,58,237,.4);text-align:center">
+              <div style="width:44px;height:44px;border-radius:50%;margin:0 auto 8px;background:radial-gradient(circle at 35% 30%,#7c3aed,#4c1d95);box-shadow:0 0 20px rgba(124,58,237,.6);display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff">✦</div>
+              <div style="font-family:var(--syne);font-weight:600;font-size:14px">${agente.nombre}</div>
+              <div style="font-size:10px;color:var(--e-text-muted);margin-top:4px">${agente.tipo}</div>
+            </div>
+            <div id="piezasEsq"></div>
+          </div>
+          <div class="zoom-ctrl">
+            <button onclick="zoomEsqOut()">−</button>
+            <span class="zoom-nivel" id="zoomNivelEsq">100%</span>
+            <button onclick="zoomEsqIn()">+</button>
+            <button onclick="centrarEsq()" title="Centrar">⌂</button>
+          </div>
+        </div>
+      </div>`;
+    renderEsqueletoLienzo();
+    initZoomEsq();
+  }
+  else if (tab === "chat") {
+    c.innerHTML = `
+      <div id="chat-hist" style="display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:420px;overflow-y:auto;padding:4px"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="chat-input" placeholder="Escribile a ${agente.nombre}…" style="flex:1" onkeydown="if(event.key==='Enter')enviarChat()" />
+        <button class="primario" id="chat-btn" onclick="enviarChat()">Enviar</button>
+      </div>
+      <p style="font-size:11px;color:var(--e-text-muted);margin-top:6px" id="chat-nota"></p>`;
+    cargarChat();
+  }
+  else if (tab === "documentos") {
+    c.innerHTML = `
+      <p class="sub" style="margin-bottom:14px">Documentos y contexto que ${agente.nombre} tiene siempre presente (como un proyecto). Se usan automáticamente cuando trabaja.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <label class="primario" style="cursor:pointer;padding:8px 14px;border-radius:8px;font-size:13px;display:inline-block">
+          &#9707; Subir archivo
+          <input type="file" style="display:none" accept=".md,.txt,.csv,.json,.log" onchange="subirArchivo(this)" />
+        </label>
+        <button onclick="mostrarPegar()">&#9998; Pegar texto</button>
+      </div>
+      <div id="pegar-box" style="display:none;margin-bottom:14px">
+        <input id="pegar-nombre" placeholder="Nombre (ej. como_funcionan_envios.md)" style="margin-bottom:6px" />
+        <textarea id="pegar-cont" rows="5" placeholder="Pegá acá el contexto: cómo funciona tu negocio, notas, datos que el agente debe conocer…"></textarea>
+        <button class="primario" onclick="guardarPegado()" style="margin-top:6px">Guardar</button>
+      </div>
+      <div id="docs-lista"></div>`;
+    cargarDocs();
+  }
+  else if (tab === "trazas") {
+    c.innerHTML = `<div id="trazas-cont"><div class="placeholder">Cargando trazas…</div></div>`;
+    cargarTrazas();
+  }
+}
+
+async function cargarTrazas() {
+  const cont = document.getElementById("trazas-cont");
+  if (!cont) return;
+  const pasos = await (await fetch(`/api/agentes/${id}/pasos`)).json();
+  if (!pasos.length) {
+    cont.innerHTML = `<div class="placeholder"><p>Sin ejecuciones todavía.</p><p style="font-size:12px">Cuando le hables al agente, acá vas a ver cómo pensó y qué hizo, paso a paso.</p></div>`;
+    return;
+  }
+  const ICOP = { pensamiento: "🧠", tool: "🔧", verificacion: "✓", plan: "📋", error: "⚠️" };
+  cont.innerHTML = pasos.map(p =>
+    `<div style="padding:8px 12px;border-bottom:1px solid var(--e-border);font-size:13px">
+      <span style="font-weight:500">${ICOP[p.tipo]||"•"} ${p.tipo}</span>
+      <div style="color:var(--e-text-sec);margin-top:3px;white-space:pre-wrap">${(p.detalle||"").slice(0,500)}</div>
+    </div>`).join("");
+}
+
+async function cargarDocs() {
+  const cont = document.getElementById("docs-lista");
+  if (!cont) return;
+  const docs = await (await fetch(`/api/agentes/${id}/documentos`)).json();
+  cont.innerHTML = docs.length
+    ? docs.map(d => `<div class="pieza" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div><div class="nom">&#9707; ${d.nombre}</div><div class="val">${(d.tam_bytes/1024).toFixed(1)} KB · ${new Date(d.creado_en).toLocaleDateString()}</div></div>
+        <button onclick="borrarDoc('${d.id}')" style="font-size:11px;padding:3px 9px">quitar</button>
+      </div>`).join("")
+    : `<p style="color:var(--e-text-muted);font-size:13px">Sin documentos todavía. Subí un archivo o pegá texto arriba.</p>`;
+}
+
+function mostrarPegar() {
+  const b = document.getElementById("pegar-box");
+  b.style.display = b.style.display === "none" ? "block" : "none";
+}
+
+async function subirArchivo(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append("archivo", f);
+  const nota = document.getElementById("docs-lista");
+  nota.insertAdjacentHTML("afterbegin", `<p style="color:var(--e-text-muted);font-size:12px">Subiendo ${f.name}…</p>`);
+  await fetch(`/api/agentes/${id}/documentos`, { method: "POST", body: fd });
+  input.value = "";
+  cargarDocs();
+}
+
+async function guardarPegado() {
+  const nombre = document.getElementById("pegar-nombre").value || "nota.txt";
+  const contenido = document.getElementById("pegar-cont").value;
+  if (!contenido.trim()) return;
+  await fetch(`/api/agentes/${id}/documentos/texto`, {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ nombre, contenido })
+  });
+  document.getElementById("pegar-cont").value = "";
+  document.getElementById("pegar-nombre").value = "";
+  document.getElementById("pegar-box").style.display = "none";
+  cargarDocs();
+}
+
+async function borrarDoc(docId) {
+  await fetch(`/api/documentos/${docId}`, { method: "DELETE" });
+  cargarDocs();
+}
+
+// ── Editor de piezas del esqueleto ──
+let piezaEditando = null;
+let modoAvanzadoEd = false;
+
+// ── Lienzo del esqueleto (como crear agente, pero para un agente existente) ──
+const ICONOS_ESQ = { identidad:"◈", cerebro:"⬡", skills:"◇", tools:"⚙", memoria:"❋", conocimiento:"▤",
+  planeamiento:"→", descomposicion:"⑃", autocorreccion:"↻", reflexion:"◉", pensar_voz_alta:"✧",
+  subagentes:"⤳", escalamiento:"⤒", flujos:"→", gobierno:"⬟", disparadores:"⚡", canales:"📡", limites:"🔒", trazas:"⏱" };
+let piezasEnEsq = [];
+
+function piezaTieneDatos(k) {
+  const v = agente[k];
+  if (!v) return false;
+  if (Array.isArray(v.items)) return v.items.length > 0;
+  if ("activo" in v) return v.activo;
+  return Object.values(v).some(x => x !== "" && x != null && x !== false);
+}
+
+// ── Zoom + paneo del esqueleto ──
+const CENTRAL_ESQ_X = 500, CENTRAL_ESQ_Y = 350;
+const camEsq = { escala: 1, x: 0, y: 0 };
+function aplicarCamEsq() {
+  const m = document.getElementById("mundoEsq");
+  if (m) m.style.transform = `translate(${camEsq.x}px, ${camEsq.y}px) scale(${camEsq.escala})`;
+  const n = document.getElementById("zoomNivelEsq"); if (n) n.textContent = Math.round(camEsq.escala*100)+"%";
+}
+function aMundoEsq(clientX, clientY) {
+  const cont = document.getElementById("lienzoEsq"); const r = cont.getBoundingClientRect();
+  return { x: (clientX - r.left - camEsq.x)/camEsq.escala, y: (clientY - r.top - camEsq.y)/camEsq.escala };
+}
+function zoomEsqA(nueva, cx, cy) {
+  nueva = Math.min(2.5, Math.max(0.3, nueva));
+  camEsq.x = cx - (cx - camEsq.x)*(nueva/camEsq.escala);
+  camEsq.y = cy - (cy - camEsq.y)*(nueva/camEsq.escala);
+  camEsq.escala = nueva; aplicarCamEsq();
+}
+function zoomEsqIn(){ const r=document.getElementById("lienzoEsq").getBoundingClientRect(); zoomEsqA(camEsq.escala*1.2, r.width/2, r.height/2); }
+function zoomEsqOut(){ const r=document.getElementById("lienzoEsq").getBoundingClientRect(); zoomEsqA(camEsq.escala*0.83, r.width/2, r.height/2); }
+function centrarEsq(){ const r=document.getElementById("lienzoEsq").getBoundingClientRect(); camEsq.escala=1; camEsq.x=r.width/2-(CENTRAL_ESQ_X+85); camEsq.y=r.height/2-(CENTRAL_ESQ_Y+40); aplicarCamEsq(); }
+
+let _paneEsq=false, _panEsqIni={x:0,y:0}, _zoomEsqInit=false;
+function initZoomEsq() {
+  const cont = document.getElementById("lienzoEsq");
+  if (!cont) return;
+  centrarEsq();
+  if (_zoomEsqInit) return; _zoomEsqInit = true;
+  // Estos listeners se registran una sola vez; chequean que el lienzo exista.
+  document.addEventListener("wheel", (e) => {
+    const c = document.getElementById("lienzoEsq");
+    if (!c || tab !== "esqueleto") return;
+    const r = c.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+    e.preventDefault();
+    zoomEsqA(camEsq.escala*(e.deltaY<0?1.12:0.89), e.clientX-r.left, e.clientY-r.top);
+  }, { passive: false });
+  cont.addEventListener("mousedown", (e) => {
+    if (e.target.closest(".pieza-esq, .central-esq, .zoom-ctrl, button")) return;
+    _paneEsq = true; cont.classList.add("paneando");
+    _panEsqIni = { x: e.clientX - camEsq.x, y: e.clientY - camEsq.y };
+  });
+}
+
+function renderEsqueletoLienzo() {
+  const pal = document.getElementById("paletaEsq");
+  if (!piezasEnEsq.length) {
+    let i = 0;
+    for (const p of PIEZAS_DEF) {
+      if (p.k === "identidad" || piezaTieneDatos(p.k)) {
+        piezasEnEsq.push({ k: p.k, x: CENTRAL_ESQ_X-280, y: CENTRAL_ESQ_Y-120 + i*80 });
+        i++;
+      }
+    }
+  }
+  let grupo = "", ph = "";
+  for (const p of PIEZAS_DEF) {
+    if (piezasEnEsq.find(x=>x.k===p.k)) continue;
+    if (p.g !== grupo) { ph += `<h4 style="font-size:10px;color:var(--e-text-muted);text-transform:uppercase;margin:8px 0 2px">${p.g}</h4>`; grupo = p.g; }
+    ph += `<div class="pal-pieza" style="padding:7px 9px;border-radius:8px;font-size:12px;cursor:grab;border:1px solid var(--e-border);background:var(--e-surface);display:flex;gap:6px;align-items:center" draggable="true" ondragstart="arrastreEsq(event,'${p.k}')"><span style="color:var(--e-accent)">${ICONOS_ESQ[p.k]||"◈"}</span>${p.nom}</div>`;
+  }
+  pal.innerHTML = ph || '<p style="font-size:11px;color:var(--e-text-muted)">Todas las piezas ya están en el lienzo.</p>';
+  renderPiezasEsq();
+}
+
+function arrastreEsq(e,k){ e.dataTransfer.setData("k",k); }
+document.addEventListener("dragover", e => { if (document.getElementById("lienzoEsq")) e.preventDefault(); });
+document.addEventListener("drop", e => {
+  const cont = document.getElementById("lienzoEsq");
+  if (!cont || tab !== "esqueleto") return;
+  const k = e.dataTransfer.getData("k");
+  if (!k || piezasEnEsq.find(x=>x.k===k)) return;
+  const r = cont.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+  e.preventDefault();
+  const p = aMundoEsq(e.clientX, e.clientY);
+  piezasEnEsq.push({ k, x: p.x-75, y: p.y-25 });
+  renderEsqueletoLienzo();
+  abrirEditor(k);
+});
+
+function renderPiezasEsq() {
+  const cont = document.getElementById("piezasEsq");
+  if (!cont) return;
+  cont.innerHTML = piezasEnEsq.map(pz => {
+    const p = PIEZAS_DEF.find(x=>x.k===pz.k);
+    const nom = p ? p.nom : (NOMBRES[pz.k]||pz.k);
+    return `<div class="pieza-esq" id="pze-${pz.k}" style="position:absolute;left:${pz.x}px;top:${pz.y}px;width:150px;background:var(--e-surface);border:1px solid var(--e-border-strong);border-radius:10px;padding:9px 11px;cursor:move;z-index:2;box-shadow:0 2px 12px rgba(0,0,0,.3)"
+        onmousedown="moverEsqInicio(event,'${pz.k}')" onclick="if(!_movioEsq)abrirEditor('${pz.k}')">
+      ${pz.k==="identidad"?"":`<span onclick="event.stopPropagation();quitarEsq('${pz.k}')" style="position:absolute;top:4px;right:6px;color:var(--e-text-muted);cursor:pointer">✕</span>`}
+      <div style="font-size:12px;font-weight:500"><span style="color:var(--e-accent)">${ICONOS_ESQ[pz.k]||"◈"}</span> ${nom}</div>
+      <div style="font-size:10px;color:var(--e-text-sec);margin-top:3px">${resumenPieza(pz.k, agente[pz.k])}</div>
+    </div>`;
+  }).join("");
+  renderLineasEsq();
+}
+function renderLineasEsq() {
+  const svg = document.getElementById("svgEsq");
+  if (!svg) return;
+  svg.setAttribute("width", 6000); svg.setAttribute("height", 6000); svg.setAttribute("viewBox", "0 0 6000 6000");
+  const defs = `<defs><filter id="glowE"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  svg.innerHTML = defs + piezasEnEsq.map(pz => `<line x1="${pz.x+75}" y1="${pz.y+25}" x2="${CENTRAL_ESQ_X}" y2="${CENTRAL_ESQ_Y}" stroke="#b388ff" stroke-width="2" opacity="0.85" filter="url(#glowE)"/>`).join("");
+}
+let moviendoEsq=null, offEsq={x:0,y:0}, _movioEsq=false;
+function moverEsqInicio(e,k){ if(e.target.tagName==="SPAN")return; e.stopPropagation(); const pz=piezasEnEsq.find(x=>x.k===k); const p=aMundoEsq(e.clientX,e.clientY); offEsq={x:p.x-pz.x,y:p.y-pz.y}; moviendoEsq=k; _movioEsq=false; }
+document.addEventListener("mousemove", e=>{
+  if(moviendoEsq){
+    _movioEsq=true;
+    const pz=piezasEnEsq.find(x=>x.k===moviendoEsq); const p=aMundoEsq(e.clientX,e.clientY);
+    pz.x=Math.max(0,p.x-offEsq.x); pz.y=Math.max(0,p.y-offEsq.y);
+    const el=document.getElementById("pze-"+moviendoEsq); if(el){el.style.left=pz.x+"px";el.style.top=pz.y+"px";}
+    renderLineasEsq();
+  } else if(_paneEsq){
+    camEsq.x=e.clientX-_panEsqIni.x; camEsq.y=e.clientY-_panEsqIni.y; aplicarCamEsq();
+  }
+});
+document.addEventListener("mouseup", ()=>{ moviendoEsq=null; _paneEsq=false; const c=document.getElementById("lienzoEsq"); if(c)c.classList.remove("paneando"); setTimeout(()=>_movioEsq=false,50); });
+function quitarEsq(k){ piezasEnEsq=piezasEnEsq.filter(x=>x.k!==k); renderEsqueletoLienzo(); }
+
+function abrirEditor(k) {
+  if (k === "skills") { abrirGestorSkills(); return; }
+  if (k === "tools") { abrirGestorTools(); return; }
+  piezaEditando = PIEZAS_DEF.find(p => p.k === k);
+  if (!piezaEditando) { alert("Esta pieza no tiene editor definido."); return; }
+  modoAvanzadoEd = false;
+  renderEditor();
+}
+
+// Gestor de tools: muestra la biblioteca de tools con checkboxes.
+async function abrirGestorTools() {
+  const biblioteca = await (await fetch("/api/tools")).json();
+  const asignadas = (agente.tools && Array.isArray(agente.tools.ids)) ? agente.tools.ids : [];
+  const html = biblioteca.length
+    ? biblioteca.map(t => `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--e-border);cursor:pointer">
+        <input type="checkbox" class="tl-check" value="${t.id}" ${asignadas.includes(t.id)?"checked":""} style="width:auto;margin:3px 0 0">
+        <span><b style="font-size:13px">${t.nombre}</b> <span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-accent-bg);color:var(--e-accent)">${t.tipo}</span><br><span style="font-size:12px;color:var(--e-text-sec)">${(t.descripcion||"").slice(0,80)}</span></span>
+      </label>`).join("")
+    : `<p style="color:var(--e-text-muted);font-size:13px">No hay tools en la biblioteca. Creá algunas en la página Tools primero.</p>`;
+
+  document.getElementById("modal-ed").innerHTML = `
+    <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:460px;width:90%;max-height:80vh;overflow-y:auto">
+      <h3 style="margin:0 0 4px">Tools de ${agente.nombre}</h3>
+      <p class="sub">Elegí a qué conexiones puede acceder este agente.</p>
+      <div style="margin-top:10px">${html}</div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button onclick="cerrarEditor()">Cancelar</button>
+        <button class="primario" onclick="guardarToolsAsignadas()">Guardar</button>
+      </div>
+    </div>`;
+  document.getElementById("modal-ed").style.display = "flex";
+}
+
+async function guardarToolsAsignadas() {
+  const ids = [...document.querySelectorAll(".tl-check:checked")].map(c => c.value);
+  const resp = await fetch(`/api/agentes/${id}/tools`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ toolIds: ids }) });
+  if (!resp.ok) { const r = await resp.json(); alert("No se pudo guardar: " + (r.error||"error")); return; }
+  agente = await (await fetch(`/api/agentes/${id}`)).json();
+  cerrarEditor();
+  if (tab === "esqueleto") renderPiezasEsq(); else render();
+}
+
+// Gestor de skills: muestra la biblioteca completa con checkboxes.
+async function abrirGestorSkills() {
+  const biblioteca = await (await fetch("/api/skills")).json();
+  // Puede venir como {ids:[...]} (formato nuevo) o vacío — leemos robusto.
+  const asignadas = (agente.skills && Array.isArray(agente.skills.ids)) ? agente.skills.ids : [];
+  const html = biblioteca.length
+    ? biblioteca.map(s => `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--e-border);cursor:pointer">
+        <input type="checkbox" class="sk-check" value="${s.id}" ${asignadas.includes(s.id)?"checked":""} style="width:auto;margin:3px 0 0">
+        <span><b style="font-size:13px">${s.nombre}</b> <span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-warn-bg);color:var(--e-warn-tx)">${s.nivel_riesgo}</span><br><span style="font-size:12px;color:var(--e-text-sec)">${(s.descripcion||"").slice(0,80)}</span></span>
+      </label>`).join("")
+    : `<p style="color:var(--e-text-muted);font-size:13px">No hay skills en la biblioteca. Creá algunas en la página Skills primero.</p>`;
+
+  document.getElementById("modal-ed").innerHTML = `
+    <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:460px;width:90%;max-height:80vh;overflow-y:auto">
+      <h3 style="margin:0 0 4px">Skills de ${agente.nombre}</h3>
+      <p class="sub">Elegí qué habilidades de la biblioteca puede usar este agente.</p>
+      <div style="margin-top:10px">${html}</div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button onclick="cerrarEditor()">Cancelar</button>
+        <button class="primario" onclick="guardarSkillsAsignadas()">Guardar</button>
+      </div>
+    </div>`;
+  document.getElementById("modal-ed").style.display = "flex";
+}
+
+async function guardarSkillsAsignadas() {
+  const ids = [...document.querySelectorAll(".sk-check:checked")].map(c => c.value);
+  const resp = await fetch(`/api/agentes/${id}/skills`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ skillIds: ids }) });
+  const r = await resp.json();
+  if (!resp.ok) { alert("No se pudo guardar: " + (r.error || "error desconocido")); return; }
+  // recargar el agente completo para reflejar el cambio
+  agente = await (await fetch(`/api/agentes/${id}`)).json();
+  cerrarEditor();
+  if (tab === "esqueleto") renderPiezasEsq(); else render();
+}
+
+function campoEdHTML(c, val) {
+  const oc = `data-key="${c.key}" data-tipo="${c.t}"`;
+  const ayuda = c.ayuda ? `<p style="font-size:11px;color:var(--e-text-muted);margin:2px 0 0">${c.ayuda}</p>` : "";
+  if (c.t === "check")
+    return `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;cursor:pointer"><input type="checkbox" ${oc} style="width:auto;margin:2px 0 0" ${val?"checked":""}><span style="font-size:13px">${c.label}</span></label>${ayuda}`;
+  if (c.t === "textarea")
+    return `<label>${c.label}</label><textarea ${oc} rows="2" placeholder="${c.ph||""}">${val||""}</textarea>${ayuda}`;
+  if (c.t === "select")
+    return `<label>${c.label}</label><select ${oc}>${c.ops.map(o=>`<option value="${o[0]}" ${val===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select>${ayuda}`;
+  return `<label>${c.label}</label><input ${oc} type="${c.t}" placeholder="${c.ph||""}" value="${val??""}" />${ayuda}`;
+}
+
+function renderEditor() {
+  const p = piezaEditando;
+  const actual = agente[p.k] || {};
+  let cuerpo = "";
+
+  if (p.lista) {
+    const items = actual.items || [];
+    cuerpo = `<p class="sub">${p.ayudaLista||""}</p>
+      <div id="ed-items">${items.map((it,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:var(--e-surface-1);border-radius:8px;margin-bottom:5px"><span style="font-size:13px">${it}</span><button onclick="edQuitarItem(${i})" style="font-size:11px;padding:2px 8px">quitar</button></div>`).join("") || '<p style="font-size:12px;color:var(--e-text-muted)">Nada todavía.</p>'}</div>
+      <div style="display:flex;gap:6px;margin-top:8px"><input id="ed-nuevo" placeholder="agregar…" /><button onclick="edAgregarItem()">+</button></div>`;
+  } else {
+    const simples = p.campos.filter(c=>!c.avanzado);
+    const avanzados = p.campos.filter(c=>c.avanzado);
+    simples.forEach(c => cuerpo += campoEdHTML(c, actual[c.key]));
+    if (avanzados.length) {
+      if (modoAvanzadoEd) avanzados.forEach(c => cuerpo += campoEdHTML(c, actual[c.key]));
+      else cuerpo += `<p style="font-size:12px;color:var(--e-text-muted);margin-top:12px">+ ${avanzados.length} opción(es) avanzada(s)</p>`;
+    }
+  }
+
+  document.getElementById("modal-ed").innerHTML = `
+    <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:460px;width:90%;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <h3 style="margin:0">${p.nom}</h3>
+        <label style="font-size:11px;color:var(--e-text-sec);display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" style="width:auto;margin:0" ${modoAvanzadoEd?"checked":""} onchange="modoAvanzadoEd=this.checked;renderEditor()"> avanzado</label>
+      </div>
+      <p class="sub">${p.desc}</p>
+      <div style="margin-top:10px">${cuerpo}</div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button onclick="cerrarEditor()">Cancelar</button>
+        <button class="primario" onclick="guardarPieza()">Guardar</button>
+      </div>
+    </div>`;
+  document.getElementById("modal-ed").style.display = "flex";
+}
+
+let itemsTmp = null;
+function edAgregarItem() {
+  const inp = document.getElementById("ed-nuevo");
+  if (!inp.value.trim()) return;
+  if (!itemsTmp) itemsTmp = [...(agente[piezaEditando.k]?.items || [])];
+  itemsTmp.push(inp.value.trim());
+  agente[piezaEditando.k] = { ...(agente[piezaEditando.k]||{}), items: itemsTmp };
+  renderEditor();
+}
+function edQuitarItem(i) {
+  itemsTmp = [...(agente[piezaEditando.k]?.items || [])];
+  itemsTmp.splice(i,1);
+  agente[piezaEditando.k] = { ...(agente[piezaEditando.k]||{}), items: itemsTmp };
+  renderEditor();
+}
+
+async function guardarPieza() {
+  const p = piezaEditando;
+  let valor;
+  if (p.lista) {
+    valor = agente[p.k] || { items: [], _extra: {} };
+  } else {
+    valor = {};
+    document.querySelectorAll("#modal-ed [data-key]").forEach(el => {
+      const key = el.dataset.key, tipo = el.dataset.tipo;
+      valor[key] = tipo === "check" ? el.checked : (tipo === "number" ? Number(el.value)||null : el.value);
+    });
+    // conservar campos avanzados que no estaban visibles
+    valor = { ...(agente[p.k]||{}), ...valor };
+  }
+  await fetch(`/api/agentes/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ [p.k]: valor }) });
+  agente[p.k] = valor;
+  itemsTmp = null;
+  cerrarEditor();
+  // Si estamos en el lienzo del esqueleto, refrescar solo las piezas (sin
+  // resetear posiciones). Si no, render normal.
+  if (tab === "esqueleto") renderPiezasEsq();
+  else render();
+}
+
+function cerrarEditor() {
+  itemsTmp = null;
+  document.getElementById("modal-ed").style.display = "none";
+}
+
+function toggleEstado() {
+  if (!agente) return;
+  const nuevo = agente.estado === "activo" ? "pausado" : "activo";
+  fetch(`/api/agentes/${id}`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ estado: nuevo }) })
+    .then(r => r.json()).then(() => { agente.estado = nuevo; pintarCabecera(); });
+}
+
+function pintarCabecera() {
+  document.getElementById("ag-ico").innerHTML = ICO[agente.tipo] || ICO.trabajo;
+  document.getElementById("ag-nombre").textContent = agente.nombre;
+  document.getElementById("ag-est").textContent = `${agente.tipo} · ${agente.estado}`;
+  document.getElementById("btn-estado").textContent = agente.estado === "activo" ? "Pausar" : "Activar";
+}
+
+function burbuja(rol, texto, viaWa = false) {
+  const esUsuario = rol === "usuario";
+  const esPensamiento = rol === "pensamiento";
+  if (esPensamiento)
+    return `<div style="align-self:flex-start;font-size:11px;color:var(--e-text-muted);font-style:italic;background:var(--e-accent-bg);padding:6px 10px;border-radius:10px;max-width:85%">🧠 ${texto}</div>`;
+  const wa = viaWa ? `<span style="font-size:9px;color:#25D366;margin-left:6px">● WhatsApp</span>` : "";
+  return `<div style="align-self:${esUsuario?"flex-end":"flex-start"};max-width:80%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;background:${esUsuario?"var(--e-accent-bg)":"var(--e-surface)"};color:${esUsuario?"var(--e-accent)":"var(--e-text)"};border:${esUsuario?"none":"1px solid var(--e-border)"}">${texto}${wa}</div>`;
+}
+
+let ultimoConteoMsgs = 0;
+let intervaloChat = null;
+
+async function cargarChat(scrollAlFondo = true) {
+  const hist = document.getElementById("chat-hist");
+  if (!hist) return;
+  const msgs = await (await fetch(`/api/agentes/${id}/mensajes`)).json();
+
+  // Solo re-renderizamos si hay mensajes nuevos (evita parpadeo).
+  if (msgs.length === ultimoConteoMsgs && !scrollAlFondo) return;
+  const habiaNuevos = msgs.length > ultimoConteoMsgs;
+  ultimoConteoMsgs = msgs.length;
+
+  // Limpiamos el marcador [WhatsApp de ...] para que se vea como conversación normal.
+  hist.innerHTML = msgs.length ? msgs.map(m => {
+    const texto = m.contenido.replace(/^\[WhatsApp de [\d+]+\]\s*/, "");
+    const viaWa = m.contenido.startsWith("[WhatsApp");
+    return burbuja(m.rol, texto, viaWa);
+  }).join("")
+    : `<p style="color:var(--e-text-muted);text-align:center;font-size:13px;padding:20px">Todavía no hablaste con ${agente.nombre}. Escribile abajo.</p>`;
+
+  // Auto-scroll al fondo solo si corresponde (al abrir, o si llegaron nuevos).
+  if (scrollAlFondo || habiaNuevos) hist.scrollTop = hist.scrollHeight;
+}
+
+// Refresco automático cada 3s mientras estás en el chat — así ves los
+// mensajes de WhatsApp llegar en tiempo real. Se detiene al salir del chat.
+function iniciarRefrescoChat() {
+  detenerRefrescoChat();
+  intervaloChat = setInterval(() => {
+    const inp = document.getElementById("chat-input");
+    // No refrescar si estás escribiendo algo (para no molestar).
+    if (tab === "chat" && (!inp || !inp.value.trim())) cargarChat(false);
+  }, 3000);
+}
+function detenerRefrescoChat() {
+  if (intervaloChat) { clearInterval(intervaloChat); intervaloChat = null; }
+}
+
+async function enviarChat() {
+  const inp = document.getElementById("chat-input");
+  const btn = document.getElementById("chat-btn");
+  const nota = document.getElementById("chat-nota");
+  const hist = document.getElementById("chat-hist");
+  const texto = inp.value.trim();
+  if (!texto) return;
+
+  if (agente.estado !== "activo") {
+    nota.textContent = "El agente está en pausa/pruebas. Activalo (botón arriba) para que responda.";
+    return;
+  }
+
+  inp.value = ""; btn.disabled = true; nota.textContent = "";
+  hist.innerHTML += burbuja("usuario", texto);
+  hist.innerHTML += `<div id="pensando" style="align-self:flex-start;font-size:12px;color:var(--e-text-muted);padding:6px">${agente.nombre} está pensando…</div>`;
+  hist.scrollTop = hist.scrollHeight;
+
+  try {
+    const r = await (await fetch(`/api/agentes/${id}/chat`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ mensaje: texto }) })).json();
+    document.getElementById("pensando")?.remove();
+    if (r.respuesta) hist.innerHTML += burbuja("agente", r.respuesta);
+    if (!r.ok) nota.textContent = "La respuesta tuvo un problema — revisá la pestaña Trazas.";
+    hist.scrollTop = hist.scrollHeight;
+  } catch (e) {
+    document.getElementById("pensando")?.remove();
+    nota.textContent = "Error: " + e.message;
+  }
+  btn.disabled = false;
+}
+
+async function cargar() {
+  try {
+    const resp = await fetch(`/api/agentes/${id}`);
+    if (!resp.ok) throw new Error("no encontrado");
+    agente = await resp.json();
+    pintarCabecera();
+    render();
+  } catch (e) {
+    document.getElementById("contenido").innerHTML = `<div class="placeholder">No se pudo cargar el agente: ${e.message}</div>`;
+  }
+}
+cargar().then(() => { if (tab === "chat") iniciarRefrescoChat(); });
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

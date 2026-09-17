@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tools · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<link rel="stylesheet" href="/comun/lienzo.css" />
+<style>
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; height: calc(100vh - 170px); }
+.izq { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+.izq h4 { font-size: 10px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 3px; }
+.pal-pieza { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: grab; border: 1px solid var(--e-border);
+  display: flex; align-items: center; gap: 7px; user-select: none; background: var(--e-surface); }
+.pal-pieza:hover { border-color: var(--e-accent); }
+.pal-pieza.usada { opacity: .4; }
+.pal-ic { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; background: var(--e-accent-bg); color: var(--e-accent); }
+.tl-lista { border-top: 1px solid var(--e-border); margin-top: 10px; padding-top: 8px; }
+.tl-item { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; }
+.tl-item:hover { background: var(--e-surface); }
+.tl-item.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
+.tl-estado { font-size: 9px; padding: 1px 6px; border-radius: 5px; margin-left: 4px; }
+.e-ok { background: rgba(34,197,94,.15); color: #6ee7b7; }
+.e-err { background: rgba(214,69,80,.15); color: #ff9090; }
+.e-sin { background: rgba(180,140,255,.08); color: var(--e-text-muted); }
+.lienzo-cont { height: 100%; }
+.central { position: absolute; left: 500px; top: 350px; width: 200px;
+  background: var(--e-surface); border: 2px solid var(--e-accent); border-radius: 16px; padding: 16px; z-index: 3;
+  box-shadow: 0 0 40px rgba(124,58,237,.4); text-align: center; }
+.central .av { width: 46px; height: 46px; border-radius: 12px; margin: 0 auto 8px;
+  background: radial-gradient(circle at 35% 30%, #7c3aed, #4c1d95); box-shadow: 0 0 20px rgba(124,58,237,.6);
+  display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; }
+.central input { text-align: center; font-family: var(--syne); font-weight: 600; background: transparent; border: none; border-bottom: 1px solid var(--e-border); border-radius: 0; }
+.central .btn-analizar { margin-top: 10px; width: 100%; font-size: 11px; }
+.sec-nodo { position: absolute; width: 150px; background: var(--e-surface); border: 1px solid var(--e-border-strong);
+  border-radius: 10px; padding: 9px 11px; cursor: move; user-select: none; z-index: 2; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
+.sec-nodo:hover { border-color: var(--e-accent); }
+.sec-nodo .sn-nom { font-size: 12px; font-weight: 500; }
+.sec-nodo .sn-sub { font-size: 10px; color: var(--e-text-sec); margin-top: 3px; }
+.sec-nodo .sn-x { position: absolute; top: 4px; right: 6px; color: var(--e-text-muted); cursor: pointer; font-size: 12px; }
+.sec-nodo .sn-x:hover { color: #ff8080; }
+.oblig { border-color: var(--e-accent); }
+.hint { position: absolute; top: 14px; left: 16px; font-size: 12px; color: var(--e-text-muted); z-index: 5; }
+.analisis-box { position: absolute; bottom: 14px; left: 16px; right: 70px; max-height: 40%; overflow-y: auto;
+  background: var(--e-surface); border: 1px solid var(--e-accent); border-radius: 12px; padding: 14px; z-index: 6; }
+.cap { font-size: 12px; padding: 3px 0; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools" class="activo">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <div class="top">
+    <div>
+      <h1>Tools / conexiones</h1>
+      <p class="sub">Arrastrá secciones a la conexión. Rueda = zoom · arrastrar el fondo = mover. Las credenciales nunca se guardan en claro.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="nuevaTool()">+ Nueva</button>
+      <button class="primario" onclick="guardarTool()">Guardar</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="izq">
+      <h4>Secciones</h4>
+      <div id="paleta"></div>
+      <div class="tl-lista">
+        <h4>Biblioteca</h4>
+        <div id="biblio"></div>
+      </div>
+    </div>
+    <div class="lienzo-cont" id="lienzoCont">
+      <div class="hint">Arrastrá secciones hacia la conexión →</div>
+      <div class="mundo" id="mundo">
+        <svg id="svgCon"></svg>
+        <div class="central">
+          <div class="av">⚙</div>
+          <input id="nombreTool" placeholder="api_conexion" oninput="estado.identidad.nombre=this.value" />
+          <div style="font-size:10px;color:var(--e-text-muted);margin-top:6px" id="estadoTool">sin probar</div>
+          <button class="btn-analizar" onclick="analizar()">🔍 Explorar alcance</button>
+        </div>
+        <div id="secConectadas"></div>
+      </div>
+      <div id="analisisBox"></div>
+      <div class="zoom-ctrl">
+        <button onclick="zoomOut()">−</button>
+        <span class="zoom-nivel" id="zoomNivel">100%</span>
+        <button onclick="zoomIn()">+</button>
+        <button onclick="centrar()" title="Centrar">⌂</button>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="modal-cfg" style="display:none;position:fixed;inset:0;background:rgba(8,6,13,.6);z-index:50;align-items:center;justify-content:center" onclick="if(event.target===this)cerrarCfg()"></div>
+<script src="/tools/def-tool.js"></script>
+<script src="/tools/tools.js"></script>
+</body>
+</html>

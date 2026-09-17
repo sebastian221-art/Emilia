@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aprobaciones · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<style>
+.aprob { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.aprob h3 { margin: 0 0 4px; font-size: 15px; }
+.aprob .det { font-size: 13px; color: var(--e-text-sec); margin: 4px 0 12px; }
+.aprob .fecha { font-size: 11px; color: var(--e-text-muted); }
+.vacio { text-align: center; padding: 50px; color: var(--e-text-muted); }
+.acciones { display: flex; gap: 8px; }
+.btn-si { background: #eaf3de; color: #3b6d11; border-color: #cde3b0; }
+.btn-no { background: #fcebeb; color: #7a1f1f; border-color: #f0caca; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/aprobaciones" class="activo">Aprobaciones</a>
+</nav>
+<main>
+  <h1>Aprobaciones pendientes</h1>
+  <p class="sub">Cuando un flujo o una acción necesita tu OK, aparece acá. Se refresca solo.</p>
+  <div id="lista" style="margin-top:16px"></div>
+</main>
+<script>
+async function cargar() {
+  const aprobs = await (await fetch("/api/aprobaciones")).json();
+  const cont = document.getElementById("lista");
+  if (!aprobs.length) {
+    cont.innerHTML = `<div class="vacio">No hay aprobaciones pendientes.</div>`;
+    return;
+  }
+  cont.innerHTML = aprobs.map(a => `
+    <div class="aprob">
+      <h3>✋ ${a.titulo}</h3>
+      <div class="det">${a.detalle || ""}</div>
+      <div class="acciones">
+        <button class="btn-si" onclick="resolver('${a.id}', true)">Aprobar</button>
+        <button class="btn-no" onclick="resolver('${a.id}', false)">Rechazar</button>
+      </div>
+      <div class="fecha" style="margin-top:8px">Pedido: ${new Date(a.creado_en).toLocaleString()}</div>
+    </div>`).join("");
+}
+async function resolver(id, aprobada) {
+  await fetch(`/api/aprobaciones/${id}/resolver`, {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ aprobada })
+  });
+  cargar();
+}
+cargar();
+setInterval(cargar, 4000); // refresco automático
+</script>
+</body>
+</html>
