@@ -249,12 +249,14 @@ const ICONOS_ESQ = { identidad:"◈", cerebro:"⬡", skills:"◇", tools:"⚙", 
   subagentes:"⤳", escalamiento:"⤒", flujos:"→", gobierno:"⬟", disparadores:"⚡", canales:"📡", limites:"🔒", trazas:"⏱" };
 let piezasEnEsq = [];
 
+const ESENCIALES_ESQ = ["identidad", "cerebro", "skills", "tools", "canales"];
 function piezaTieneDatos(k) {
+  if (ESENCIALES_ESQ.includes(k)) return true;
   const v = agente[k];
   if (!v) return false;
   if (Array.isArray(v.items)) return v.items.length > 0;
-  if ("activo" in v) return v.activo;
-  return Object.values(v).some(x => x !== "" && x != null && x !== false);
+  const claves = Object.keys(v).filter(kk => kk !== "activo" && kk !== "_extra");
+  return claves.some(kk => v[kk] !== "" && v[kk] != null && v[kk] !== false);
 }
 
 // ── Zoom + paneo del esqueleto ──

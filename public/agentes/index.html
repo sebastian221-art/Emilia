@@ -89,7 +89,6 @@ const nuevoId = new URLSearchParams(location.search).get("nuevo");
 const cont = document.getElementById("vistaLienzo");
 const mundo = document.getElementById("mundo");
 
-// ── Zoom + paneo ──
 const cam = { escala: 1, x: 0, y: 0 };
 const Z_MIN = 0.3, Z_MAX = 2.5;
 function aplicarCamara() {
@@ -140,8 +139,9 @@ function renderLienzo() {
   hint.textContent = "";
   c.innerHTML = agentes.map((a, i) => {
     const est = estadoInfo(a.estado);
-    const x = a.pos_x ?? (30 + (i % 4) * 210);
-    const y = a.pos_y ?? (30 + Math.floor(i / 4) * 180);
+    // Posiciones iniciales bien separadas para que NO se encimen (nodos de 190x~140).
+    const x = a.pos_x ?? (40 + (i % 3) * 260);
+    const y = a.pos_y ?? (40 + Math.floor(i / 3) * 210);
     a._x = x; a._y = y;
     const mision = a.identidad?.mision || a.identidad?.personalidad || "Sin misión";
     const nSkills = (a.skills?.items || []).length;
@@ -173,7 +173,6 @@ function renderLineas() {
   svg.innerHTML = lineas;
 }
 
-// ── Arrastrar nodos (agentes), con coordenadas del mundo ──
 let arrastrando = null, offset = {x:0,y:0};
 function empezarArrastre(e, id) {
   if (e.target.classList.contains("ag-abrir")) return;
