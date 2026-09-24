@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listarAgentes, obtenerAgente, actualizarAgente, asignarSkills, skillsDeAgente, asignarTools, toolsDeAgente } from "../dominio/agentes.js";
+import { listarAgentes, obtenerAgente, actualizarAgente, asignarSkills, skillsDeAgente, asignarTools, toolsDeAgente,borrarAgente } from "../dominio/agentes.js";
 
 export const rutasAgentes = Router();
 
@@ -56,7 +56,9 @@ rutasAgentes.get("/api/agentes/:id", async (req, res, next) => {
     res.json(a);
   } catch (e) { next(e); }
 });
-
+rutasAgentes.delete("/api/agentes/:id", async (req, res, next) => {
+  try { await borrarAgente(req.params.id); res.json({ ok: true }); } catch (e) { next(e); }
+});
 // Editar un agente (cambiar estado, piezas, etc.).
 rutasAgentes.patch("/api/agentes/:id", async (req, res, next) => {
   try {

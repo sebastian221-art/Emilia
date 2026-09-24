@@ -107,3 +107,6 @@ export async function toolsDeAgente(agenteId: string): Promise<any[]> {
   if (!ids.length) return [];
   return query(`SELECT * FROM tools WHERE id = ANY($1::uuid[])`, [ids]);
 }
+export async function borrarAgente(id: string): Promise<void> {
+  await query(`DELETE FROM agentes WHERE id = $1`, [id]);
+}

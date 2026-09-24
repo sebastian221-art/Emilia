@@ -97,7 +97,7 @@ function renderPiezas() {
     const resumen = resumenPieza(c.k);
     return `<div class="pieza-nodo" id="pz-${c.k}" style="left:${c.x}px;top:${c.y}px"
         onmousedown="empezarMover(event,'${c.k}')" onclick="if(!_movio)abrirCfg('${c.k}')">
-      <span class="pn-x" onclick="event.stopPropagation();quitar('${c.k}')">✕</span>
+      ${c.k==="identidad"?"":`<span class="pn-x" onclick="event.stopPropagation();quitar('${c.k}')">✕</span>`}
       <div class="pn-nom"><span style="color:var(--e-accent)">${ICONOS[p.ico]||"◈"}</span> ${p.nom}</div>
       <div class="pn-sub">${resumen}</div>
     </div>`;
@@ -143,7 +143,7 @@ document.addEventListener("mousemove", e => {
 });
 document.addEventListener("mouseup", ()=>{ moviendo=null; paneando=false; cont.classList.remove("paneando"); setTimeout(()=>_movio=false,50); });
 
-function quitar(k) { conectadas = conectadas.filter(c=>c.k!==k); renderPiezas(); renderPaleta(); }
+function quitar(k) { if (k==="identidad") return; conectadas = conectadas.filter(c=>c.k!==k); renderPiezas(); renderPaleta(); }
 
 function abrirCfg(k) { cfgActiva = PIEZAS.find(p=>p.k===k); modoAvz = false; renderCfg(); }
 function campoHTML(pieza, c, val) {
@@ -199,6 +199,8 @@ async function crearAgente() {
   } catch(e) { alert("Error: "+e.message); }
 }
 
+// Identidad arranca ya puesta en el lienzo (obligatoria, no se puede quitar).
+conectadas.push({ k: "identidad", x: CENTRAL_X - 270, y: CENTRAL_Y - 30 });
 renderPaleta();
 renderPiezas();
 centrar();

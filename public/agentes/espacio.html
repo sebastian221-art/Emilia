@@ -11,7 +11,7 @@
 .hd .ic { width: 42px; height: 42px; border-radius: 11px; background: var(--e-accent-bg); color: var(--e-accent);
   display: flex; align-items: center; justify-content: center; font-size: 21px; flex-shrink: 0; }
 .hd h1 { font-size: 19px; margin: 0; }
-.hd .est { font-size: 12px; color: var(--e-text-sec); margin-top: 1px; }
+.hd .est { font-size: 12px; color: var(--e-text-sec); margin-top: 4px; }
 .hd .acciones { margin-left: auto; display: flex; gap: 8px; }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--e-border); margin-bottom: 16px; }
 .tab { font-size: 13px; padding: 9px 15px; cursor: pointer; color: var(--e-text-sec);
@@ -52,6 +52,7 @@
     </div>
     <div class="acciones">
       <button id="btn-estado" onclick="toggleEstado()">…</button>
+      <button onclick="borrarAgente()" style="color:#ff8080">Borrar</button>
     </div>
   </div>
 
@@ -251,11 +252,14 @@ let piezasEnEsq = [];
 
 const ESENCIALES_ESQ = ["identidad", "cerebro", "skills", "tools", "canales"];
 function piezaTieneDatos(k) {
-  if (ESENCIALES_ESQ.includes(k)) return true;
+  if (k === "identidad") return true;   // identidad siempre
   const v = agente[k];
   if (!v) return false;
-  if (Array.isArray(v.items)) return v.items.length > 0;
-  const claves = Object.keys(v).filter(kk => kk !== "activo" && kk !== "_extra");
+  if (Array.isArray(v.items)) return v.items.length > 0;  // skills/tools/listas: solo si tienen algo
+  // Piezas de config: solo si el usuario puso datos reales (no los defaults).
+  // Ignoramos valores por defecto típicos: activo, curaduria, modo, esfuerzo, turnos, proveedor, modelo.
+  const DEFAULTS = ["activo", "_extra", "curaduria", "modo", "esfuerzo", "turnos", "proveedor", "modelo_rapido", "estrategia", "rag", "confirmar", "rechaza_inventado", "verifica", "hereda", "ve_padre", "permitido"];
+  const claves = Object.keys(v).filter(kk => !DEFAULTS.includes(kk));
   return claves.some(kk => v[kk] !== "" && v[kk] != null && v[kk] !== false);
 }
 
@@ -550,6 +554,14 @@ function cerrarEditor() {
   document.getElementById("modal-ed").style.display = "none";
 }
 
+async function borrarAgente() {
+  if (!agente) return;
+  if (!confirm(`¿Borrar el agente "${agente.nombre}"? Esta acción no se puede deshacer.`)) return;
+  const r = await fetch(`/api/agentes/${id}`, { method: "DELETE" });
+  if (r.ok) { window.location.href = "/agentes"; }
+  else { alert("No se pudo borrar el agente."); }
+}
+
 function toggleEstado() {
   if (!agente) return;
   const nuevo = agente.estado === "activo" ? "pausado" : "activo";
@@ -658,20 +670,3 @@ cargar().then(() => { if (tab === "chat") iniciarRefrescoChat(); });
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
