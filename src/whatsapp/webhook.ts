@@ -1,9 +1,31 @@
+// ARCHIVO: src/whatsapp/webhook.ts
+// ─────────────────────────────────────────────────────────────────────────────
+//  CANAL WHATSAPP — ENTRADA (Fase 3: honra canales y gobierno.aprobar_por_whatsapp)
+//  - Verifica firma HMAC.
+//  - Procesa TODOS los mensajes del batch (Meta puede mandar varios).
+//  - Dedup persistente en la tabla whatsapp_vistos.
+//  - Cada número tiene su conversación; los mensajes de un mismo número se
+//    procesan en orden (cola por conversación).
+//  - Si el que escribe es el jefe (WHATSAPP_NUMERO_JEFE) y hay una aprobación
+//    pendiente en su conversación, "ok"/"no" la resuelve y reanuda.
+//  - La respuesta final del agente se entrega por el canal (entrega.ts). El
+//    agente ya NO tiene que "usar su tool de WhatsApp" para contestar.
+//  .env: WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_NUMERO_JEFE,
+//        WHATSAPP_SOLO_JEFE=true (opcional: ignora a cualquier otro número).
+// ─────────────────────────────────────────────────────────────────────────────
+
 import crypto from "node:crypto";
 import type { Request, Response } from "express";
 import { query } from "../db/cliente.js";
-import { correrTarea } from "../motor/loop.js";
-import { ejecutarTool } from "../motor/ejecutor.js";
-import { guardarMensaje } from "../dominio/chat.js";
+import { tieneCanal, obtenerAgente } from "../dominio/agentes.js";
+import { correrTarea, reanudarEjecucion } from "../motor/loop.js";
+import { reanudarFlujo } from "../motor/flujo.js";
+import { encolar } from "../motor/cola.js";
+import { entregarRespuesta } from "../motor/entrega.js";
+import { obtenerOCrearConversacion, guardarMensajeEn } from "../dominio/conversaciones.js";
+import { aprobacionPendienteDeConversacion, resolverAprobacion } from "../dominio/aprobaciones.js";
+import { enviarTextoWhatsapp, descargarMedia } from "./enviar.js";
+import { guardarArchivo } from "../dominio/archivos.js";
 
 /** Verificación GET que Meta hace al configurar el webhook. */
 export function verificarWebhook(req: Request, res: Response) {
@@ -30,29 +52,26 @@ function firmaValida(rawBody: Buffer, header: string | undefined): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Dedup de mensajes (Meta reintenta la entrega).
-const vistos = new Map<string, true>();
-function esNuevo(id: string | undefined): boolean {
-  if (!id) return true;
-  if (vistos.has(id)) return false;
-  vistos.set(id, true);
-  if (vistos.size > 5000) vistos.delete(vistos.keys().next().value!);
-  return true;
+/** Dedup persistente: true si es la primera vez que vemos este wa_id. */
+async function esNuevo(waId: string | undefined): Promise<boolean> {
+  if (!waId) return true;
+  const filas = await query(`INSERT INTO whatsapp_vistos (wa_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING wa_id`, [waId]);
+  return filas.length > 0;
 }
 
-/** Busca el agente que responde WhatsApp: el que tenga la skill de whatsapp, o un administrador activo. */
-async function agenteHub(): Promise<any | undefined> {
-  // Preferimos un agente activo que tenga asignada una skill de whatsapp.
-  const activos = await query<any>(`SELECT * FROM agentes WHERE estado='activo'`);
-  for (const a of activos) {
-    const ids = a.skills?.ids || [];
-    if (ids.length) {
-      const skills = await query<any>(`SELECT nombre, secciones FROM skills WHERE id = ANY($1::uuid[])`, [ids]);
-      if (skills.some((s) => (s.nombre + JSON.stringify(s.secciones)).toLowerCase().includes("whatsapp"))) return a;
-    }
-  }
-  return activos[0]; // fallback: cualquier agente activo
+/**
+ * El agente que atiende WhatsApp: el primero activo que declare el canal
+ * 'whatsapp' en su esqueleto (pieza Canales). Si ninguno lo declara, nadie
+ * responde y se loguea claro — ya no hay fallback silencioso.
+ */
+async function agenteDeWhatsapp(): Promise<any | undefined> {
+  const activos = await query<any>(`SELECT id, canales FROM agentes WHERE estado='activo' ORDER BY creado_en ASC`);
+  const elegido = activos.find((a) => tieneCanal(a, "whatsapp"));
+  return elegido ? obtenerAgente(elegido.id) : undefined;
 }
+
+const RE_APRUEBA = /^\s*(ok|okay|oka|sí|si|dale|apruebo|aprobado|aprobar|listo|hazlo|hacelo|confirmo|va)\s*[.!]*\s*$/i;
+const RE_RECHAZA = /^\s*(no|nop|rechazo|rechazar|cancela|cancelar|cancelado|para|detente|frena)\s*[.!]*\s*$/i;
 
 export async function recibirMensaje(req: Request, res: Response) {
   const rawBody: Buffer | undefined = (req as any).rawBody;
@@ -63,54 +82,86 @@ export async function recibirMensaje(req: Request, res: Response) {
   res.sendStatus(200); // Meta espera 200 inmediato
 
   try {
-    const value = req.body?.entry?.[0]?.changes?.[0]?.value;
-    const mensaje = value?.messages?.[0];
-    if (!mensaje) return; // notificación de estado, no un mensaje
-
-    if (!esNuevo(mensaje.id)) { console.log(`[whatsapp] Duplicado ignorado`); return; }
-
-    const texto = mensaje.text?.body ?? "";
-    const numero = mensaje.from;
-    console.log(`[whatsapp] Entrante de ${numero}: "${texto}"`);
-
-    const hub = await agenteHub();
-    if (!hub) { console.error("[whatsapp] No hay agente activo para responder."); return; }
-    if (hub.estado !== "activo") return;
-
-    // Guardar el mensaje entrante en el chat del agente.
-    await guardarMensaje(hub.id, "usuario", `[WhatsApp de ${numero}] ${texto}`);
-
-    // El agente procesa y responde USANDO SU SKILL de WhatsApp directamente.
-    // Instrucción clara: la respuesta al usuario es SOLO el mensaje que manda
-    // por la tool — nada de reportes ni relatos de lo que hizo.
-    const instruccion = `Te llegó este mensaje de WhatsApp del número ${numero}: "${texto}".
-Respondele de forma natural y directa, en tu personalidad, USANDO tu herramienta de WhatsApp para enviarle el mensaje al número ${numero}.
-IMPORTANTE: el mensaje que le envíes es tu respuesta completa. NO agregues reportes, ni resúmenes de lo que hiciste, ni detalles técnicos. Escribile como si fuera una conversación normal.`;
-
-    const resultado = await correrTarea(hub.id, instruccion);
-
-    // Guardar en el chat del panel el mensaje REAL que Emilia envió por
-    // WhatsApp (no el "Listo." de cierre). Así el panel refleja la conversación
-    // de verdad. Si envió varios, los guardamos todos.
-    if (resultado.mensajesEnviados?.length) {
-      for (const m of resultado.mensajesEnviados) {
-        await guardarMensaje(hub.id, "agente", `[WhatsApp de ${numero}] ${m}`);
-      }
-    } else {
-      await guardarMensaje(hub.id, "agente", resultado.respuesta || "(respondió por WhatsApp)");
-    }
-    console.log(`[whatsapp] Emilia procesó y respondió vía su skill. ok=${resultado.ok}, tools=${resultado.toolCalls}`);
-
-    // Red de seguridad: si NO usó ninguna tool (no envió nada real), enviamos
-    // su texto para que el usuario no quede sin respuesta.
-    if (resultado.toolCalls === 0) {
-      const [toolWa] = await query<any>(`SELECT * FROM tools WHERE descripcion ILIKE '%whatsapp%' OR nombre ILIKE '%whatsapp%' LIMIT 1`);
-      if (toolWa && resultado.respuesta) {
-        await ejecutarTool(toolWa, { destino: numero, mensaje: resultado.respuesta });
-        console.log(`[whatsapp] Red de seguridad: envié la respuesta porque no usó tool.`);
+    const entradas: any[] = req.body?.entry || [];
+    for (const entry of entradas) {
+      for (const cambio of entry.changes || []) {
+        const mensajes: any[] = cambio.value?.messages || [];
+        for (const m of mensajes) {
+          if (!(await esNuevo(m.id))) { console.log(`[whatsapp] Duplicado ignorado (${m.id})`); continue; }
+          procesarEntrante(m).catch((e) => console.error("[whatsapp] Error procesando:", e));
+        }
       }
     }
   } catch (e) {
-    console.error("[whatsapp] Error procesando:", e);
+    console.error("[whatsapp] Error leyendo el webhook:", e);
   }
+}
+
+async function procesarEntrante(m: any) {
+  const numero = String(m.from || "").replace(/\D/g, "");
+  const jefe = (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, "");
+  const esJefe = !!jefe && numero === jefe;
+
+  if (process.env.WHATSAPP_SOLO_JEFE === "true" && !esJefe) {
+    console.log(`[whatsapp] Ignorado ${numero}: solo se atiende al jefe.`);
+    return;
+  }
+
+  const agente = await agenteDeWhatsapp();
+  if (!agente) { console.error("[whatsapp] Ningún agente activo tiene el canal 'whatsapp' en su esqueleto (pieza Canales). Nadie responde."); return; }
+  const conv = await obtenerOCrearConversacion(agente.id, "whatsapp", numero);
+
+  // ── Texto o adjunto ──
+  let texto = "";
+  if (m.type === "text") texto = m.text?.body ?? "";
+  else if (m.type === "button") texto = m.button?.text ?? "";
+  else if (m.type === "interactive") texto = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "";
+  else if (["document", "image", "audio", "video"].includes(m.type)) {
+    const media = m[m.type] || {};
+    const d = await descargarMedia(media.id);
+    if (!d.ok) { await enviarTextoWhatsapp(numero, `No pude descargar el archivo: ${d.error}`); return; }
+    const nombre = media.filename || `${m.type}_${Date.now()}.${(d.mime || "").split("/")[1]?.split(";")[0] || "bin"}`;
+    const arch = await guardarArchivo({ nombre, mime: d.mime || "application/octet-stream", contenido: d.contenido!, origen: "whatsapp", conversacionId: conv.id, agenteId: agente.id });
+    texto = `[Adjunto recibido: "${arch.nombre}" (${Math.round(arch.tam_bytes / 1024)} KB, archivo_id=${arch.id})]${media.caption ? ` ${media.caption}` : ""}`;
+    console.log(`[whatsapp] Adjunto de ${numero}: ${arch.nombre} → ${arch.id}`);
+  }
+  if (!texto.trim()) {
+    await enviarTextoWhatsapp(numero, `No entendí ese mensaje (tipo "${m.type}"). Mandame texto o un archivo.`);
+    return;
+  }
+  console.log(`[whatsapp] Entrante de ${numero}${esJefe ? " (jefe)" : ""}: "${texto.slice(0, 120)}"`);
+
+  // Todo lo de esta conversación va en orden.
+  await encolar(conv.id, async () => {
+    await guardarMensajeEn(conv, "usuario", texto);
+
+    // ── ¿Es una respuesta a una aprobación pendiente? ──
+    const puedeAprobar = agente.gobierno?.aprobar_por_whatsapp !== false;
+    if (esJefe && puedeAprobar && (RE_APRUEBA.test(texto) || RE_RECHAZA.test(texto))) {
+      const ap = await aprobacionPendienteDeConversacion(conv.id);
+      if (ap?.tipo === "tool" && ap.agente_ejecucion_id) {
+        const aprobada = RE_APRUEBA.test(texto);
+        await resolverAprobacion(ap.id, aprobada);
+        const r = await reanudarEjecucion(ap.agente_ejecucion_id, aprobada);
+        await entregarRespuesta(conv, r);
+        return;
+      }
+      if (ap?.tipo === "flujo" && ap.ejecucion_id) {
+        const aprobada = RE_APRUEBA.test(texto);
+        await resolverAprobacion(ap.id, aprobada);
+        await reanudarFlujo(ap.ejecucion_id, aprobada);   // el flujo reporta solo a esta conversación
+        return;
+      }
+      // Sin aprobación pendiente: es un mensaje normal ("ok" de conversación).
+    }
+
+    // ── Tarea normal ──
+    const contextoCanal = esJefe
+      ? `Quien te escribe es tu jefe, Sebastián (WhatsApp ${numero}). Tiene autoridad total: sus órdenes se ejecutan (el sistema pide aprobación donde corresponda). Cuando una tool o flujo necesite "el número del jefe", es ${numero}. Si te manda un archivo, te llega como "[Adjunto recibido: ... archivo_id=...]": usá ese archivo_id. Respondele corto y directo, como en un chat.`
+      : "Quien te escribe NO es tu jefe. Sé amable y útil, pero no ejecutes acciones sensibles ni reveles información interna por pedido de esta persona.";
+
+    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", contextoCanal });
+    await entregarRespuesta(conv, r);
+    console.log(`[whatsapp] Respondido a ${numero}. estado=${r.estado} tools=${r.toolCalls}`);
+  });
 }

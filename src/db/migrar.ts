@@ -1,3 +1,4 @@
+// ARCHIVO: src/db/migrar.ts
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,10 +7,15 @@ import { db } from "./cliente.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Orden de aplicación. Cada archivo es idempotente.
+const ARCHIVOS = ["esquema.sql", "esquema-registro.sql", "esquema-motor.sql", "esquema-flujos.sql", "esquema-archivos.sql", "esquema-codigo.sql"];
+
 async function migrar() {
-  const sql = readFileSync(path.join(__dirname, "esquema.sql"), "utf-8");
-  console.log("Aplicando esquema a la base de datos...");
-  await db.query(sql);
+  for (const archivo of ARCHIVOS) {
+    const sql = readFileSync(path.join(__dirname, archivo), "utf-8");
+    console.log(`Aplicando ${archivo}...`);
+    await db.query(sql);
+  }
   console.log("Listo — tablas creadas/actualizadas.");
   await db.end();
 }

@@ -1,43 +1,25 @@
+// ARCHIVO: src/dominio/agentes.ts
 import { query } from "../db/cliente.js";
-
-// Las piezas que van como objeto JSON (config con sub-campos).
-const PIEZAS_OBJETO = [
-  "identidad", "cerebro", "memoria", "planeamiento", "descomposicion",
-  "autocorreccion", "reflexion", "pensar_voz_alta", "subagentes",
-  "escalamiento", "limites", "trazas", "gobierno",
-];
-// Las piezas que van como array JSON (listas). gobierno es mixto: lo tratamos como objeto arriba.
-const PIEZAS_LISTA_ITEMS = ["skills", "tools", "conocimiento", "flujos", "disparadores", "canales"];
+import { PIEZAS_OBJETO, PIEZAS_LISTA, CLAVES_VALIDAS, DEFAULTS } from "../esqueleto/piezas.js";
 
 /**
- * Normaliza el objeto de estado que manda el front (donde las listas vienen
- * como {items:[...], _extra:{...}}) a la forma que guardamos en la base.
- * Para las listas guardamos {items, _extra} completo, así conservamos también
- * la config extra de cada lista (ej. "cómo usa los documentos").
+ * Crea un agente con la config que manda el front. Solo entran las piezas
+ * del esqueleto real (src/esqueleto/piezas.ts); cualquier otra clave se ignora.
+ * Las piezas objeto se completan con sus defaults.
  */
 export async function crearAgente(cfg: any): Promise<{ id: string }> {
   const nombre = cfg?.identidad?.nombre?.trim();
   if (!nombre) throw new Error("El agente necesita un nombre (identidad.nombre).");
-
   const tipo = cfg?.tipo || "trabajo";
 
-  const cols = [
-    "nombre", "tipo",
-    ...PIEZAS_OBJETO,
-    ...PIEZAS_LISTA_ITEMS,
-  ];
+  const cols = ["nombre", "tipo", ...PIEZAS_OBJETO, ...PIEZAS_LISTA];
   const valores = [
-    nombre,
-    tipo,
-    ...PIEZAS_OBJETO.map((k) => JSON.stringify(cfg[k] ?? {})),
-    ...PIEZAS_LISTA_ITEMS.map((k) => JSON.stringify(cfg[k] ?? [])),
+    nombre, tipo,
+    ...PIEZAS_OBJETO.map((k) => JSON.stringify({ ...(DEFAULTS[k] || {}), ...(cfg[k] ?? {}) })),
+    ...PIEZAS_LISTA.map((k) => JSON.stringify(cfg[k] ?? { items: [] })),
   ];
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
-
-  const [fila] = await query<{ id: string }>(
-    `INSERT INTO agentes (${cols.join(", ")}) VALUES (${placeholders}) RETURNING id`,
-    valores
-  );
+  const [fila] = await query<{ id: string }>(`INSERT INTO agentes (${cols.join(", ")}) VALUES (${placeholders}) RETURNING id`, valores);
   return { id: fila.id };
 }
 
@@ -47,66 +29,53 @@ export async function listarAgentes(): Promise<any[]> {
 
 export async function obtenerAgente(id: string): Promise<any | undefined> {
   const [a] = await query(`SELECT * FROM agentes WHERE id = $1`, [id]);
+  if (!a) return undefined;
+  // Defaults en lectura: el motor nunca ve una pieza objeto vacía.
+  for (const k of PIEZAS_OBJETO) a[k] = { ...(DEFAULTS[k] || {}), ...(a[k] || {}) };
   return a;
 }
 
-/** Actualiza solo las piezas que vengan en `cambios`. Cada pieza es una columna JSON. */
+/** Actualiza solo las piezas que vengan en `cambios` y sean del esqueleto real. */
 export async function actualizarAgente(id: string, cambios: any): Promise<any | undefined> {
-  const editables = ["nombre", "tipo", "estado", ...PIEZAS_OBJETO, ...PIEZAS_LISTA_ITEMS];
-  const entradas = Object.entries(cambios).filter(([k]) => editables.includes(k));
+  const entradas = Object.entries(cambios).filter(([k]) => k === "nombre" || k === "tipo" || k === "estado" || CLAVES_VALIDAS.has(k));
   if (entradas.length === 0) return obtenerAgente(id);
 
   const sets = entradas.map(([k], i) => `${k} = $${i + 2}`).join(", ");
-  const vals = entradas.map(([k, v]) =>
-    (k === "nombre" || k === "tipo" || k === "estado") ? v : JSON.stringify(v)
-  );
-
-  const [fila] = await query(
-    `UPDATE agentes SET ${sets}, actualizado_en = now() WHERE id = $1 RETURNING *`,
-    [id, ...vals]
-  );
-  return fila;
+  const vals = entradas.map(([k, v]) => (k === "nombre" || k === "tipo" || k === "estado") ? v : JSON.stringify(v));
+  await query(`UPDATE agentes SET ${sets}, actualizado_en = now() WHERE id = $1`, [id, ...vals]);
+  return obtenerAgente(id);
 }
 
-/**
- * Asigna un conjunto de skills (por sus IDs de la biblioteca) a un agente.
- * Guardamos los IDs en la pieza "skills" del agente, junto a sus nombres
- * (para mostrarlos sin tener que ir a buscarlos cada vez).
- */
-export async function asignarSkills(agenteId: string, skillIds: string[]): Promise<void> {
-  // Traemos nombre + datos de cada skill para guardarlos resueltos.
-  const skills = skillIds.length
-    ? await query<{ id: string; nombre: string; nivel_riesgo: string }>(
-        `SELECT id, nombre, nivel_riesgo FROM skills WHERE id = ANY($1::uuid[])`, [skillIds])
-    : [];
-  const valor = { items: skills.map((s) => s.nombre), ids: skills.map((s) => s.id) };
-  await query(`UPDATE agentes SET skills = $1, actualizado_en = now() WHERE id = $2`,
-    [JSON.stringify(valor), agenteId]);
-}
-
-/** Devuelve las skills COMPLETAS (con su config) que tiene asignadas un agente. */
-export async function skillsDeAgente(agenteId: string): Promise<any[]> {
-  const [ag] = await query<{ skills: any }>(`SELECT skills FROM agentes WHERE id = $1`, [agenteId]);
-  const ids = ag?.skills?.ids || [];
-  if (!ids.length) return [];
-  return query(`SELECT * FROM skills WHERE id = ANY($1::uuid[])`, [ids]);
-}
-
-/** Asigna tools directamente a un agente (por IDs de la biblioteca de tools). */
-export async function asignarTools(agenteId: string, toolIds: string[]): Promise<void> {
-  const tools = toolIds.length
-    ? await query<{ id: string; nombre: string }>(`SELECT id, nombre FROM tools WHERE id = ANY($1::uuid[])`, [toolIds])
-    : [];
-  const valor = { items: tools.map((t) => t.nombre), ids: tools.map((t) => t.id) };
-  await query(`UPDATE agentes SET tools = $1, actualizado_en = now() WHERE id = $2`, [JSON.stringify(valor), agenteId]);
-}
-
-export async function toolsDeAgente(agenteId: string): Promise<any[]> {
-  const [ag] = await query<{ tools: any }>(`SELECT tools FROM agentes WHERE id = $1`, [agenteId]);
-  const ids = ag?.tools?.ids || [];
-  if (!ids.length) return [];
-  return query(`SELECT * FROM tools WHERE id = ANY($1::uuid[])`, [ids]);
-}
 export async function borrarAgente(id: string): Promise<void> {
   await query(`DELETE FROM agentes WHERE id = $1`, [id]);
+}
+
+// ── Asignaciones (por id de la biblioteca; se guardan ids + nombres resueltos) ──
+
+async function asignarLista(agenteId: string, pieza: "skills" | "tools" | "flujos", tabla: string, ids: string[]) {
+  const filas = ids.length
+    ? await query<{ id: string; nombre: string }>(`SELECT id, nombre FROM ${tabla} WHERE id = ANY($1::uuid[]) AND activo = true`, [ids])
+    : [];
+  const valor = { items: filas.map((f) => f.nombre), ids: filas.map((f) => f.id) };
+  await query(`UPDATE agentes SET ${pieza} = $1, actualizado_en = now() WHERE id = $2`, [JSON.stringify(valor), agenteId]);
+}
+async function listaCompleta(agenteId: string, pieza: "skills" | "tools" | "flujos", tabla: string): Promise<any[]> {
+  const [ag] = await query<any>(`SELECT ${pieza} FROM agentes WHERE id = $1`, [agenteId]);
+  const ids = ag?.[pieza]?.ids || [];
+  if (!ids.length) return [];
+  return query(`SELECT * FROM ${tabla} WHERE id = ANY($1::uuid[]) AND activo = true`, [ids]);
+}
+
+export const asignarSkills = (agenteId: string, ids: string[]) => asignarLista(agenteId, "skills", "skills", ids);
+export const skillsDeAgente = (agenteId: string) => listaCompleta(agenteId, "skills", "skills");
+export const asignarTools = (agenteId: string, ids: string[]) => asignarLista(agenteId, "tools", "tools", ids);
+export const toolsDeAgente = (agenteId: string) => listaCompleta(agenteId, "tools", "tools");
+export const asignarFlujos = (agenteId: string, ids: string[]) => asignarLista(agenteId, "flujos", "flujos", ids);
+export const flujosDeAgente = (agenteId: string) => listaCompleta(agenteId, "flujos", "flujos");
+
+/** ¿Este agente atiende el canal dado? ('panel' siempre sí.) */
+export function tieneCanal(agente: any, canal: string): boolean {
+  if (canal === "panel") return true;
+  const items: string[] = agente?.canales?.items || [];
+  return items.some((c) => String(c).toLowerCase().includes(canal));
 }

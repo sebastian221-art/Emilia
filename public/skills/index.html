@@ -1,42 +1,28 @@
 <!DOCTYPE html>
+<!-- ARCHIVO: public/skills/index.html  (borrar public/skills/skills.js y public/skills/def-skill.js) -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Skills · Emilia</title>
 <link rel="stylesheet" href="/comun/estilos.css" />
-<link rel="stylesheet" href="/comun/lienzo.css" />
 <style>
 .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.layout { display: grid; grid-template-columns: 220px 1fr; gap: 12px; height: calc(100vh - 170px); }
-.izq { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
-.izq h4 { font-size: 10px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 3px; }
-.pal-pieza { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: grab; border: 1px solid var(--e-border);
-  display: flex; align-items: center; gap: 7px; user-select: none; background: var(--e-surface); }
-.pal-pieza:hover { border-color: var(--e-accent); }
-.pal-pieza.usada { opacity: .4; }
-.pal-ic { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; background: var(--e-accent-bg); color: var(--e-accent); }
-.sk-lista { border-top: 1px solid var(--e-border); margin-top: 10px; padding-top: 8px; }
-.sk-item { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; }
-.sk-item:hover { background: var(--e-surface); }
-.sk-item.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
-.lienzo-cont { height: 100%; }
-.central { position: absolute; left: 500px; top: 350px; width: 190px;
-  background: var(--e-surface); border: 2px solid var(--e-accent); border-radius: 16px; padding: 16px; z-index: 3;
-  box-shadow: 0 0 40px rgba(124,58,237,.4); text-align: center; }
-.central .av { width: 46px; height: 46px; border-radius: 12px; margin: 0 auto 8px;
-  background: radial-gradient(circle at 35% 30%, #7c3aed, #4c1d95); box-shadow: 0 0 20px rgba(124,58,237,.6);
-  display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; }
-.central input { text-align: center; font-family: var(--syne); font-weight: 600; background: transparent; border: none; border-bottom: 1px solid var(--e-border); border-radius: 0; }
-.sec-nodo { position: absolute; width: 150px; background: var(--e-surface); border: 1px solid var(--e-border-strong);
-  border-radius: 10px; padding: 9px 11px; cursor: move; user-select: none; z-index: 2; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
-.sec-nodo:hover { border-color: var(--e-accent); }
-.sec-nodo .sn-nom { font-size: 12px; font-weight: 500; }
-.sec-nodo .sn-sub { font-size: 10px; color: var(--e-text-sec); margin-top: 3px; }
-.sec-nodo .sn-x { position: absolute; top: 4px; right: 6px; color: var(--e-text-muted); cursor: pointer; font-size: 12px; }
-.sec-nodo .sn-x:hover { color: #ff8080; }
-.oblig { border-color: var(--e-accent); }
-.hint { position: absolute; top: 14px; left: 16px; font-size: 12px; color: var(--e-text-muted); z-index: 5; }
+.layout { display: grid; grid-template-columns: 250px 1fr; gap: 14px; height: calc(100vh - 170px); }
+.izq { overflow-y: auto; }
+.izq h4 { font-size: 10px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 4px; }
+.item { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.item:hover { background: var(--e-surface); }
+.item.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
+.item .n { font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 18px; overflow-y: auto; }
+.panel h2 { font-size: 17px; margin: 0; font-family: monospace; }
+.sec { margin-top: 16px; }
+.sec h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 8px; }
+.vacio { text-align: center; padding: 60px 20px; color: var(--e-text-muted); }
+.chk { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; cursor: pointer; }
+.chk input { width: auto; margin: 0; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 </style>
 </head>
 <body>
@@ -47,50 +33,147 @@
   <a href="/skills" class="activo">Skills</a>
   <a href="/tools">Tools</a>
   <a href="/flujos">Flujos</a>
+  <a href="/codigo">Código</a>
   <a href="/aprobaciones">Aprobaciones</a>
 </nav>
 <main>
   <div class="top">
     <div>
       <h1>Skills</h1>
-      <p class="sub">Arrastrá secciones a la skill. Rueda = zoom · arrastrar el fondo = mover · clic en sección = configurar.</p>
+      <p class="sub">Procedimientos. Las de <b>código</b> (<code>src/skills/</code>) se registran solas. Las <b>guiadas</b> las escribís acá: un procedimiento en lenguaje natural + las tools que puede usar; el modelo las ejecuta en su propio sub-loop.</p>
     </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="nuevaSkill()">+ Nueva</button>
-      <button class="primario" onclick="guardarSkill()">Guardar</button>
-    </div>
+    <button class="primario" onclick="nueva()">+ Nueva guiada</button>
   </div>
   <div class="layout">
-    <div class="izq">
-      <h4>Secciones</h4>
-      <div id="paleta"></div>
-      <div class="sk-lista">
-        <h4>Biblioteca</h4>
-        <div id="biblio"></div>
-      </div>
-    </div>
-    <div class="lienzo-cont" id="lienzoCont">
-      <div class="hint">Arrastrá secciones hacia la skill →</div>
-      <div class="mundo" id="mundo">
-        <svg id="svgCon"></svg>
-        <div class="central">
-          <div class="av">◇</div>
-          <input id="nombreSkill" placeholder="nombre_skill" oninput="estado.identidad.nombre=this.value" />
-          <div style="font-size:10px;color:var(--e-text-muted);margin-top:6px">skill</div>
-        </div>
-        <div id="secConectadas"></div>
-      </div>
-      <div class="zoom-ctrl">
-        <button onclick="zoomOut()">−</button>
-        <span class="zoom-nivel" id="zoomNivel">100%</span>
-        <button onclick="zoomIn()">+</button>
-        <button onclick="centrar()" title="Centrar">⌂</button>
-      </div>
-    </div>
+    <div class="izq" id="lista"></div>
+    <div class="panel" id="panel"><div class="vacio">Elegí una skill o creá una guiada.</div></div>
   </div>
 </main>
-<div id="modal-cfg" style="display:none;position:fixed;inset:0;background:rgba(8,6,13,.6);z-index:50;align-items:center;justify-content:center" onclick="if(event.target===this)cerrarCfg()"></div>
-<script src="/skills/def-skill.js"></script>
-<script src="/skills/skills.js"></script>
+<script src="/comun/espejo.js"></script>
+<script>
+let registro = null, guiadas = [], seleccion = null;
+
+async function cargar() {
+  registro = await api("/api/registro");
+  const todas = await api("/api/skills");
+  guiadas = todas.filter((s) => s.origen !== "codigo");
+  renderLista();
+}
+
+function renderLista() {
+  const grupos = agrupar(registro.skills, "modulo");
+  let html = "";
+  for (const [mod, sk] of Object.entries(grupos)) {
+    html += `<h4>${esc(mod)} (código)</h4>` + sk.map((s) => `<div class="item ${seleccion === s.nombre ? "activo" : ""}" onclick="verCodigo('${esc(s.nombre)}')"><span class="n">${esc(s.nombre)}</span>${s.tipo === "guiada" ? "✎" : "{}"}</div>`).join("");
+  }
+  html += `<h4>Guiadas (desde acá)</h4>` + (guiadas.length ? guiadas.map((s) => `<div class="item ${seleccion === "ui:" + s.id ? "activo" : ""}" onclick="editar('${s.id}')"><span class="n">${esc(s.nombre)}</span>${s.requiere_aprobacion || s.secciones?.riesgo?.aprobacion ? "⏸" : ""}</div>`).join("") : `<p style="font-size:11px;color:var(--e-text-muted)">Ninguna todavía.</p>`);
+  document.getElementById("lista").innerHTML = html;
+}
+
+function verCodigo(nombre) {
+  seleccion = nombre; renderLista();
+  const s = registro.skills.find((x) => x.nombre === nombre);
+  document.getElementById("panel").innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <h2>${esc(s.nombre)}</h2>${badge("código", "codigo")}${badge(s.tipo === "codigo" ? "lógica propia" : "guiada", "neutro")}${badge(s.riesgo, s.riesgo)}${s.requiereAprobacion ? badge("⏸ aprobación", "aprobacion") : ""}
+    </div>
+    <p class="sub" style="margin-top:8px;font-size:13px">${esc(s.descripcion)}</p>
+    ${s.cuandoUsar ? `<p style="font-size:12px;color:var(--e-text-sec);margin-top:6px"><b>Cuándo usarla:</b> ${esc(s.cuandoUsar)}</p>` : ""}
+    <div class="sec"><h3>Tools permitidas</h3><div>${s.tools.length ? s.tools.map((t) => badge(t, "codigo")).join(" ") : '<span style="font-size:12px;color:var(--e-text-muted)">ninguna</span>'}</div></div>
+    ${s.procedimiento ? `<div class="sec"><h3>Procedimiento</h3><pre style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec);margin:0">${esc(s.procedimiento)}</pre></div>` : ""}
+    <div class="sec"><h3>Parámetros</h3>${tablaEsquema(s.parametros)}</div>
+    <div class="sec"><h3>Probar</h3>
+      <div id="form">${formEsquema(s.parametros)}</div>
+      <button class="primario" style="margin-top:12px" onclick="probar('${esc(s.nombre)}')">▶ Ejecutar ahora</button>
+      <div id="resultado"></div>
+    </div>`;
+}
+
+// ── Guiadas (UI) ──
+function formGuiada(s) {
+  const sec = s?.secciones || {};
+  const toolsSel = new Set(String(sec.recursos?.tools || "").split(",").map((x) => x.trim()).filter(Boolean));
+  const toolsHtml = registro.tools.map((t) => `<label class="chk"><input type="checkbox" class="tl" value="${esc(t.nombre)}" ${toolsSel.has(t.nombre) ? "checked" : ""}> <span style="font-family:monospace">${esc(t.nombre)}</span>${t.requiereAprobacion ? "⏸" : ""} <span style="color:var(--e-text-muted)">${esc(t.descripcion).slice(0, 70)}</span></label>`).join("");
+  return `
+    <div class="dos">
+      <div><label>Nombre (snake_case)</label><input id="g-nombre" value="${esc(s?.nombre || "")}" placeholder="reportar_campana" ${s ? "readonly" : ""} /></div>
+      <div><label>Nivel de riesgo</label><select id="g-riesgo">${["lectura", "escritura", "ejecucion", "sistema"].map((r) => `<option ${(s?.nivel_riesgo || "lectura") === r ? "selected" : ""}>${r}</option>`).join("")}</select></div>
+    </div>
+    <label>Descripción — qué hace (lo lee el modelo para elegirla)</label><textarea id="g-desc" rows="2">${esc(s?.descripcion || sec.identidad?.descripcion || "")}</textarea>
+    <label>Cuándo usarla (señales)</label><input id="g-cuando" value="${esc(sec.identidad?.cuando_usar || "")}" placeholder="Cuando el usuario pide un reporte o resumen de una campaña." />
+    <label>Procedimiento — los pasos en lenguaje natural</label><textarea id="g-proc" rows="6" placeholder="1. Consultá X con la tool tal.&#10;2. Si Y, hacé Z.&#10;3. Devolvé el resultado así.">${esc(sec.procedimiento?.pasos || "")}</textarea>
+    <div class="dos">
+      <div><label>Qué datos necesita para arrancar</label><input id="g-entradas" value="${esc(sec.io?.entradas || "")}" /></div>
+      <div><label>Qué devuelve al terminar</label><input id="g-salida" value="${esc(sec.io?.salida || "")}" /></div>
+    </div>
+    <label>Criterio de éxito (cómo sabe que cumplió de verdad)</label><input id="g-criterio" value="${esc(sec.verificacion?.criterio || "")}" />
+    <div class="dos">
+      <div><label>Si le falta un dato</label><select id="g-sifalta">${[["pregunta", "Lo pide (no asume)"], ["asume", "Asume un valor razonable"], ["falla", "Falla y avisa"]].map(([v, l]) => `<option value="${v}" ${(sec.io?.si_falta || "pregunta") === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div><label>Presupuesto de pasos</label><input id="g-pasos" type="number" value="${sec.complejidad?.presupuesto || 10}" min="1" max="30" /></div>
+    </div>
+    <label class="chk" style="margin-top:10px"><input type="checkbox" id="g-aprob" ${sec.riesgo?.aprobacion ? "checked" : ""}> Requiere tu aprobación antes de ejecutarse</label>
+    <div class="sec"><h3>Tools que puede usar (del registro)</h3>${toolsHtml || '<p style="font-size:12px;color:var(--e-text-muted)">No hay tools registradas.</p>'}</div>`;
+}
+
+function nueva() {
+  seleccion = null; renderLista();
+  document.getElementById("panel").innerHTML = `<h2 style="font-family:var(--syne)">Nueva skill guiada</h2>${formGuiada(null)}
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="primario" onclick="guardar(null)">Crear</button></div>`;
+}
+function editar(id) {
+  seleccion = "ui:" + id; renderLista();
+  const s = guiadas.find((x) => x.id === id);
+  document.getElementById("panel").innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px"><h2>${esc(s.nombre)}</h2>${badge("guiada · UI", "ui")}${badge(s.nivel_riesgo, s.nivel_riesgo)}</div>
+    ${formGuiada(s)}
+    <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+      <button class="primario" onclick="guardar('${s.id}')">Guardar</button>
+      <button onclick="probar('${esc(s.nombre)}')">▶ Probar</button>
+      <button onclick="borrar('${s.id}')" style="color:#ff8080;margin-left:auto">Borrar</button>
+    </div>
+    <div id="form" style="display:none"></div><div id="resultado"></div>`;
+}
+function leerGuiada() {
+  const v = (id) => document.getElementById(id).value;
+  const tools = [...document.querySelectorAll(".tl:checked")].map((c) => c.value);
+  return {
+    nombre: v("g-nombre").trim(), descripcion: v("g-desc").trim(), nivel_riesgo: v("g-riesgo"),
+    secciones: {
+      identidad: { nombre: v("g-nombre").trim(), descripcion: v("g-desc").trim(), cuando_usar: v("g-cuando").trim() },
+      procedimiento: { pasos: v("g-proc"), modo: "guiado" },
+      recursos: { tools: tools.join(", ") },
+      io: { entradas: v("g-entradas"), salida: v("g-salida"), si_falta: v("g-sifalta") },
+      verificacion: { criterio: v("g-criterio") },
+      complejidad: { presupuesto: Number(v("g-pasos")) || 10 },
+      riesgo: { nivel: v("g-riesgo"), aprobacion: document.getElementById("g-aprob").checked },
+    },
+  };
+}
+async function guardar(id) {
+  const datos = leerGuiada();
+  if (!/^[a-z][a-z0-9_]{2,63}$/.test(datos.nombre)) { alert("El nombre debe ser snake_case en minúsculas (ej. reportar_campana)."); return; }
+  if (!datos.secciones.procedimiento.pasos.trim()) { alert("Escribí el procedimiento."); return; }
+  try {
+    if (id) await patch(`/api/skills/${id}`, datos); else { const r = await post("/api/skills", datos); id = r.id; }
+    await cargar(); editar(id);
+  } catch (e) { alert("No se pudo guardar: " + e.message); }
+}
+async function borrar(id) {
+  if (!confirm("¿Borrar esta skill?")) return;
+  await del(`/api/skills/${id}`); seleccion = null; await cargar();
+  document.getElementById("panel").innerHTML = `<div class="vacio">Elegí una skill o creá una guiada.</div>`;
+}
+async function probar(nombre) {
+  const form = document.getElementById("form");
+  const args = form ? leerForm(form) : {};
+  const out = document.getElementById("resultado");
+  out.innerHTML = `<p style="font-size:12px;color:var(--e-text-muted);margin-top:10px">Ejecutando (puede tardar: usa el modelo)…</p>`;
+  try {
+    const r = await fetch(`/api/registro/skills/${nombre}/probar`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ args }) });
+    out.innerHTML = renderResultado(await r.json());
+  } catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
+}
+cargar();
+</script>
 </body>
 </html>

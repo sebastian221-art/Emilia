@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- ARCHIVO: public/agentes/espacio.html -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -39,6 +40,7 @@
   <a href="/skills">Skills</a>
   <a href="/tools">Tools</a>
   <a href="/flujos">Flujos</a>
+  <a href="/codigo">Código</a>
   <a href="/aprobaciones">Aprobaciones</a>
 </nav>
 <main>
@@ -56,8 +58,11 @@
     </div>
   </div>
 
+  <div id="banner-aprob"></div>
+
   <div class="tabs">
     <span class="tab activo" data-tab="chat" onclick="verTab('chat')">&#9993; Chat</span>
+    <span class="tab" data-tab="conversaciones" onclick="verTab('conversaciones')">&#9993;&#9993; Conversaciones</span>
     <span class="tab" data-tab="documentos" onclick="verTab('documentos')">&#9707; Documentos</span>
     <span class="tab" data-tab="esqueleto" onclick="verTab('esqueleto')">&#9783; Esqueleto</span>
     <span class="tab" data-tab="trazas" onclick="verTab('trazas')">&#9201; Trazas</span>
@@ -68,8 +73,10 @@
 
 <div id="modal-ed" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center" onclick="if(event.target===this)cerrarEditor()"></div>
 
+<!-- Generados por el backend desde src/esqueleto/piezas.ts (ver src/rutas/esqueleto.ts) -->
 <script src="/crear/piezas-1.js"></script>
 <script src="/crear/piezas-2.js"></script>
+<script src="/comun/espejo.js"></script>
 <script>
 const PIEZAS_DEF = [...(typeof DEF_PIEZAS !== "undefined" ? DEF_PIEZAS : []), ...(typeof DEF_PIEZAS_2 !== "undefined" ? DEF_PIEZAS_2 : [])];
 const id = location.pathname.split("/").pop();
@@ -77,20 +84,10 @@ let agente = null, tab = "chat";
 
 const ICO = { trabajo: "&#9679;", administrador: "&#9863;", companero: "&#9788;" };
 
-const GRUPOS = {
-  "Fundación": ["identidad", "cerebro"],
-  "Capacidades": ["skills", "tools", "memoria", "conocimiento"],
-  "Inteligencia": ["planeamiento", "descomposicion", "autocorreccion", "reflexion", "pensar_voz_alta", "subagentes", "escalamiento", "flujos"],
-  "Gobierno y operación": ["gobierno", "disparadores", "canales", "limites", "trazas"],
-};
-const NOMBRES = {
-  identidad:"Identidad y misión", cerebro:"Cerebro (modelo)", skills:"Skills", tools:"Tools",
-  memoria:"Memoria y RAG", conocimiento:"Base de conocimiento", planeamiento:"Planeamiento",
-  descomposicion:"Descomposición", autocorreccion:"Auto-corrección", reflexion:"Reflexión",
-  pensar_voz_alta:"Pensar en voz alta", subagentes:"Sub-agentes", escalamiento:"Escalamiento",
-  flujos:"Flujos de trabajo", gobierno:"Gobierno", disparadores:"Disparadores", canales:"Canales",
-  limites:"Límites y seguridad", trazas:"Trazas y verificación",
-};
+// Grupos y nombres derivados del esqueleto real (no hay listas a mano).
+const GRUPOS = {};
+for (const p of PIEZAS_DEF) (GRUPOS[p.g] ||= []).push(p.k);
+const NOMBRES = Object.fromEntries(PIEZAS_DEF.map(p => [p.k, p.nom]));
 
 function resumenPieza(k, v) {
   if (!v) return "—";
@@ -110,6 +107,7 @@ function verTab(t) {
   if (t === "chat") { ultimoConteoMsgs = 0; iniciarRefrescoChat(); }
   else detenerRefrescoChat();
   if (t !== "esqueleto") piezasEnEsq = []; // se recalcula al volver a esqueleto
+  if (t === "trazas") ejSel = null;
   render();
 }
 
@@ -171,27 +169,85 @@ function render() {
       <div id="docs-lista"></div>`;
     cargarDocs();
   }
+  else if (tab === "conversaciones") {
+    c.innerHTML = `<div style="display:grid;grid-template-columns:240px 1fr;gap:14px;min-height:420px">
+      <div id="conv-lista" style="overflow-y:auto"></div>
+      <div id="conv-msgs" style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto;padding:4px"><p class="placeholder">Elegí una conversación.</p></div>
+    </div>`;
+    cargarConversaciones();
+  }
   else if (tab === "trazas") {
-    c.innerHTML = `<div id="trazas-cont"><div class="placeholder">Cargando trazas…</div></div>`;
-    cargarTrazas();
+    c.innerHTML = `<div style="display:grid;grid-template-columns:300px 1fr;gap:14px;min-height:420px">
+      <div id="ej-lista" style="overflow-y:auto;max-height:65vh"></div>
+      <div id="trazas-cont"><div class="placeholder">Elegí una ejecución.</div></div>
+    </div>`;
+    cargarEjecuciones();
   }
 }
 
-async function cargarTrazas() {
-  const cont = document.getElementById("trazas-cont");
-  if (!cont) return;
-  const pasos = await (await fetch(`/api/agentes/${id}/pasos`)).json();
-  if (!pasos.length) {
-    cont.innerHTML = `<div class="placeholder"><p>Sin ejecuciones todavía.</p><p style="font-size:12px">Cuando le hables al agente, acá vas a ver cómo pensó y qué hizo, paso a paso.</p></div>`;
-    return;
-  }
-  const ICOP = { pensamiento: "🧠", tool: "🔧", verificacion: "✓", plan: "📋", error: "⚠️" };
-  cont.innerHTML = pasos.map(p =>
-    `<div style="padding:8px 12px;border-bottom:1px solid var(--e-border);font-size:13px">
-      <span style="font-weight:500">${ICOP[p.tipo]||"•"} ${p.tipo}</span>
-      <div style="color:var(--e-text-sec);margin-top:3px;white-space:pre-wrap">${(p.detalle||"").slice(0,500)}</div>
-    </div>`).join("");
+// ── Conversaciones ──
+let convSel = null;
+async function cargarConversaciones() {
+  const convs = await api(`/api/agentes/${id}/conversaciones`);
+  const cont = document.getElementById("conv-lista"); if (!cont) return;
+  cont.innerHTML = convs.length ? convs.map(c => `<div class="pieza" style="cursor:pointer;margin-bottom:6px;${convSel===c.id?"border-color:var(--e-accent)":""}" onclick="verConversacion('${c.id}')">
+      <div class="nom">${c.canal==="whatsapp"?"● ":"▣ "}${esc(c.titulo)}</div>
+      <div class="val">${fechaHora(c.ultimo_mensaje_en)}${c.resumen?" · con resumen":""}</div>
+    </div>`).join("") : `<p style="color:var(--e-text-muted);font-size:13px">Sin conversaciones todavía.</p>`;
 }
+async function verConversacion(cid) {
+  convSel = cid; cargarConversaciones();
+  const msgs = await api(`/api/conversaciones/${cid}/mensajes?limite=200`);
+  const convs = await api(`/api/agentes/${id}/conversaciones`);
+  const conv = convs.find(c => c.id === cid);
+  const cont = document.getElementById("conv-msgs"); if (!cont) return;
+  cont.innerHTML = (conv?.resumen ? `<div style="font-size:11px;color:var(--e-text-muted);background:var(--e-accent-bg);padding:8px 10px;border-radius:10px"><b>Memoria (resumen):</b> ${esc(conv.resumen)}</div>` : "")
+    + (msgs.length ? msgs.map(m => burbuja(m.rol, esc(m.contenido), conv?.canal === "whatsapp")).join("") : `<p class="placeholder">Sin mensajes.</p>`);
+  cont.scrollTop = cont.scrollHeight;
+}
+
+// ── Ejecuciones y trazas ──
+let ejSel = null;
+async function cargarEjecuciones() {
+  const cont = document.getElementById("ej-lista"); if (!cont) return;
+  const [ejs, flujos] = await Promise.all([api(`/api/agentes/${id}/ejecuciones?limite=30`), api(`/api/flujo-ejecuciones?agenteId=${id}&limite=15`)]);
+  let html = `<h4 style="font-size:10px;color:var(--e-text-muted);text-transform:uppercase;margin:0 0 6px">Tareas</h4>`;
+  html += ejs.length ? ejs.map(e => `<div class="pieza" style="cursor:pointer;margin-bottom:6px;padding:9px 11px;${ejSel===e.id?"border-color:var(--e-accent)":""}" onclick="verEjecucion('${e.id}')">
+      <div class="nom" style="font-size:12px">${fechaHora(e.inicio)}${badgeEstado(e.estado)}</div>
+      <div class="val">${esc(e.origen)} · ${e.turnos_usados} turnos · ${e.tool_calls} tools${e.respuesta?`<br>${esc(e.respuesta).slice(0,70)}`:""}</div>
+    </div>`).join("") : `<p style="color:var(--e-text-muted);font-size:12px">Sin tareas todavía.</p>`;
+  if (flujos.length) {
+    html += `<h4 style="font-size:10px;color:var(--e-text-muted);text-transform:uppercase;margin:12px 0 6px">Flujos</h4>` + flujos.map(f => `<div class="pieza" style="margin-bottom:6px;padding:9px 11px">
+      <div class="nom" style="font-size:12px">→ ${esc(f.nombre_flujo)}${badgeEstado(f.estado)}</div>
+      <div class="val">${fechaHora(f.inicio)} · ${esc(f.nodo_actual||"")} · <a href="/flujos" style="color:var(--e-accent)">ver</a></div>
+    </div>`).join("");
+  }
+  cont.innerHTML = html;
+  if (!ejSel && ejs.length) verEjecucion(ejs[0].id);
+}
+async function verEjecucion(eid) {
+  ejSel = eid; cargarEjecuciones();
+  const pasos = await api(`/api/ejecuciones/${eid}/pasos`);
+  const cont = document.getElementById("trazas-cont"); if (!cont) return;
+  const ICOP = { pensamiento: "🧠", tool: "🔧", skill: "◇", verificacion: "✓", plan: "📋", aprobacion: "⏸", error: "⚠️" };
+  cont.innerHTML = pasos.length ? pasos.map(p =>
+    `<div style="padding:8px 12px;border-bottom:1px solid var(--e-border);font-size:13px">
+      <span style="font-weight:500">${ICOP[p.tipo]||"•"} ${esc(p.tipo)}</span><span style="font-size:10px;color:var(--e-text-muted);margin-left:8px">${hora(p.creado_en)}</span>
+      <div style="color:var(--e-text-sec);margin-top:3px;white-space:pre-wrap">${esc((p.detalle||"").slice(0,800))}</div>
+    </div>`).join("") : `<div class="placeholder">Esta ejecución no dejó pasos.</div>`;
+}
+
+// ── Aprobaciones pendientes del agente (banner) ──
+async function cargarBanner() {
+  try {
+    const pend = (await api("/api/aprobaciones")).filter(a => a.agente_id === id);
+    const b = document.getElementById("banner-aprob"); if (!b) return;
+    b.innerHTML = pend.length ? `<div style="border:1px solid #fdba74;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      ⏸ <b>${pend.length} aprobación(es) pendiente(s):</b> ${pend.map(a => `<span style="font-family:monospace;font-size:12px">${esc(a.detalle||a.titulo).slice(0,80)}</span>`).join(" · ")}
+      <a href="/aprobaciones" style="margin-left:auto;color:var(--e-accent)">resolver →</a></div>` : "";
+  } catch {}
+}
+setInterval(cargarBanner, 4000);
 
 async function cargarDocs() {
   const cont = document.getElementById("docs-lista");
@@ -246,8 +302,7 @@ let modoAvanzadoEd = false;
 
 // ── Lienzo del esqueleto (como crear agente, pero para un agente existente) ──
 const ICONOS_ESQ = { identidad:"◈", cerebro:"⬡", skills:"◇", tools:"⚙", memoria:"❋", conocimiento:"▤",
-  planeamiento:"→", descomposicion:"⑃", autocorreccion:"↻", reflexion:"◉", pensar_voz_alta:"✧",
-  subagentes:"⤳", escalamiento:"⤒", flujos:"→", gobierno:"⬟", disparadores:"⚡", canales:"📡", limites:"🔒", trazas:"⏱" };
+  planeamiento:"→", pensar_voz_alta:"✧", flujos:"→", gobierno:"⬟", canales:"📡", trazas:"⏱" };
 let piezasEnEsq = [];
 
 const ESENCIALES_ESQ = ["identidad", "cerebro", "skills", "tools", "canales"];
@@ -256,9 +311,8 @@ function piezaTieneDatos(k) {
   const v = agente[k];
   if (!v) return false;
   if (Array.isArray(v.items)) return v.items.length > 0;  // skills/tools/listas: solo si tienen algo
-  // Piezas de config: solo si el usuario puso datos reales (no los defaults).
-  // Ignoramos valores por defecto típicos: activo, curaduria, modo, esfuerzo, turnos, proveedor, modelo.
-  const DEFAULTS = ["activo", "_extra", "curaduria", "modo", "esfuerzo", "turnos", "proveedor", "modelo_rapido", "estrategia", "rag", "confirmar", "rechaza_inventado", "verifica", "hereda", "ve_padre", "permitido"];
+  // Piezas de config: solo si el usuario puso datos reales (no los defaults del esqueleto).
+  const DEFAULTS = ["activo", "visible", "_extra", "modo", "ventana", "turnos", "temperatura", "modelo_rapido", "verifica", "aprobar_por_whatsapp", "max_tool_calls"];
   const claves = Object.keys(v).filter(kk => !DEFAULTS.includes(kk));
   return claves.some(kk => v[kk] !== "" && v[kk] != null && v[kk] !== false);
 }
@@ -383,78 +437,53 @@ document.addEventListener("mouseup", ()=>{ moviendoEsq=null; _paneEsq=false; con
 function quitarEsq(k){ piezasEnEsq=piezasEnEsq.filter(x=>x.k!==k); renderEsqueletoLienzo(); }
 
 function abrirEditor(k) {
-  if (k === "skills") { abrirGestorSkills(); return; }
-  if (k === "tools") { abrirGestorTools(); return; }
+  if (k === "skills") { abrirGestorBiblioteca("skills"); return; }
+  if (k === "tools") { abrirGestorBiblioteca("tools"); return; }
+  if (k === "flujos") { abrirGestorBiblioteca("flujos"); return; }
   piezaEditando = PIEZAS_DEF.find(p => p.k === k);
   if (!piezaEditando) { alert("Esta pieza no tiene editor definido."); return; }
   modoAvanzadoEd = false;
   renderEditor();
 }
 
-// Gestor de tools: muestra la biblioteca de tools con checkboxes.
-async function abrirGestorTools() {
-  const biblioteca = await (await fetch("/api/tools")).json();
-  const asignadas = (agente.tools && Array.isArray(agente.tools.ids)) ? agente.tools.ids : [];
+// ── Gestor de biblioteca (tools / skills / flujos): checkboxes sobre lo registrado ──
+const BIBLIO = {
+  tools:  { url: "/api/tools",  titulo: "Tools",  sub: "Operaciones tipadas que puede invocar.",     campo: "toolIds",  badge: t => t.modulo || t.tipo || "" },
+  skills: { url: "/api/skills", titulo: "Skills", sub: "Procedimientos que puede ejecutar.",           campo: "skillIds", badge: s => s.nivel_riesgo || "" },
+  flujos: { url: "/api/flujos", titulo: "Flujos", sub: "Orquestaciones deterministas que puede disparar.", campo: "flujoIds", badge: f => f.modulo || "" },
+};
+async function abrirGestorBiblioteca(tipo) {
+  const cfg = BIBLIO[tipo];
+  const biblioteca = await (await fetch(cfg.url)).json();
+  const asignadas = (agente[tipo] && Array.isArray(agente[tipo].ids)) ? agente[tipo].ids : [];
   const html = biblioteca.length
-    ? biblioteca.map(t => `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--e-border);cursor:pointer">
-        <input type="checkbox" class="tl-check" value="${t.id}" ${asignadas.includes(t.id)?"checked":""} style="width:auto;margin:3px 0 0">
-        <span><b style="font-size:13px">${t.nombre}</b> <span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-accent-bg);color:var(--e-accent)">${t.tipo}</span><br><span style="font-size:12px;color:var(--e-text-sec)">${(t.descripcion||"").slice(0,80)}</span></span>
+    ? biblioteca.map(x => `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--e-border);cursor:pointer">
+        <input type="checkbox" class="bib-check" value="${x.id}" ${asignadas.includes(x.id)?"checked":""} style="width:auto;margin:3px 0 0">
+        <span><b style="font-size:13px">${x.nombre}</b>
+          ${x.origen==="codigo" ? `<span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-accent-bg);color:var(--e-accent)">código</span>` : ""}
+          ${cfg.badge(x) ? `<span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-warn-bg);color:var(--e-warn-tx)">${cfg.badge(x)}</span>` : ""}
+          ${x.requiere_aprobacion ? `<span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-warn-bg);color:var(--e-warn-tx)">⏸ aprobación</span>` : ""}
+          <br><span style="font-size:12px;color:var(--e-text-sec)">${(x.descripcion||"").slice(0,90)}</span></span>
       </label>`).join("")
-    : `<p style="color:var(--e-text-muted);font-size:13px">No hay tools en la biblioteca. Creá algunas en la página Tools primero.</p>`;
+    : `<p style="color:var(--e-text-muted);font-size:13px">No hay ${tipo} registradas. Se definen en código (src/${tipo}/).</p>`;
 
   document.getElementById("modal-ed").innerHTML = `
-    <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:460px;width:90%;max-height:80vh;overflow-y:auto">
-      <h3 style="margin:0 0 4px">Tools de ${agente.nombre}</h3>
-      <p class="sub">Elegí a qué conexiones puede acceder este agente.</p>
+    <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:480px;width:90%;max-height:80vh;overflow-y:auto">
+      <h3 style="margin:0 0 4px">${cfg.titulo} de ${agente.nombre}</h3>
+      <p class="sub">${cfg.sub}</p>
       <div style="margin-top:10px">${html}</div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
         <button onclick="cerrarEditor()">Cancelar</button>
-        <button class="primario" onclick="guardarToolsAsignadas()">Guardar</button>
+        <button class="primario" onclick="guardarBiblioteca('${tipo}')">Guardar</button>
       </div>
     </div>`;
   document.getElementById("modal-ed").style.display = "flex";
 }
-
-async function guardarToolsAsignadas() {
-  const ids = [...document.querySelectorAll(".tl-check:checked")].map(c => c.value);
-  const resp = await fetch(`/api/agentes/${id}/tools`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ toolIds: ids }) });
-  if (!resp.ok) { const r = await resp.json(); alert("No se pudo guardar: " + (r.error||"error")); return; }
-  agente = await (await fetch(`/api/agentes/${id}`)).json();
-  cerrarEditor();
-  if (tab === "esqueleto") renderPiezasEsq(); else render();
-}
-
-// Gestor de skills: muestra la biblioteca completa con checkboxes.
-async function abrirGestorSkills() {
-  const biblioteca = await (await fetch("/api/skills")).json();
-  // Puede venir como {ids:[...]} (formato nuevo) o vacío — leemos robusto.
-  const asignadas = (agente.skills && Array.isArray(agente.skills.ids)) ? agente.skills.ids : [];
-  const html = biblioteca.length
-    ? biblioteca.map(s => `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--e-border);cursor:pointer">
-        <input type="checkbox" class="sk-check" value="${s.id}" ${asignadas.includes(s.id)?"checked":""} style="width:auto;margin:3px 0 0">
-        <span><b style="font-size:13px">${s.nombre}</b> <span style="font-size:10px;padding:1px 6px;border-radius:5px;background:var(--e-warn-bg);color:var(--e-warn-tx)">${s.nivel_riesgo}</span><br><span style="font-size:12px;color:var(--e-text-sec)">${(s.descripcion||"").slice(0,80)}</span></span>
-      </label>`).join("")
-    : `<p style="color:var(--e-text-muted);font-size:13px">No hay skills en la biblioteca. Creá algunas en la página Skills primero.</p>`;
-
-  document.getElementById("modal-ed").innerHTML = `
-    <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:460px;width:90%;max-height:80vh;overflow-y:auto">
-      <h3 style="margin:0 0 4px">Skills de ${agente.nombre}</h3>
-      <p class="sub">Elegí qué habilidades de la biblioteca puede usar este agente.</p>
-      <div style="margin-top:10px">${html}</div>
-      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-        <button onclick="cerrarEditor()">Cancelar</button>
-        <button class="primario" onclick="guardarSkillsAsignadas()">Guardar</button>
-      </div>
-    </div>`;
-  document.getElementById("modal-ed").style.display = "flex";
-}
-
-async function guardarSkillsAsignadas() {
-  const ids = [...document.querySelectorAll(".sk-check:checked")].map(c => c.value);
-  const resp = await fetch(`/api/agentes/${id}/skills`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ skillIds: ids }) });
-  const r = await resp.json();
-  if (!resp.ok) { alert("No se pudo guardar: " + (r.error || "error desconocido")); return; }
-  // recargar el agente completo para reflejar el cambio
+async function guardarBiblioteca(tipo) {
+  const cfg = BIBLIO[tipo];
+  const ids = [...document.querySelectorAll(".bib-check:checked")].map(c => c.value);
+  const resp = await fetch(`/api/agentes/${id}/${tipo}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ [cfg.campo]: ids }) });
+  if (!resp.ok) { const r = await resp.json().catch(()=>({})); alert("No se pudo guardar: " + (r.error||"error")); return; }
   agente = await (await fetch(`/api/agentes/${id}`)).json();
   cerrarEditor();
   if (tab === "esqueleto") renderPiezasEsq(); else render();
@@ -462,14 +491,15 @@ async function guardarSkillsAsignadas() {
 
 function campoEdHTML(c, val) {
   const oc = `data-key="${c.key}" data-tipo="${c.t}"`;
+  const usa = c.usa ? `<span style="font-size:10px;color:var(--e-text-muted);margin-left:6px" title="Dónde lo lee el motor">⚙ ${c.usa}</span>` : "";
   const ayuda = c.ayuda ? `<p style="font-size:11px;color:var(--e-text-muted);margin:2px 0 0">${c.ayuda}</p>` : "";
   if (c.t === "check")
-    return `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;cursor:pointer"><input type="checkbox" ${oc} style="width:auto;margin:2px 0 0" ${val?"checked":""}><span style="font-size:13px">${c.label}</span></label>${ayuda}`;
+    return `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;cursor:pointer"><input type="checkbox" ${oc} style="width:auto;margin:2px 0 0" ${val?"checked":""}><span style="font-size:13px">${c.label}${usa}</span></label>${ayuda}`;
   if (c.t === "textarea")
-    return `<label>${c.label}</label><textarea ${oc} rows="2" placeholder="${c.ph||""}">${val||""}</textarea>${ayuda}`;
+    return `<label>${c.label}${usa}</label><textarea ${oc} rows="2" placeholder="${c.ph||""}">${val||""}</textarea>${ayuda}`;
   if (c.t === "select")
-    return `<label>${c.label}</label><select ${oc}>${c.ops.map(o=>`<option value="${o[0]}" ${val===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select>${ayuda}`;
-  return `<label>${c.label}</label><input ${oc} type="${c.t}" placeholder="${c.ph||""}" value="${val??""}" />${ayuda}`;
+    return `<label>${c.label}${usa}</label><select ${oc}>${c.ops.map(o=>`<option value="${o[0]}" ${val===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select>${ayuda}`;
+  return `<label>${c.label}${usa}</label><input ${oc} type="${c.t}" placeholder="${c.ph||""}" value="${val??""}" />${ayuda}`;
 }
 
 function renderEditor() {
@@ -579,10 +609,13 @@ function pintarCabecera() {
 function burbuja(rol, texto, viaWa = false) {
   const esUsuario = rol === "usuario";
   const esPensamiento = rol === "pensamiento";
+  const esSistema = rol === "sistema";
   if (esPensamiento)
     return `<div style="align-self:flex-start;font-size:11px;color:var(--e-text-muted);font-style:italic;background:var(--e-accent-bg);padding:6px 10px;border-radius:10px;max-width:85%">🧠 ${texto}</div>`;
+  if (esSistema)
+    return `<div style="align-self:center;font-size:11px;color:var(--e-text-muted);padding:4px 10px">${texto}</div>`;
   const wa = viaWa ? `<span style="font-size:9px;color:#25D366;margin-left:6px">● WhatsApp</span>` : "";
-  return `<div style="align-self:${esUsuario?"flex-end":"flex-start"};max-width:80%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;background:${esUsuario?"var(--e-accent-bg)":"var(--e-surface)"};color:${esUsuario?"var(--e-accent)":"var(--e-text)"};border:${esUsuario?"none":"1px solid var(--e-border)"}">${texto}${wa}</div>`;
+  return `<div style="align-self:${esUsuario?"flex-end":"flex-start"};max-width:80%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;background:${esUsuario?"var(--e-accent-bg)":"var(--e-surface)"};color:${esUsuario?"var(--e-accent)":"var(--e-text)"};border:${esUsuario?"none":"1px solid var(--e-border)"}">${texto}${wa}</div>`;
 }
 
 let ultimoConteoMsgs = 0;
@@ -598,10 +631,10 @@ async function cargarChat(scrollAlFondo = true) {
   const habiaNuevos = msgs.length > ultimoConteoMsgs;
   ultimoConteoMsgs = msgs.length;
 
-  // Limpiamos el marcador [WhatsApp de ...] para que se vea como conversación normal.
+  // El canal viene de la conversación; el prefijo "[WhatsApp de N]" es de mensajes viejos.
   hist.innerHTML = msgs.length ? msgs.map(m => {
     const texto = m.contenido.replace(/^\[WhatsApp de [\d+]+\]\s*/, "");
-    const viaWa = m.contenido.startsWith("[WhatsApp");
+    const viaWa = m.canal === "whatsapp" || m.contenido.startsWith("[WhatsApp");
     return burbuja(m.rol, texto, viaWa);
   }).join("")
     : `<p style="color:var(--e-text-muted);text-align:center;font-size:13px;padding:20px">Todavía no hablaste con ${agente.nombre}. Escribile abajo.</p>`;
@@ -646,8 +679,10 @@ async function enviarChat() {
     const r = await (await fetch(`/api/agentes/${id}/chat`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ mensaje: texto }) })).json();
     document.getElementById("pensando")?.remove();
     if (r.respuesta) hist.innerHTML += burbuja("agente", r.respuesta);
-    if (!r.ok) nota.textContent = "La respuesta tuvo un problema — revisá la pestaña Trazas.";
+    if (r.estado === "esperando_aprobacion") nota.innerHTML = `⏸ Esperando tu aprobación — resolvela en <a href="/aprobaciones" style="color:var(--e-accent)">Aprobaciones</a>.`;
+    else if (!r.ok) nota.textContent = "La respuesta tuvo un problema — revisá la pestaña Trazas.";
     hist.scrollTop = hist.scrollHeight;
+    ultimoConteoMsgs = 0; // que el próximo refresco traiga la versión guardada
   } catch (e) {
     document.getElementById("pensando")?.remove();
     nota.textContent = "Error: " + e.message;
@@ -662,6 +697,7 @@ async function cargar() {
     agente = await resp.json();
     pintarCabecera();
     render();
+    cargarBanner();
   } catch (e) {
     document.getElementById("contenido").innerHTML = `<div class="placeholder">No se pudo cargar el agente: ${e.message}</div>`;
   }

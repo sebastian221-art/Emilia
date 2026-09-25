@@ -1,3 +1,4 @@
+// ARCHIVO: src/motor/groq.ts
 import Groq from "groq-sdk";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "groq-sdk/resources/chat/completions";
 
@@ -15,20 +16,34 @@ export interface RespuestaModelo {
   toolCalls: { id: string; nombre: string; argumentos: Record<string, unknown> }[];
 }
 
-/** Una llamada al modelo, con o sin tools. Normaliza la respuesta a un formato propio. */
+export interface OpcionesModelo {
+  modelo?: string;
+  temperatura?: number;
+  forzarTool?: boolean;
+}
+
+/**
+ * Una llamada al modelo, con o sin tools. Normaliza la respuesta.
+ * Compatibilidad: el 3er parámetro puede ser el nombre del modelo (uso viejo)
+ * o un objeto de opciones {modelo, temperatura, forzarTool}.
+ */
 export async function llamarModelo(
   mensajes: ChatCompletionMessageParam[],
   tools: ChatCompletionTool[] = [],
-  modelo = MODELO_POR_DEFECTO,
-  forzarTool = false
+  modeloUOpciones: string | OpcionesModelo = MODELO_POR_DEFECTO,
+  forzarToolLegado = false
 ): Promise<RespuestaModelo> {
+  const op: OpcionesModelo = typeof modeloUOpciones === "string" ? { modelo: modeloUOpciones, forzarTool: forzarToolLegado } : modeloUOpciones;
+  const modelo = op.modelo || MODELO_POR_DEFECTO;
+  const temperature = clamp(op.temperatura ?? 0.3, 0, 1);
+
   try {
     const resp = await get().chat.completions.create({
       model: modelo,
-      temperature: 0.3,
+      temperature,
       messages: mensajes,
       tools: tools.length ? tools : undefined,
-      tool_choice: tools.length ? (forzarTool ? "required" : "auto") : undefined,
+      tool_choice: tools.length ? (op.forzarTool ? "required" : "auto") : undefined,
     });
     const m = resp.choices[0]?.message;
     return {
@@ -41,45 +56,30 @@ export async function llamarModelo(
       }),
     };
   } catch (e: any) {
-    // gpt-oss de Groq a veces "escupe" una tool call mal formada y Groq
-    // rechaza con error 400 — PERO el error incluye lo que el modelo quería
-    // hacer (failed_generation). Lo rescatamos en vez de perderlo.
+    // gpt-oss de Groq a veces "escupe" una tool call mal formada y Groq la
+    // rechaza con 400 — PERO el error incluye lo que el modelo quería hacer
+    // (failed_generation). Lo rescatamos en vez de perderlo.
     const msg = String(e?.error?.message || e?.message || "");
-
-    // failed_generation puede venir en distintas capas del error del SDK. Lo buscamos en todas.
-    let failedGen =
-      e?.error?.failed_generation ||
-      e?.error?.error?.failed_generation ||
-      e?.failed_generation ||
-      null;
-    // Último recurso: extraerlo del texto del mensaje de error.
+    let failedGen = e?.error?.failed_generation || e?.error?.error?.failed_generation || e?.failed_generation || null;
     if (!failedGen) {
       try {
         const jsonEnMsg = String(e?.message || "").match(/\{[\s\S]*\}/)?.[0];
         if (jsonEnMsg) failedGen = JSON.parse(jsonEnMsg)?.error?.failed_generation || null;
       } catch { /* nada */ }
     }
-
     if (failedGen && (msg.includes("tool_use_failed") || msg.includes("Tool choice is none"))) {
       try {
         const parsed = JSON.parse(failedGen);
         if (parsed?.name && parsed?.arguments) {
-          // Devolvemos esta tool call como si el modelo la hubiera hecho bien.
-          return {
-            texto: "",
-            razonamiento: undefined,
-            toolCalls: [{ id: "rescatado_" + Date.now(), nombre: parsed.name, argumentos: parsed.arguments }],
-          };
+          return { texto: "", razonamiento: undefined, toolCalls: [{ id: "rescatado_" + Date.now(), nombre: parsed.name, argumentos: parsed.arguments }] };
         }
       } catch { /* si no parsea, seguimos abajo */ }
     }
-
-    // Caso 2: intentó llamar tool cuando no le dimos ninguna → reintentar solo texto.
+    // Intentó llamar tool cuando no le dimos ninguna → reintentar solo texto.
     if (msg.includes("Tool choice is none") || msg.includes("tool_use_failed")) {
       try {
         const resp = await get().chat.completions.create({
-          model: modelo,
-          temperature: 0.3,
+          model: modelo, temperature,
           messages: [...mensajes, { role: "system", content: "Respondé SOLO con texto plano. No intentes llamar ninguna herramienta." }],
         });
         const m = resp.choices[0]?.message;
@@ -89,3 +89,5 @@ export async function llamarModelo(
     throw e;
   }
 }
+
+function clamp(n: number, a: number, b: number) { return Number.isFinite(n) ? Math.min(b, Math.max(a, n)) : 0.3; }

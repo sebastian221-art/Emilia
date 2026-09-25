@@ -1,18 +1,25 @@
-import { query } from "../db/cliente.js";
+// ARCHIVO: src/dominio/chat.ts
+// Compatibilidad: estas funciones existían antes de las conversaciones.
+// Ahora pasan por la conversación del panel. El listado del agente sigue
+// devolviendo TODOS sus mensajes (panel + WhatsApp) porque así lo muestra la
+// UI actual; en Fase 5 la UI filtra por conversación.
 
-export async function guardarMensaje(agenteId: string, rol: string, contenido: string) {
-  const [m] = await query(
-    `INSERT INTO mensajes (agente_id, rol, contenido) VALUES ($1,$2,$3) RETURNING *`,
-    [agenteId, rol, contenido]
-  );
-  return m;
+import { query } from "../db/cliente.js";
+import { obtenerOCrearConversacion, guardarMensajeEn } from "./conversaciones.js";
+
+export async function guardarMensaje(agenteId: string, rol: "usuario" | "agente" | "pensamiento" | "sistema", contenido: string) {
+  const conv = await obtenerOCrearConversacion(agenteId, "panel", "panel");
+  return guardarMensajeEn(conv, rol, contenido);
 }
 
-export async function mensajesDe(agenteId: string, limite = 50) {
-  return query(
-    `SELECT * FROM mensajes WHERE agente_id = $1 ORDER BY creado_en ASC LIMIT $2`,
+export async function mensajesDe(agenteId: string, limite = 100) {
+  const filas = await query(
+    `SELECT m.*, c.canal, c.contacto FROM mensajes m
+     LEFT JOIN conversaciones c ON c.id = m.conversacion_id
+     WHERE m.agente_id = $1 ORDER BY m.creado_en DESC LIMIT $2`,
     [agenteId, limite]
   );
+  return filas.reverse();
 }
 
 export async function pasosDeUltimaEjecucion(agenteId: string) {

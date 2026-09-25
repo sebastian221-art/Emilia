@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- ARCHIVO: public/codigo/index.html -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Código · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<style>
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.layout { display: grid; grid-template-columns: 300px 1fr; gap: 14px; height: calc(100vh - 170px); }
+.izq { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.izq h4 { font-size: 10px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 4px; }
+.card { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 10px; padding: 9px 11px; font-size: 12px; cursor: pointer; }
+.card:hover { border-color: var(--e-accent); }
+.card.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
+.card .n { font-family: monospace; font-weight: 500; }
+.card .s { color: var(--e-text-sec); font-size: 11px; margin-top: 3px; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; overflow-y: auto; }
+.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 8px; }
+.log { font-family: monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.55; max-height: 45vh; overflow-y: auto; background: var(--e-bg2); border-radius: 10px; padding: 10px; }
+.log .claude { color: #d8c9ff; } .log .tool { color: #6ee7b7; } .log .error { color: #ff9090; } .log .resultado { color: #fdba74; } .log .t { color: var(--e-text-muted); }
+pre.diff { font-size: 11px; white-space: pre-wrap; background: var(--e-bg2); border-radius: 10px; padding: 10px; max-height: 50vh; overflow: auto; margin: 0; }
+pre.diff .add { color: #6ee7b7; } pre.diff .del { color: #ff9090; } pre.diff .hdr { color: #b388ff; }
+.vacio { text-align: center; padding: 60px 20px; color: var(--e-text-muted); }
+.fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/codigo" class="activo">Código</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <div class="top">
+    <div><h1>Código · Senior Developer</h1><p class="sub">Proyectos registrados, sandboxes abiertos y sesiones de Claude Code con su log en vivo y el diff. Integrar al repo real pasa por Aprobaciones.</p></div>
+    <button onclick="mostrarRegistro()">+ Proyecto</button>
+  </div>
+  <div class="layout">
+    <div class="izq" id="izq"></div>
+    <div class="panel" id="panel"><div class="vacio">Elegí un sandbox o una sesión.</div></div>
+  </div>
+</main>
+<script src="/comun/espejo.js"></script>
+<script>
+let proyectos = [], sandboxes = [], sesiones = [], sel = null, timer = null;
+
+async function cargar() {
+  [proyectos, sandboxes, sesiones] = await Promise.all([api("/api/codigo/proyectos"), api("/api/codigo/sandboxes"), api("/api/codigo/sesiones?limite=25")]);
+  const izq = document.getElementById("izq");
+  let html = `<h4>Proyectos</h4>` + (proyectos.length ? proyectos.map((p) => `<div class="card" onclick="verProyecto('${p.id}')"><div class="n">${esc(p.nombre)}</div><div class="s">${esc(p.ruta)} · ${esc(p.rama_base)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno. Registrá uno arriba o pedíselo al Senior.</p>`);
+  html += `<h4>Sandboxes abiertos</h4>` + (sandboxes.length ? sandboxes.map((s) => `<div class="card ${sel === "sb:" + s.id ? "activo" : ""}" onclick="verSandbox('${s.id}')"><div class="n">${esc(s.proyecto_nombre)}/${esc(s.rama)}</div><div class="s">${esc(s.proposito)} · ${fechaHora(s.creado_en)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno.</p>`);
+  html += `<h4>Sesiones de Claude Code</h4>` + (sesiones.length ? sesiones.map((s) => `<div class="card ${sel === "se:" + s.id ? "activo" : ""}" onclick="verSesion('${s.id}')"><div class="n">${esc(s.proyecto)}/${esc((s.rama || "").replace("senior/", ""))}${badgeEstado(s.estado)}</div><div class="s">${esc(s.encargo).slice(0, 70)}<br>${fechaHora(s.inicio)}${s.costo_usd ? ` · $${Number(s.costo_usd).toFixed(3)}` : ""}${s.turnos ? ` · ${s.turnos} turnos` : ""}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguna todavía.</p>`);
+  izq.innerHTML = html;
+}
+
+function verProyecto(id) {
+  const p = proyectos.find((x) => x.id === id); sel = null; clearInterval(timer);
+  document.getElementById("panel").innerHTML = `<h2 style="font-family:monospace;margin:0">${esc(p.nombre)}</h2>
+    <p class="sub" style="font-size:12px">${esc(p.ruta)} · rama base <b>${esc(p.rama_base)}</b></p>
+    <h3>Comandos</h3><div style="font-size:12px;font-family:monospace">install: ${esc(p.cmd_install || "(auto)")}<br>build: ${esc(p.cmd_build || "—")}<br>lint: ${esc(p.cmd_lint || "—")}<br>test: ${esc(p.cmd_test || "—")}</div>
+    ${p.notas ? `<h3>Notas</h3><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec)">${esc(p.notas)}</div>` : ""}
+    <h3>Sandboxes de este proyecto</h3>${sandboxes.filter((s) => s.proyecto_id === p.id).map((s) => `<div class="card" onclick="verSandbox('${s.id}')"><div class="n">${esc(s.rama)}</div><div class="s">${esc(s.proposito)}</div></div>`).join("") || `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno abierto.</p>`}`;
+}
+
+async function verSandbox(id) {
+  sel = "sb:" + id; clearInterval(timer); await cargar();
+  const s = sandboxes.find((x) => x.id === id);
+  const panel = document.getElementById("panel");
+  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:monospace;margin:0;font-size:16px">${esc(s.proyecto_nombre)}/${esc(s.rama)}</h2>${badge("abierto", "ok")}</div>
+    <p class="sub" style="font-size:12px">${esc(s.proposito)} · ${esc(s.ruta)}</p>
+    <div style="display:flex;gap:8px;margin-top:10px"><button onclick="cerrarSandbox('${s.id}', false)">Cerrar (conservar rama)</button><button onclick="cerrarSandbox('${s.id}', true)" style="color:#ff8080">Descartar (borrar rama)</button></div>
+    <h3>Sesiones</h3><div id="sb-ses"></div>
+    <h3>Diff contra ${esc(s.rama)} base</h3><div id="sb-diff"><p style="font-size:12px;color:var(--e-text-muted)">Cargando…</p></div>`;
+  const ses = await api(`/api/codigo/sesiones?sandboxId=${id}`);
+  document.getElementById("sb-ses").innerHTML = ses.length ? ses.map((x) => `<div class="card" onclick="verSesion('${x.id}')"><div class="n">${badgeEstado(x.estado)} ${esc(x.encargo).slice(0, 80)}</div><div class="s">${fechaHora(x.inicio)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Sin sesiones.</p>`;
+  const d = await api(`/api/codigo/sandboxes/${id}/diff`);
+  document.getElementById("sb-diff").innerHTML = `<div style="font-size:12px;color:var(--e-text-sec);white-space:pre-wrap;margin-bottom:8px">${esc(d.resumen)}</div><pre class="diff">${colorDiff(d.diff)}${d.truncado ? "\n[...recortado]" : ""}</pre>`;
+}
+function colorDiff(t) {
+  return String(t || "").split("\n").map((l) => { const e = esc(l); if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("@@")) return `<span class="hdr">${e}</span>`; if (l.startsWith("+")) return `<span class="add">${e}</span>`; if (l.startsWith("-")) return `<span class="del">${e}</span>`; return e; }).join("\n");
+}
+async function cerrarSandbox(id, borrar) {
+  if (!confirm(borrar ? "¿Descartar el sandbox y BORRAR su rama? No se puede deshacer." : "¿Cerrar el sandbox? La rama se conserva.")) return;
+  try { await post(`/api/codigo/sandboxes/${id}/cerrar`, { borrar_rama: borrar }); sel = null; await cargar(); document.getElementById("panel").innerHTML = `<div class="vacio">Sandbox cerrado.</div>`; } catch (e) { alert(e.message); }
+}
+
+async function verSesion(id) {
+  sel = "se:" + id; clearInterval(timer);
+  await refrescarSesion(id);
+  timer = setInterval(() => refrescarSesion(id), 2500);
+}
+async function refrescarSesion(id) {
+  const s = await api(`/api/codigo/sesiones/${id}`);
+  const fin = s.estado !== "en_curso"; if (fin) clearInterval(timer);
+  const panel = document.getElementById("panel");
+  const scroll = panel.querySelector(".log")?.scrollTop;
+  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Sesión de Claude Code</b>${badgeEstado(s.estado)}${s.turnos ? badge(`${s.turnos} turnos`, "neutro") : ""}${s.costo_usd ? badge(`$${Number(s.costo_usd).toFixed(3)}`, "neutro") : ""}${s.duracion_ms ? badge(`${Math.round(s.duracion_ms / 1000)}s`, "neutro") : ""}
+      ${!fin ? `<button style="margin-left:auto;font-size:11px" onclick="cancelar('${s.id}')">Cancelar</button>` : `<button style="margin-left:auto;font-size:11px" onclick="verSandbox('${s.sandbox_id}')">Ver sandbox y diff</button>`}</div>
+    <h3>Encargo</h3><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec);max-height:120px;overflow:auto">${esc(s.encargo)}</div>
+    ${s.error ? `<h3>Error</h3><div style="font-size:12px;color:#ff9090;white-space:pre-wrap">${esc(s.error)}</div>` : ""}
+    ${s.resultado ? `<h3>Informe final</h3><div style="font-size:13px;white-space:pre-wrap">${esc(s.resultado)}</div>` : ""}
+    <h3>Log en vivo${!fin ? " ●" : ""}</h3><div class="log">${(s.log || []).map((l) => `<div><span class="t">${hora(l.t)}</span> <span class="${esc(l.tipo)}">[${esc(l.tipo)}]</span> ${esc(l.texto)}</div>`).join("") || "(sin eventos todavía)"}</div>
+    ${s.session_id_claude ? `<p style="font-size:11px;color:var(--e-text-muted);margin-top:8px">session_id de Claude: <code>${esc(s.session_id_claude)}</code> (se puede continuar)</p>` : ""}`;
+  const lg = panel.querySelector(".log"); if (lg) lg.scrollTop = fin && scroll != null ? scroll : lg.scrollHeight;
+}
+async function cancelar(id) { if (!confirm("¿Cancelar la sesión?")) return; await post(`/api/codigo/sesiones/${id}/cancelar`); await refrescarSesion(id); }
+
+function mostrarRegistro() {
+  sel = null; clearInterval(timer);
+  document.getElementById("panel").innerHTML = `<h2 style="font-family:var(--syne);margin:0">Registrar proyecto</h2>
+    <div class="fila"><div><label>Nombre (snake_case)</label><input id="r-nombre" placeholder="jelcom_envios" /></div><div><label>Rama base</label><input id="r-rama" value="main" /></div></div>
+    <label>Ruta absoluta del repo</label><input id="r-ruta" placeholder="C:\\Users\\Sebas\\Sebastian_proyects\\jelcom-envios" />
+    <div class="fila"><div><label>Comando build</label><input id="r-build" placeholder="npx tsc --noEmit -p ." /></div><div><label>Comando test</label><input id="r-test" placeholder="npm test" /></div></div>
+    <div class="fila"><div><label>Comando lint</label><input id="r-lint" /></div><div><label>Comando install</label><input id="r-install" placeholder="(auto: npm install)" /></div></div>
+    <label>Notas para el Senior (stack, convenciones, cuidados)</label><textarea id="r-notas" rows="3"></textarea>
+    <button class="primario" style="margin-top:12px" onclick="registrar()">Registrar</button><div id="r-out"></div>`;
+}
+async function registrar() {
+  const v = (i) => document.getElementById(i).value.trim();
+  try {
+    const r = await post("/api/codigo/proyectos", { nombre: v("r-nombre"), ruta: v("r-ruta"), rama_base: v("r-rama") || "main", cmd_build: v("r-build") || undefined, cmd_test: v("r-test") || undefined, cmd_lint: v("r-lint") || undefined, cmd_install: v("r-install") || undefined, notas: v("r-notas") });
+    document.getElementById("r-out").innerHTML = renderResultado(r); await cargar();
+  } catch (e) { document.getElementById("r-out").innerHTML = renderResultado({ ok: false, error: e.message }); }
+}
+cargar(); setInterval(cargar, 10000);
+</script>
+</body>
+</html>

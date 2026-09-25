@@ -1,26 +1,49 @@
+// ARCHIVO: src/dominio/tools.ts
 import { query } from "../db/cliente.js";
 import { llamarModelo } from "../motor/groq.js";
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
+// Las tools con origen='codigo' vienen del registro (src/tools/): se listan y
+// se asignan a agentes, pero no se editan ni se borran desde la UI.
 
 export async function crearTool(datos: any): Promise<{ id: string }> {
   const nombre = datos.nombre?.trim();
   if (!nombre) throw new Error("La tool necesita un nombre.");
   const [f] = await query<{ id: string }>(
-    `INSERT INTO tools (nombre, descripcion, tipo, secciones) VALUES ($1,$2,$3,$4) RETURNING id`,
+    `INSERT INTO tools (nombre, descripcion, tipo, secciones, origen) VALUES ($1,$2,$3,$4,'ui') RETURNING id`,
     [nombre, datos.descripcion || "", datos.tipo || "api_rest", JSON.stringify(datos.secciones || {})]
   );
   return { id: f.id };
 }
-export async function listarTools() { return query(`SELECT * FROM tools ORDER BY creado_en DESC`); }
-export async function obtenerTool(id: string) { const [t] = await query(`SELECT * FROM tools WHERE id=$1`, [id]); return t; }
+
+/** Lista para la UI: primero las de código (activas), después las de la UI. */
+export async function listarTools() {
+  return query(`SELECT * FROM tools WHERE activo = true ORDER BY (origen = 'codigo') DESC, modulo NULLS LAST, creado_en DESC`);
+}
+
+export async function obtenerTool(id: string) {
+  const [t] = await query(`SELECT * FROM tools WHERE id=$1`, [id]);
+  return t;
+}
+
 export async function actualizarTool(id: string, datos: any): Promise<{ id: string }> {
+  const actual = await obtenerTool(id);
+  if (!actual) throw new Error("Tool no encontrada.");
+  if (actual.origen === "codigo") throw new Error(`"${actual.nombre}" está definida en código (src/tools/). Se edita ahí, no desde la UI.`);
   await query(
     `UPDATE tools SET nombre=$1, descripcion=$2, tipo=$3, secciones=$4, estado_prueba='sin_probar', actualizado_en=now() WHERE id=$5`,
     [datos.nombre, datos.descripcion || "", datos.tipo || "api_rest", JSON.stringify(datos.secciones || {}), id]
   );
   return { id };
 }
-export async function borrarTool(id: string) { await query(`DELETE FROM tools WHERE id=$1`, [id]); }
 
+export async function borrarTool(id: string) {
+  const actual = await obtenerTool(id);
+  if (actual?.origen === "codigo") throw new Error(`"${actual.nombre}" está definida en código. Para retirarla, quitala del registro.`);
+  await query(`DELETE FROM tools WHERE id=$1`, [id]);
+}
+
+// ── Exploración ──────────────────────────────────────────────────────────────
 /**
  * Exploración profunda del alcance de una tool:
  * 1. Prueba la conexión.
@@ -29,10 +52,17 @@ export async function borrarTool(id: string) { await query(`DELETE FROM tools WH
  *
  * Honesto sobre el límite: si no hay OpenAPI, hace un sondeo básico y la IA
  * lo aclara ("esto es lo que encontré, puede haber más").
+ * Solo aplica a tools de la UI (api_rest); las de código ya traen su schema.
  */
 export async function explorarTool(id: string): Promise<any> {
   const tool = await obtenerTool(id);
   if (!tool) throw new Error("Tool no encontrada");
+
+  if (tool.origen === "codigo") {
+    const cap = { estado: "ok", endpoints: [], resumen: `"${tool.nombre}" está definida en código: su alcance es exactamente su schema de parámetros. ${tool.descripcion}`, puede: [tool.descripcion], no_puede: [], nota: "" };
+    await query(`UPDATE tools SET estado_prueba='ok', capacidades=$1 WHERE id=$2`, [JSON.stringify(cap), id]);
+    return cap;
+  }
 
   const sec = tool.secciones || {};
   const endpoint = sec.conexion?.endpoint;

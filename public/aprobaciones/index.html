@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- ARCHIVO: public/aprobaciones/index.html -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -6,14 +7,14 @@
 <title>Aprobaciones · Emilia</title>
 <link rel="stylesheet" href="/comun/estilos.css" />
 <style>
-.aprob { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-.aprob h3 { margin: 0 0 4px; font-size: 15px; }
-.aprob .det { font-size: 13px; color: var(--e-text-sec); margin: 4px 0 12px; }
-.aprob .fecha { font-size: 11px; color: var(--e-text-muted); }
-.vacio { text-align: center; padding: 50px; color: var(--e-text-muted); }
-.acciones { display: flex; gap: 8px; }
-.btn-si { background: #eaf3de; color: #3b6d11; border-color: #cde3b0; }
-.btn-no { background: #fcebeb; color: #7a1f1f; border-color: #f0caca; }
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+.card.tool { border-left: 3px solid #fdba74; }
+.card.flujo { border-left: 3px solid #b388ff; }
+.tit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 500; }
+.det { font-size: 13px; color: var(--e-text-sec); margin: 8px 0; white-space: pre-wrap; font-family: monospace; }
+.meta { font-size: 11px; color: var(--e-text-muted); }
+.vacio { text-align: center; padding: 60px 20px; color: var(--e-text-muted); }
 </style>
 </head>
 <body>
@@ -24,40 +25,42 @@
   <a href="/skills">Skills</a>
   <a href="/tools">Tools</a>
   <a href="/flujos">Flujos</a>
+  <a href="/codigo">Código</a>
   <a href="/aprobaciones" class="activo">Aprobaciones</a>
 </nav>
 <main>
-  <h1>Aprobaciones pendientes</h1>
-  <p class="sub">Cuando un flujo o una acción necesita tu OK, aparece acá. Se refresca solo.</p>
-  <div id="lista" style="margin-top:16px"></div>
+  <div class="top">
+    <div><h1>Aprobaciones pendientes</h1><p class="sub">Acciones que un agente o un flujo quieren ejecutar y esperan tu OK. Al aprobar, continúan exactamente donde quedaron.</p></div>
+    <span id="n" class="badge pend"></span>
+  </div>
+  <div id="lista"><div class="vacio">Cargando…</div></div>
 </main>
+<script src="/comun/espejo.js"></script>
 <script>
+let agentes = {};
 async function cargar() {
-  const aprobs = await (await fetch("/api/aprobaciones")).json();
-  const cont = document.getElementById("lista");
-  if (!aprobs.length) {
-    cont.innerHTML = `<div class="vacio">No hay aprobaciones pendientes.</div>`;
-    return;
-  }
-  cont.innerHTML = aprobs.map(a => `
-    <div class="aprob">
-      <h3>✋ ${a.titulo}</h3>
-      <div class="det">${a.detalle || ""}</div>
-      <div class="acciones">
-        <button class="btn-si" onclick="resolver('${a.id}', true)">Aprobar</button>
-        <button class="btn-no" onclick="resolver('${a.id}', false)">Rechazar</button>
-      </div>
-      <div class="fecha" style="margin-top:8px">Pedido: ${new Date(a.creado_en).toLocaleString()}</div>
-    </div>`).join("");
+  try { for (const a of await api("/api/agentes")) agentes[a.id] = a.nombre; } catch {}
+  const lista = await api("/api/aprobaciones");
+  document.getElementById("n").textContent = lista.length ? `${lista.length} pendiente(s)` : "";
+  document.getElementById("lista").innerHTML = lista.length ? lista.map((a) => `
+    <div class="card ${a.tipo}" id="ap-${a.id}">
+      <div class="tit">${a.tipo === "tool" ? "⚙" : "→"} ${esc(a.titulo)}${badge(a.tipo === "tool" ? "tool en tarea del agente" : "paso de flujo", a.tipo === "tool" ? "aprobacion" : "codigo")}</div>
+      <div class="det">${esc(a.detalle || "")}</div>
+      <div class="meta">${a.agente_id ? `agente: ${esc(agentes[a.agente_id] || a.agente_id)} · ` : ""}${fechaHora(a.creado_en)}${a.conversacion_id ? " · desde una conversación (también se puede responder ok/no por WhatsApp)" : ""}</div>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="primario" onclick="resolver('${a.id}',true)">✔ Aprobar</button><button onclick="resolver('${a.id}',false)">✘ Rechazar</button></div>
+      <div id="r-${a.id}"></div>
+    </div>`).join("") : `<div class="vacio">Nada pendiente. 🎉</div>`;
 }
 async function resolver(id, aprobada) {
-  await fetch(`/api/aprobaciones/${id}/resolver`, {
-    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ aprobada })
-  });
-  cargar();
+  const out = document.getElementById(`r-${id}`);
+  out.innerHTML = `<p style="font-size:12px;color:var(--e-text-muted);margin-top:8px">${aprobada ? "Aprobando y reanudando…" : "Rechazando…"}</p>`;
+  try {
+    const r = await post(`/api/aprobaciones/${id}/resolver`, { aprobada });
+    out.innerHTML = renderResultado({ ok: r.ok, estado: r.estado, resumen: r.respuesta || (r.tipo === "flujo" ? `Flujo ${r.estado}` : ""), error: r.error });
+    setTimeout(cargar, 2500);
+  } catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
 }
-cargar();
-setInterval(cargar, 4000); // refresco automático
+cargar(); setInterval(cargar, 4000);
 </script>
 </body>
 </html>

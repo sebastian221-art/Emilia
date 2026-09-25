@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- ARCHIVO: public/flujos/index.html  (borrar los .js viejos de public/flujos/) -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -8,26 +9,32 @@
 <link rel="stylesheet" href="/comun/lienzo.css" />
 <style>
 .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.layout { display: grid; grid-template-columns: 180px 1fr; gap: 12px; height: calc(100vh - 160px); }
-.paleta { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
-.paleta h4 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; margin: 8px 0 2px; }
-.pal-nodo { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: grab; border: 1px solid var(--e-border);
-  display: flex; align-items: center; gap: 7px; user-select: none; background: var(--e-surface); }
-.pal-nodo:active { cursor: grabbing; }
-.pal-ic { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
-.lienzo-cont { height: calc(100vh - 160px); }
-.nodo-fl { position: absolute; min-width: 130px; background: var(--e-surface); border: 1.5px solid var(--e-border);
-  border-radius: 10px; padding: 8px 10px; cursor: move; user-select: none; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-.nodo-fl.sel { border-color: var(--e-accent); box-shadow: 0 0 0 3px var(--e-accent-bg); }
-.nodo-fl .titulo { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
-.nodo-fl .sub { font-size: 11px; color: var(--e-text-sec); margin-top: 3px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nodo-ic { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
-.nodo-fl { z-index: 2; }
-.punto-con { position: absolute; width: 11px; height: 11px; border-radius: 50%; background: var(--e-accent);
-  border: 2px solid var(--e-surface); cursor: crosshair; }
-.punto-out { bottom: -6px; left: 50%; transform: translateX(-50%); }
-.punto-in { top: -6px; left: 50%; transform: translateX(-50%); background: var(--e-text-muted); }
-.hint { position: absolute; top: 12px; left: 12px; font-size: 12px; color: var(--e-text-muted); z-index: 5; }
+.layout { display: grid; grid-template-columns: 230px 1fr 340px; gap: 14px; height: calc(100vh - 170px); }
+.izq { overflow-y: auto; }
+.izq h4 { font-size: 10px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 4px; }
+.item { padding: 8px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; margin-bottom: 4px; border: 1px solid transparent; }
+.item:hover { background: var(--e-surface); }
+.item.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
+.item .n { font-family: monospace; }
+.centro { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lienzo-cont { flex: 1; min-height: 300px; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 14px; overflow-y: auto; }
+.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 8px; }
+.ej { padding: 7px 9px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid transparent; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.ej:hover { background: var(--e-surface); }
+.ej.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
+.log { font-size: 12px; font-family: monospace; white-space: pre-wrap; line-height: 1.5; max-height: 40vh; overflow-y: auto; }
+.log .t { color: var(--e-text-muted); }
+.nodo { fill: var(--e-surface); stroke: var(--e-border-strong); stroke-width: 1; }
+.nodo.actual { stroke: #b388ff; stroke-width: 2; filter: drop-shadow(0 0 8px rgba(124,58,237,.7)); }
+.nodo.hecho { stroke: #22c55e; }
+.nodo.fallo { stroke: #ff9090; }
+.nt { font-size: 11px; fill: var(--e-text); font-family: monospace; }
+.ns { font-size: 9px; fill: var(--e-text-sec); font-family: 'DM Sans', sans-serif; }
+.nk { font-size: 8px; fill: var(--e-accent); font-family: 'DM Sans', sans-serif; text-transform: uppercase; }
+.ar { stroke: #b388ff; stroke-width: 1.5; fill: none; opacity: .8; }
+.ar.punteado { stroke-dasharray: 4 4; opacity: .55; }
+.al { font-size: 9px; fill: var(--e-text-sec); font-family: 'DM Sans', sans-serif; }
 </style>
 </head>
 <body>
@@ -38,43 +45,176 @@
   <a href="/skills">Skills</a>
   <a href="/tools">Tools</a>
   <a href="/flujos" class="activo">Flujos</a>
+  <a href="/codigo">Código</a>
   <a href="/aprobaciones">Aprobaciones</a>
 </nav>
 <main>
   <div class="top">
     <div>
-      <h1>Flujos de trabajo</h1>
-      <p class="sub">Arrastrá nodos al lienzo. Rueda = zoom · arrastrar el fondo = mover · doble clic = configurar.</p>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <select id="selectorFlujo" onchange="cargarFlujo(this.value)" style="width:auto"><option value="">— Nuevo flujo —</option></select>
-      <input id="nombreFlujo" placeholder="Nombre del flujo" style="width:auto" />
-      <button class="primario" onclick="guardarFlujo()">Guardar</button>
-      <button onclick="ejecutarFlujo()">▶ Ejecutar</button>
+      <h1>Flujos</h1>
+      <p class="sub">Orquestaciones deterministas definidas en código (<code>src/flujos/</code>). El diagrama se genera de la definición; abajo las ejecuciones en vivo.</p>
     </div>
   </div>
-
   <div class="layout">
-    <div class="paleta" id="paleta"></div>
-    <div class="lienzo-cont" id="lienzoCont">
-      <div class="hint" id="hint">Arrastrá un nodo desde la izquierda para empezar. Empezá por "Inicio".</div>
-      <div class="mundo" id="mundo">
-        <svg class="conexiones" id="svgCon"></svg>
-        <div id="lienzo"></div>
+    <div class="izq" id="lista"></div>
+    <div class="centro">
+      <div class="lienzo-cont" id="lienzo">
+        <div class="mundo" id="mundo"><svg id="svg" width="2000" height="2000"></svg></div>
+        <div class="zoom-ctrl"><button onclick="zoom(0.83)">−</button><span class="zoom-nivel" id="zn">100%</span><button onclick="zoom(1.2)">+</button><button onclick="centrar()">⌂</button></div>
       </div>
-      <div class="zoom-ctrl">
-        <button onclick="zoomOut()">−</button>
-        <span class="zoom-nivel" id="zoomNivel">100%</span>
-        <button onclick="zoomIn()">+</button>
-        <button onclick="centrar()" title="Centrar">⌂</button>
-      </div>
+      <div class="panel" id="detalle" style="max-height:34%"></div>
     </div>
+    <div class="panel" id="der"><h3>Ejecuciones</h3><div id="ejs"></div><div id="ejdet"></div></div>
   </div>
 </main>
+<script src="/comun/espejo.js"></script>
+<script>
+let registro = null, filas = [], sel = null, ejSel = null, ejData = null, timer = null;
+const cam = { escala: 1, x: 0, y: 0 };
+const NW = 210, NH = 52, GY = 84, GX = 300;
 
-<div id="modal-nodo" style="display:none;position:fixed;inset:0;background:rgba(8,6,13,.6);z-index:50;align-items:center;justify-content:center" onclick="if(event.target===this)cerrarModalNodo()"></div>
+async function cargar() {
+  registro = await api("/api/registro");
+  filas = await api("/api/flujos");
+  renderLista();
+  if (!sel && registro.flujos.length) seleccionar(registro.flujos[0].nombre);
+}
+function renderLista() {
+  const grupos = agrupar(registro.flujos, "modulo");
+  let html = "";
+  for (const [mod, fl] of Object.entries(grupos)) html += `<h4>${esc(mod)}</h4>` + fl.map((f) => `<div class="item ${sel === f.nombre ? "activo" : ""}" onclick="seleccionar('${esc(f.nombre)}')"><span class="n">${esc(f.nombre)}</span><div style="font-size:10px;color:var(--e-text-muted)">${f.pasos.length} pasos · ${esc(f.riesgo)}</div></div>`).join("");
+  document.getElementById("lista").innerHTML = html || `<p style="font-size:12px;color:var(--e-text-muted)">No hay flujos registrados.</p>`;
+}
+function def() { return registro.flujos.find((f) => f.nombre === sel); }
+function fila() { return filas.find((f) => f.nombre === sel); }
 
-<script src="/flujos/tipos-nodo.js"></script>
-<script src="/flujos/flujos.js"></script>
+async function seleccionar(nombre) {
+  sel = nombre; ejSel = null; ejData = null; renderLista();
+  const f = def();
+  document.getElementById("detalle").innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-family:monospace">${esc(f.nombre)}</b>${badge("código", "codigo")}${badge(f.riesgo, f.riesgo)}</div>
+    <p class="sub" style="font-size:12px;margin-top:4px">${esc(f.descripcion)}</p>
+    <div style="margin-top:8px"><div id="form">${formEsquema(f.parametros)}</div>
+      <button class="primario" style="margin-top:10px" onclick="ejecutar()">▶ Ejecutar</button>
+      <span style="font-size:11px;color:var(--e-text-muted);margin-left:8px">Sin agente ni conversación: las aprobaciones se resuelven acá o en Aprobaciones.</span>
+    </div>`;
+  dibujar(); centrar(); await cargarEjecuciones();
+}
+
+// ── Diagrama ──
+function layout(f) {
+  const enCuerpo = new Map(); // pasoId -> repetirId
+  for (const p of f.pasos) if (p.tipo === "repetir") p.cuerpo.forEach((c) => enCuerpo.set(c, p.id));
+  const pos = {};
+  let y = 30;
+  for (const p of f.pasos) {
+    if (enCuerpo.has(p.id)) continue;
+    pos[p.id] = { x: 40, y };
+    if (p.tipo === "repetir") {
+      let yy = y;
+      for (const c of p.cuerpo) { pos[c] = { x: 40 + GX, y: yy }; yy += GY; }
+      y = Math.max(y + GY, yy);
+    } else y += GY;
+  }
+  return { pos, enCuerpo };
+}
+function principal(f, id) {
+  const { enCuerpo } = layout(f);
+  const i = f.pasos.findIndex((p) => p.id === id);
+  for (let j = i + 1; j < f.pasos.length; j++) if (!enCuerpo.has(f.pasos[j].id)) return f.pasos[j].id;
+  return null;
+}
+function sub(p) {
+  if (p.tipo === "tool") return p.tool; if (p.tipo === "skill") return p.skill; if (p.tipo === "subflujo") return p.flujo;
+  if (p.tipo === "repetir") return `máx ${p.maxVeces}${p.cadaSegundos ? ` · cada ${p.cadaSegundos}s` : ""}`;
+  if (p.tipo === "esperar") return typeof p.segundos === "number" ? `${p.segundos}s` : "según contexto";
+  if (p.tipo === "condicion") return `sí → ${p.entonces} · no → ${p.sino}`;
+  if (p.tipo === "aprobacion") return typeof p.mensaje === "string" ? p.mensaje : "según contexto";
+  if (p.tipo === "fin") return p.fallo ? "fin (fallo)" : "fin";
+  return "";
+}
+function dibujar() {
+  const f = def(); if (!f) return;
+  const { pos } = layout(f);
+  const actual = ejData?.nodo_actual, estado = ejData?.estado;
+  const hechos = new Set(); if (ejData?.log) for (const l of ejData.log) { const m = l.texto.match(/^[⚙◇◆✋✅🔁⏱⤵⤴✘] ([a-z0-9_]+):/); if (m) hechos.add(m[1]); }
+  const flechas = [], nodos = [];
+  const c = (id) => ({ x: pos[id].x + NW / 2, y: pos[id].y + NH / 2 });
+  const arco = (a, b, clase = "", etiqueta = "") => {
+    const A = c(a), B = c(b);
+    const y1 = A.y + NH / 2, y2 = B.y - NH / 2;
+    let d;
+    if (Math.abs(A.x - B.x) < 5 && B.y > A.y) d = `M${A.x},${y1} L${B.x},${y2}`;
+    else { const mx = A.x + (B.x - A.x) * 0.5; d = `M${A.x},${y1} C${A.x},${y1 + 40} ${B.x},${y2 - 40} ${B.x},${y2}`; if (B.y <= A.y) d = `M${A.x + NW / 2},${A.y} C${A.x + NW / 2 + 60},${A.y} ${B.x + NW / 2 + 60},${B.y} ${B.x + NW / 2},${B.y}`; }
+    flechas.push(`<path d="${d}" class="ar ${clase}" marker-end="url(#fl)"/>`);
+    if (etiqueta) flechas.push(`<text x="${(A.x + B.x) / 2 + 6}" y="${(y1 + y2) / 2}" class="al">${esc(etiqueta)}</text>`);
+  };
+  for (const p of f.pasos) {
+    if (!pos[p.id]) continue;
+    if (p.tipo === "condicion") { if (pos[p.entonces]) arco(p.id, p.entonces, "", "sí"); if (pos[p.sino]) arco(p.id, p.sino, "", "no"); }
+    else if (p.tipo === "repetir") { if (p.cuerpo[0] && pos[p.cuerpo[0]]) arco(p.id, p.cuerpo[0], "punteado", "cuerpo"); const u = p.cuerpo[p.cuerpo.length - 1]; if (u && pos[u]) arco(u, p.id, "punteado", "vuelve"); for (let i = 0; i < p.cuerpo.length - 1; i++) if (pos[p.cuerpo[i]] && pos[p.cuerpo[i + 1]]) arco(p.cuerpo[i], p.cuerpo[i + 1], "punteado"); const s = principal(f, p.id); if (s) arco(p.id, s); }
+    else if (p.tipo !== "fin") { const s = principal(f, p.id); if (s && pos[s]) arco(p.id, s); }
+    const cls = p.id === actual ? (estado === "fallido" ? "fallo" : "actual") : (hechos.has(p.id) ? "hecho" : "");
+    nodos.push(`<g transform="translate(${pos[p.id].x},${pos[p.id].y})">
+      <rect width="${NW}" height="${NH}" rx="10" class="nodo ${cls}"/>
+      <text x="10" y="14" class="nk">${esc(p.tipo)}${p.id === f.inicio ? " · inicio" : ""}</text>
+      <text x="10" y="30" class="nt">${esc(p.id)}</text>
+      <text x="10" y="44" class="ns">${esc(sub(p)).slice(0, 34)}</text>
+    </g>`);
+  }
+  document.getElementById("svg").innerHTML = `<defs><marker id="fl" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#b388ff"/></marker></defs>` + flechas.join("") + nodos.join("");
+}
+function aplicar() { document.getElementById("mundo").style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.escala})`; document.getElementById("zn").textContent = Math.round(cam.escala * 100) + "%"; }
+function zoom(f) { cam.escala = Math.min(2.5, Math.max(0.3, cam.escala * f)); aplicar(); }
+function centrar() { cam.escala = 1; cam.x = 20; cam.y = 0; aplicar(); }
+(function pan() {
+  const c = document.getElementById("lienzo"); let on = false, ini = { x: 0, y: 0 };
+  c.addEventListener("mousedown", (e) => { if (e.target.closest(".zoom-ctrl,button")) return; on = true; c.classList.add("paneando"); ini = { x: e.clientX - cam.x, y: e.clientY - cam.y }; });
+  window.addEventListener("mousemove", (e) => { if (on) { cam.x = e.clientX - ini.x; cam.y = e.clientY - ini.y; aplicar(); } });
+  window.addEventListener("mouseup", () => { on = false; c.classList.remove("paneando"); });
+  c.addEventListener("wheel", (e) => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
+})();
+
+// ── Ejecuciones ──
+async function ejecutar() {
+  const args = leerForm(document.getElementById("form"));
+  try { const r = await post(`/api/flujos/${fila().id}/ejecutar`, { args }); await cargarEjecuciones(); verEjecucion(r.ejecucionId); }
+  catch (e) { alert("No se pudo iniciar: " + e.message); }
+}
+async function cargarEjecuciones() {
+  const fl = fila(); if (!fl) return;
+  const ejs = await api(`/api/flujo-ejecuciones?flujoId=${fl.id}&limite=25`);
+  document.getElementById("ejs").innerHTML = ejs.length ? ejs.map((e) => `<div class="ej ${ejSel === e.id ? "activo" : ""}" onclick="verEjecucion('${e.id}')"><span>${fechaHora(e.inicio)}<div style="font-size:10px;color:var(--e-text-muted)">${esc(e.origen)} · ${esc(e.nodo_actual || "")}</div></span>${badgeEstado(e.estado)}</div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Sin ejecuciones todavía.</p>`;
+}
+async function verEjecucion(id) {
+  ejSel = id; clearInterval(timer);
+  await refrescar();
+  timer = setInterval(refrescar, 2000);
+}
+async function refrescar() {
+  if (!ejSel) return;
+  ejData = await api(`/api/flujo-ejecuciones/${ejSel}`);
+  await cargarEjecuciones();
+  dibujar();
+  let aprob = "";
+  if (ejData.estado === "esperando_aprobacion") {
+    const pend = (await api("/api/aprobaciones")).find((a) => a.ejecucion_id === ejSel);
+    if (pend) aprob = `<div style="border:1px solid #fdba74;border-radius:10px;padding:10px;margin:8px 0;font-size:12px">⏸ ${esc(pend.detalle || pend.titulo)}
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="primario" onclick="resolver('${pend.id}',true)">Aprobar</button><button onclick="resolver('${pend.id}',false)">Rechazar</button></div></div>`;
+  }
+  const fin = ["completado", "fallido"].includes(ejData.estado);
+  if (fin) clearInterval(timer);
+  document.getElementById("ejdet").innerHTML = `
+    <div style="margin-top:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:12px">Ejecución</b>${badgeEstado(ejData.estado)}<span style="font-size:11px;color:var(--e-text-muted)">${esc(ejData.nodo_actual || "")}</span></div>
+    ${aprob}
+    ${ejData.error ? `<div style="font-size:12px;color:#ff9090;margin:6px 0">${esc(ejData.error)}</div>` : ""}
+    ${ejData.resultado != null && fin ? `<pre style="font-size:11px;color:var(--e-text-sec);white-space:pre-wrap;max-height:120px;overflow:auto">${esc(JSON.stringify(ejData.resultado, null, 2))}</pre>` : ""}
+    <div class="log" style="margin-top:6px">${(ejData.log || []).map((l) => `<div><span class="t">${hora(l.t)}</span> ${esc(l.texto)}</div>`).join("")}</div>`;
+}
+async function resolver(id, aprobada) {
+  try { await post(`/api/aprobaciones/${id}/resolver`, { aprobada }); await refrescar(); } catch (e) { alert(e.message); }
+}
+cargar();
+</script>
 </body>
 </html>
