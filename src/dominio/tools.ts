@@ -94,7 +94,7 @@ export async function explorarTool(id: string): Promise<any> {
     try {
       const resp = await fetch(origen + r, { signal: AbortSignal.timeout(6000) });
       if (resp.ok) {
-        const data = await resp.json().catch(() => null);
+        const data = await resp.json().catch(() => null) as any;
         if (data?.paths) { endpoints = Object.keys(data.paths); specTexto = JSON.stringify(data.paths).slice(0, 3000); estado = "ok"; break; }
       }
     } catch { /* sigue */ }

@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "tsx watch src/server.ts",
+        "build": "tsc --noEmit -p .",
         "crear-base": "tsx src/db/crear-base.ts",
         "migrate": "tsx src/db/migrar.ts",
         "setup": "tsx src/db/crear-base.ts && tsx src/db/migrar.ts"

@@ -24,6 +24,7 @@ import { iniciarRegistro } from "./registro/cargar.js";
 import { retomarFlujos } from "./motor/flujo.js";
 import { recuperarSesionesHuerfanas } from "./motor/claude-code.js";
 import { rutasCodigo } from "./rutas/codigo.js";
+import { rutasSalud } from "./rutas/salud.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUB = path.join(__dirname, "..", "public");
@@ -49,6 +50,7 @@ app.use(rutasRegistro);
 app.use(rutasRecordatorio);
 app.use(rutasFlujos);
 app.use(rutasCodigo);
+app.use(rutasSalud);
 
 // ── Webhook de WhatsApp ──
 app.get("/webhook/whatsapp", verificarWebhook);
