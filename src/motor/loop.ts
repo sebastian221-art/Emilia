@@ -319,6 +319,7 @@ async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: C
       ? `Tus herramientas reales son exactamente estas: ${nombres.join(", ")}. Usá solo esos nombres, con los parámetros que declaran. Si una requiere aprobación, pedila igual: el sistema pausa y pide el OK.`
       : "No tenés herramientas asignadas: solo podés responder con texto.",
     "Usás tus herramientas de verdad cuando hacen falta. Nunca afirmes haber hecho algo (enviar, consultar) sin haber llamado la herramienta correspondiente. Si una herramienta devuelve error, leelo y corregí los argumentos o explicá el problema. Sé honesto.",
+    "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que creés recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
   ].filter(Boolean).join("\n");
 
   const contexto = await contextoDeAgente(ag.id);

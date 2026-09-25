@@ -86,6 +86,7 @@ Sos un REVISOR de código independiente y exigente (no escribiste estos cambios)
   const diff = (d.datos as any) || {};
   const informe = (ultimo.datos as any)?.informe || "";
   const cuerpo = [
+    `RESULTADO REAL DE CLAUDE CODE sobre el código actual de "${p.proyecto}". Basá tu respuesta SOLO en esto.`,
     ultimo.ok ? `✅ Listo en el sandbox (rama ${rama}).` : `⚠ No quedó del todo (rama ${rama}).`,
     informe && `\nInforme del Senior:\n${informe}`,
     diff.resumen && `\nCambios:\n${diff.resumen}`,
@@ -114,11 +115,13 @@ async function ejecutarLectura(ctx: ContextoEjecucion, p: { proyecto: string; pr
   await ctx.ejecutarTool("codigo_cerrar_sandbox", { sandbox_id, borrar_rama: true });   // lectura: no deja rastro
   if (!cc.ok) return { ok: false, error: `Claude Code: ${cc.error}` };
   const informe = (cc.datos as any)?.resultado || "";
+  const fecha = new Date().toISOString().slice(0, 16).replace("T", " ");
+  const encabezado = `INFORME REAL DE CLAUDE CODE sobre el código actual de "${p.proyecto}" (${fecha}). Basá tu respuesta SOLO en este informe; ignorá análisis anteriores de la conversación, pueden estar desactualizados.\n\n`;
   if (p.guardar !== false) {
     const fecha = new Date().toISOString().slice(0, 10);
     await ctx.ejecutarTool("conocimiento_guardar", { nombre: `hallazgos/${p.proyecto}/${fecha}-${p.proposito.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30)}.md`, contenido: `# ${p.proposito} (${p.proyecto}, ${fecha})\n\n${informe.slice(0, 2500)}` }).catch(() => {});
   }
-  return { ok: true, datos: { informe }, resumen: informe || "Listo." };
+  return { ok: true, datos: { informe, fecha }, resumen: encabezado + (informe || "Listo.") };
 }
 
 const toolsBase = ["conocimiento_guardar", "conocimiento_buscar", "codigo_abrir_sandbox", "codigo_ejecutar_claude", "codigo_estado_sesion", "codigo_verificar", "codigo_diff", "codigo_cerrar_sandbox", "codigo_ejecutar_comando", "codigo_leer_archivo", "codigo_buscar", "codigo_git_estado"];
