@@ -55,8 +55,7 @@ export async function crearWorktree(proyecto: Proyecto, proposito: string): Prom
   const ruta = path.join(SANDBOX_DIR, proyecto.nombre, rama.replace("senior/", ""));
   await fs.mkdir(path.dirname(ruta), { recursive: true });
 
-  // Asegurar que rama_base exista localmente (o usar HEAD si no).
-  const base = (await git(proyecto.ruta, `rev-parse --verify --quiet ${proyecto.rama_base}`)).codigo === 0 ? proyecto.rama_base : "HEAD";
+  const base = await ramaBaseReal(proyecto);
   const r = await git(proyecto.ruta, `worktree add -b "${rama}" "${ruta}" ${base}`, 120);
   if (r.codigo !== 0) throw new Error(`No se pudo crear el worktree: ${(r.stderr || r.stdout).trim()}`);
 
@@ -109,13 +108,34 @@ export async function commitSandbox(ruta: string, mensaje: string): Promise<Sali
 export async function pushSandbox(ruta: string, rama: string): Promise<SalidaComando> {
   return git(ruta, `push -u origin "${rama}"`, 180);
 }
+/**
+ * Rama base REAL del repo: la configurada si existe; si no, la rama actual
+ * (main vs master es el error más común). Corrige el registro del proyecto.
+ */
+export async function ramaBaseReal(proyecto: Proyecto): Promise<string> {
+  const existe = (await git(proyecto.ruta, `rev-parse --verify --quiet refs/heads/${proyecto.rama_base}`)).codigo === 0;
+  if (existe) return proyecto.rama_base;
+  const actual = (await git(proyecto.ruta, "rev-parse --abbrev-ref HEAD")).stdout.trim() || "master";
+  const { query } = await import("../db/cliente.js");
+  await query(`UPDATE proyectos SET rama_base=$1, actualizado_en=now() WHERE id=$2`, [actual, proyecto.id]).catch(() => {});
+  console.warn(`[sandbox] El proyecto ${proyecto.nombre} tenía rama_base "${proyecto.rama_base}" que no existe; corregido a "${actual}".`);
+  proyecto.rama_base = actual;
+  return actual;
+}
+
 /** Integra la rama del sandbox en la rama base del repo REAL (merge --no-ff). El repo real debe estar limpio. */
 export async function integrarEnBase(proyecto: Proyecto, rama: string): Promise<SalidaComando> {
   const st = await git(proyecto.ruta, "status --porcelain");
   if (st.stdout.trim()) return { codigo: 1, stdout: "", stderr: `El repo real (${proyecto.ruta}) tiene cambios sin commit; hacé commit o descartalos a mano antes de integrar. Archivos:\n${st.stdout.trim().slice(0, 1200)}`, duracion_ms: 0, timeout: false };
-  const co = await git(proyecto.ruta, `checkout ${proyecto.rama_base}`);
+  const base = await ramaBaseReal(proyecto);
+  const co = await git(proyecto.ruta, `checkout ${base}`);
   if (co.codigo !== 0) return co;
-  return git(proyecto.ruta, `merge --no-ff "${rama}" -m "Integra ${rama} (Senior Developer)"`, 120);
+  const m = await git(proyecto.ruta, `merge --no-ff "${rama}" -m "Integra ${rama} (Senior Developer)"`, 120);
+  if (m.codigo !== 0 && /CONFLICT|conflict/i.test(m.stdout + m.stderr)) {
+    await git(proyecto.ruta, "merge --abort");
+    return { ...m, stderr: `El merge tiene CONFLICTOS con ${base} (el sandbox nació de un commit más viejo y ambos tocan los mismos archivos). Deshice el merge; el repo quedó limpio. Opciones: descartar el sandbox y rehacer la tarea sobre el master actual, o resolverlo a mano.\n${(m.stdout + m.stderr).slice(-600)}` };
+  }
+  return m;
 }
 
 async function existe(p: string) { try { await fs.access(p); return true; } catch { return false; } }
