@@ -26,6 +26,7 @@ import { recuperarSesionesHuerfanas } from "./motor/claude-code.js";
 import { rutasCodigo } from "./rutas/codigo.js";
 import { rutasEmpresa } from "./rutas/empresa.js";
 import { rutasEventos } from "./rutas/eventos.js";
+import { rutasActividad } from "./rutas/actividad.js";
 import { iniciarReloj } from "./motor/eventos.js";
 import { limpiarArchivosViejos } from "./dominio/archivos.js";
 import { retomarProcesos } from "./motor/runtime.js";
@@ -56,13 +57,14 @@ app.use(rutasFlujos);
 app.use(rutasCodigo);
 app.use(rutasEmpresa);
 app.use(rutasEventos);
+app.use(rutasActividad);
 
 // ── Webhook de WhatsApp ──
 app.get("/webhook/whatsapp", verificarWebhook);
 app.post("/webhook/whatsapp", recibirMensaje);
 
 // ── URLs limpias de las páginas ───────────────────────────────────────────
-const PAGINAS = ["crear", "agentes", "skills", "tools", "flujos", "aprobaciones", "codigo", "empresa"];
+const PAGINAS = ["crear", "agentes", "skills", "tools", "flujos", "aprobaciones", "codigo", "empresa", "actividad"];
 for (const p of PAGINAS) {
   app.get([`/${p}`, `/${p}/`], (_req, res) => {
     const idx = path.join(PUB, p, "index.html");

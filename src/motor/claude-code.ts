@@ -129,12 +129,22 @@ function parsear(linea: string): any | null {
   try { return JSON.parse(l); } catch { return null; }
 }
 
+const contadorAvisos = new Map<string, number>();
+async function avisoPeriodico(id: string, texto: string) {
+  const n = (contadorAvisos.get(id) || 0) + 1; contadorAvisos.set(id, n);
+  if (n % 12 !== 0) return;
+  const [s] = await query<{ conversacion_id: string | null; turnos: number | null }>(`SELECT conversacion_id FROM sesiones_codigo WHERE id=$1`, [id]).catch(() => [] as any);
+  if (!s?.conversacion_id) return;
+  const { avisarProgreso } = await import("./actividad.js");
+  await avisarProgreso(s.conversacion_id, `⌛ Claude sigue: ${texto.slice(0, 140)}`);
+}
+
 async function procesarEvento(id: string, ev: any) {
   if (ev.type === "system" && ev.subtype === "init") { await logSesion(id, "sistema", `sesión ${ev.session_id} · modelo ${ev.model || "?"} · tools ${(ev.tools || []).length}`); if (ev.session_id) await query(`UPDATE sesiones_codigo SET session_id_claude=$1 WHERE id=$2`, [ev.session_id, id]); return; }
   if (ev.type === "assistant") {
     for (const b of ev.message?.content || []) {
       if (b.type === "text" && b.text?.trim()) await logSesion(id, "claude", b.text.trim());
-      else if (b.type === "tool_use") await logSesion(id, "tool", `${b.name} ${resumirInput(b.name, b.input)}`);
+      else if (b.type === "tool_use") { const t = `${b.name} ${resumirInput(b.name, b.input)}`; await logSesion(id, "tool", t); avisoPeriodico(id, t).catch(() => {}); }
     }
     return;
   }

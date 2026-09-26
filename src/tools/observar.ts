@@ -10,6 +10,7 @@ import type { DefTool } from "../registro/tipos.js";
 import { query } from "../db/cliente.js";
 import { leerBitacora } from "../motor/bitacora.js";
 import { sesionesActivas } from "../motor/claude-code.js";
+import { actividadActual, resumirActividad } from "../motor/actividad.js";
 
 const MODULO = "observar";
 
@@ -74,4 +75,11 @@ export const observarEstado: DefTool = {
   },
 };
 
-export const toolsObservar: DefTool[] = [observarLogs, observarEjecuciones, observarFlujos, observarEstado];
+export const observarActividad: DefTool = {
+  nombre: "observar_actividad", modulo: MODULO,
+  descripcion: "Qué está haciendo el sistema AHORA: tareas de agentes con su último paso, sesiones de Claude Code y qué están tocando, flujos activos y su nodo, aprobaciones pendientes. Para responder 'qué estás haciendo' o 'en qué vas'.",
+  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false,
+  async ejecutar() { const a = await actividadActual(); return { ok: true, datos: a, resumen: resumirActividad(a) }; },
+};
+
+export const toolsObservar: DefTool[] = [observarLogs, observarEjecuciones, observarFlujos, observarEstado, observarActividad];

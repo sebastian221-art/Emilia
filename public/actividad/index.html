@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!-- ARCHIVO: public/actividad/index.html -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Actividad · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<style>
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.col { display: flex; flex-direction: column; gap: 14px; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 14px 16px; }
+.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.pulso { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; animation: p 1.6s infinite; }
+@keyframes p { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+.item { border-top: 1px solid var(--e-border); padding: 8px 0; font-size: 12px; }
+.item:first-child { border-top: 0; }
+.item .t { font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.item .s { color: var(--e-text-sec); margin-top: 3px; font-family: monospace; font-size: 11px; white-space: pre-wrap; }
+.feed { font-family: monospace; font-size: 11px; line-height: 1.6; max-height: 70vh; overflow-y: auto; }
+.feed div { padding: 2px 0; border-bottom: 1px dashed var(--e-border); }
+.feed .h { color: var(--e-text-muted); }
+.feed .tool { color: #6ee7b7; } .feed .pensamiento { color: #d8c9ff; } .feed .error { color: #ff9090; } .feed .aprobacion { color: #fdba74; } .feed .skill { color: #b388ff; } .feed .verificacion { color: var(--e-text-sec); }
+.vacio { color: var(--e-text-muted); font-size: 12px; padding: 6px 0; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/codigo">Código</a>
+  <a href="/empresa">Empresa</a>
+  <a href="/actividad" class="activo">Actividad</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <div class="top">
+    <div><h1>Actividad en vivo</h1><p class="sub">Qué está haciendo el sistema ahora mismo. Se refresca cada 2 segundos. Nunca más "no sé qué está pasando".</p></div>
+    <span id="hora" style="font-size:12px;color:var(--e-text-muted)"></span>
+  </div>
+  <div class="grid">
+    <div class="col">
+      <div class="panel"><h3><span class="pulso"></span> Tareas de agentes en curso</h3><div id="tareas"></div></div>
+      <div class="panel"><h3>Claude Code trabajando</h3><div id="sesiones"></div></div>
+      <div class="panel"><h3>Flujos activos</h3><div id="flujos"></div></div>
+      <div class="panel"><h3>Esperando tu OK</h3><div id="aprob"></div></div>
+    </div>
+    <div class="col">
+      <div class="panel"><h3>Últimos pasos (todos los agentes)</h3><div class="feed" id="feed"></div></div>
+    </div>
+  </div>
+</main>
+<script src="/comun/espejo.js"></script>
+<script>
+async function cargar() {
+  try {
+    const a = await api("/api/actividad");
+    document.getElementById("hora").textContent = new Date(a.ahora).toLocaleTimeString("es-CO");
+    document.getElementById("tareas").innerHTML = a.tareas.length ? a.tareas.map((t) => `<div class="item"><div class="t">${esc(t.agente)}${badgeEstado(t.estado)}<span style="color:var(--e-text-muted)">${t.turnos_usados} turnos · ${t.tool_calls} tools · desde ${hora(t.inicio)}</span></div><div class="s">${esc(t.ultimo_paso || "(arrancando)")}</div></div>`).join("") : `<div class="vacio">Ninguna.</div>`;
+    document.getElementById("sesiones").innerHTML = a.sesiones_claude.length ? a.sesiones_claude.map((s) => `<div class="item"><div class="t"><a href="/codigo" style="color:var(--e-accent)">${esc(s.proyecto)}/${esc(String(s.rama).replace("senior/", ""))}</a><span style="color:var(--e-text-muted)">${s.eventos} eventos · desde ${hora(s.inicio)}</span></div><div class="s">${esc(s.encargo).slice(0, 120)}</div><div class="s" style="color:#6ee7b7">↳ ${esc(s.ultimo_evento || "iniciando…")}</div></div>`).join("") : `<div class="vacio">Ninguna.</div>`;
+    document.getElementById("flujos").innerHTML = a.flujos.length ? a.flujos.map((f) => `<div class="item"><div class="t"><a href="/flujos" style="color:var(--e-accent)">${esc(f.nombre_flujo)}</a>${badgeEstado(f.estado)}<span style="color:var(--e-text-muted)">@${esc(f.nodo_actual || "")}${f.despertar_en ? " · despierta " + hora(f.despertar_en) : ""}</span></div><div class="s">${esc(f.ultimo_log || "")}</div></div>`).join("") : `<div class="vacio">Ninguno.</div>`;
+    document.getElementById("aprob").innerHTML = a.aprobaciones.length ? a.aprobaciones.map((x) => `<div class="item"><div class="t"><a href="/aprobaciones" style="color:#fdba74">⏸ ${esc(x.detalle || x.titulo)}</a></div><div class="s">${esc(x.agente || "")} · ${hora(x.creado_en)}</div></div>`).join("") : `<div class="vacio">Nada pendiente.</div>`;
+    const feed = document.getElementById("feed"); const arriba = feed.scrollTop < 20;
+    feed.innerHTML = a.ultimos_pasos.map((p) => `<div><span class="h">${hora(p.creado_en)} ${esc(p.agente)}</span> <span class="${esc(p.tipo)}">[${esc(p.tipo)}]</span> ${esc(p.detalle)}</div>`).join("") || `<div class="vacio">Sin pasos recientes.</div>`;
+    if (arriba) feed.scrollTop = 0;
+  } catch (e) { document.getElementById("tareas").innerHTML = `<div class="vacio">Error: ${esc(e.message)}</div>`; }
+}
+cargar(); setInterval(cargar, 2000);
+</script>
+</body>
+</html>

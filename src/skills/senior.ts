@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { DefSkill, ContextoEjecucion, ResultadoTool } from "../registro/tipos.js";
+import { avisarProgreso } from "../motor/actividad.js";
 
 const MODULO = "senior";
 
@@ -38,6 +39,7 @@ async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
   const sandbox_id = (ab.datos as any).sandbox_id;
   const rama = (ab.datos as any).rama;
   await ctx.traza("skill", `sandbox ${sandbox_id} (${rama}) para: ${p.proposito}`);
+  await avisarProgreso(ctx.conversacionId, `🧪 Sandbox listo (${rama.replace("senior/", "")}). Claude Code empieza a trabajar; te aviso cada paso.`);
 
   let sesionClaude: string | undefined;
   let ultimo: ResultadoTool = { ok: false, error: "sin ejecución" };
@@ -52,14 +54,16 @@ async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
       continuar_sesion: sesionClaude, esperar: true,
     });
     sesionClaude = (cc.datos as any)?.session_id_claude || sesionClaude;
-    if (!cc.ok) { ultimo = { ok: false, error: `Claude Code: ${cc.error}`, datos: { sandbox_id, rama } }; break; }
+    if (!cc.ok) { ultimo = { ok: false, error: `Claude Code: ${cc.error}`, datos: { sandbox_id, rama } }; await avisarProgreso(ctx.conversacionId, `❌ Claude Code falló: ${String(cc.error).slice(0, 200)}`); break; }
+    await avisarProgreso(ctx.conversacionId, `🛠 Claude terminó (${(cc.datos as any)?.turnos ?? "?"} turnos, ${(cc.datos as any)?.duracion_s ?? "?"}s). ${p.verificar ? "Verificando build/lint/tests…" : ""}`);
 
     if (!p.verificar) { ultimo = { ok: true, datos: { sandbox_id, rama, informe: (cc.datos as any)?.resultado } }; break; }
 
     const ver = await ctx.ejecutarTool("codigo_verificar", { sandbox_id });
-    if (ver.ok) { ultimo = { ok: true, datos: { sandbox_id, rama, informe: (cc.datos as any)?.resultado, verificacion: ver.resumen, intentos: intento } }; break; }
+    if (ver.ok) { ultimo = { ok: true, datos: { sandbox_id, rama, informe: (cc.datos as any)?.resultado, verificacion: ver.resumen, intentos: intento } }; await avisarProgreso(ctx.conversacionId, `✔ Verificación en verde (intento ${intento}).${p.revisionCruzada ? " Ahora un segundo Claude lo revisa…" : ""}`); break; }
     ultimo = { ok: false, error: `Verificación falló (intento ${intento}/${maxIter})`, datos: { sandbox_id, rama, informe: (cc.datos as any)?.resultado, verificacion: ver.resumen } };
     await ctx.traza("skill", `intento ${intento}: verificación falló, reintentando`);
+    await avisarProgreso(ctx.conversacionId, `⚠ La verificación falló (intento ${intento}/${maxIter}): ${String(ver.error || "").slice(0, 160)}. Claude corrige…`);
   }
 
   // Revisión cruzada: un segundo Claude, sin el contexto del primero, revisa el diff.
@@ -73,6 +77,7 @@ Sos un REVISOR de código independiente y exigente (no escribiste estos cambios)
     });
     revision = (rv.datos as any)?.resultado || rv.error || "";
     await ctx.traza("skill", `revisión cruzada: ${/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "BLOQUEANTE" : "aprobado"}`);
+    await avisarProgreso(ctx.conversacionId, /^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "🔍 El revisor encontró problemas bloqueantes; Claude los corrige…" : "🔍 Revisión cruzada: aprobado.");
     if (/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision)) {
       const fix = await ctx.ejecutarTool("codigo_ejecutar_claude", { sandbox_id, esperar: true, max_turnos: p.maxTurnos ?? 80, timeout_seg: p.timeoutSeg ?? 1500, continuar_sesion: sesionClaude, contexto: p.sistema, encargo: `Un revisor independiente encontró problemas BLOQUEANTES en tu trabajo. Corregilos todos y dejá build/lint/tests en verde:\n${revision.slice(0, 4000)}` });
       const ver2 = await ctx.ejecutarTool("codigo_verificar", { sandbox_id });
@@ -111,6 +116,7 @@ async function ejecutarLectura(ctx: ContextoEjecucion, p: { proyecto: string; pr
   const ab = await ctx.ejecutarTool("codigo_abrir_sandbox", { proyecto: p.proyecto, proposito: p.proposito });
   if (!ab.ok) return { ok: false, error: `No pude abrir el sandbox: ${ab.error}` };
   const sandbox_id = (ab.datos as any).sandbox_id;
+  await avisarProgreso(ctx.conversacionId, `🧪 Sandbox listo. Claude Code está leyendo el proyecto (${p.proposito})…`);
   const cc = await ctx.ejecutarTool("codigo_ejecutar_claude", { sandbox_id, encargo: p.encargo, contexto: p.sistema, max_turnos: p.maxTurnos ?? 60, timeout_seg: 1200, esperar: true });
   await ctx.ejecutarTool("codigo_cerrar_sandbox", { sandbox_id, borrar_rama: true });   // lectura: no deja rastro
   if (!cc.ok) return { ok: false, error: `Claude Code: ${cc.error}` };
@@ -314,7 +320,7 @@ const CONTRATO_CAPACIDAD = `CONTRATO DEL REGISTRO DE EMILIA (src/registro/tipos.
 
 export const seniorCrearCapacidad: DefSkill = {
   nombre: "senior_crear_capacidad", modulo: MODULO,
-  descripcion: "AUTO-MEJORA: escribe una capacidad nueva de Emilia (tool, skill o flujo) como módulo en su propio código, siguiendo el contrato del registro, en un sandbox del proyecto 'emilia'. Verifica (tsc) y la revisa un segundo Claude. Devuelve el sandbox listo para integrar; después se recarga el registro. No integra por sí sola.",
+  descripcion: "AUTO-MEJORA (usar preferentemente vía el flujo capacidad_nueva): escribe una capacidad nueva de Emilia (tool, skill o flujo) en un sandbox del proyecto 'emilia', verificada y revisada. IMPORTANTE: una capacidad en sandbox NO existe para el sistema hasta integrar + registro_recargar; no se puede 'probar antes'.",
   cuandoUsar: "Cuando falta una herramienta que ninguna tool actual cubre (ej. 'consultar el clima', 'leer Google Sheets', 'mandar correo') o el jefe pide 'creá una tool/skill que…'.",
   parametros: {
     type: "object",
