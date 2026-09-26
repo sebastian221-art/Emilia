@@ -36,6 +36,31 @@ export async function leerArchivo(id: string): Promise<{ meta: Archivo; contenid
 export async function archivosDeConversacion(convId: string, limite = 10): Promise<Archivo[]> {
   return query<Archivo>(`SELECT * FROM archivos WHERE conversacion_id=$1 ORDER BY creado_en DESC LIMIT $2`, [convId, limite]);
 }
+/**
+ * Limpieza: borra del disco y de la tabla los audios (recibidos o generados) con
+ * más de `diasAudio` días, y los archivos generados (informes, etc.) con más de
+ * `diasGenerados`. Las bases de contactos que mandó el jefe se conservan `diasSubidos`.
+ * Se corre al arrancar y una vez al día (ver server.ts).
+ */
+export async function limpiarArchivosViejos(op: { diasAudio?: number; diasGenerados?: number; diasSubidos?: number } = {}): Promise<{ borrados: number; liberado_kb: number }> {
+  const dA = op.diasAudio ?? Number(process.env.ARCHIVOS_DIAS_AUDIO || 2);
+  const dG = op.diasGenerados ?? Number(process.env.ARCHIVOS_DIAS_GENERADOS || 14);
+  const dS = op.diasSubidos ?? Number(process.env.ARCHIVOS_DIAS_SUBIDOS || 60);
+  const viejos = await query<Archivo>(
+    `SELECT * FROM archivos WHERE
+       (mime LIKE 'audio/%' AND creado_en < now() - ($1 || ' days')::interval)
+       OR (origen = 'generado' AND mime NOT LIKE 'audio/%' AND creado_en < now() - ($2 || ' days')::interval)
+       OR (origen <> 'generado' AND mime NOT LIKE 'audio/%' AND creado_en < now() - ($3 || ' days')::interval)`,
+    [String(dA), String(dG), String(dS)]);
+  let liberado = 0;
+  for (const a of viejos) {
+    try { await fs.unlink(a.ruta); liberado += a.tam_bytes; } catch { /* ya no estaba */ }
+    await query(`DELETE FROM archivos WHERE id=$1`, [a.id]);
+  }
+  if (viejos.length) console.log(`[archivos] Limpieza: ${viejos.length} archivo(s) borrados, ${Math.round(liberado / 1024)} KB liberados.`);
+  return { borrados: viejos.length, liberado_kb: Math.round(liberado / 1024) };
+}
+
 export async function archivosRecientes(limite = 10): Promise<Archivo[]> {
   return query<Archivo>(`SELECT * FROM archivos ORDER BY creado_en DESC LIMIT $1`, [limite]);
 }

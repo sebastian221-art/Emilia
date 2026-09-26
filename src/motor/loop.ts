@@ -19,7 +19,9 @@ import { llamarModelo, MODELO_POR_DEFECTO } from "./groq.js";
 import { ejecutarTool, ejecutarSkill, crearContexto } from "./ejecutor.js";
 import { herramientasDeAgente, type Invocable } from "./herramientas.js";
 import { iniciarFlujo } from "./flujo.js";
-import { historialParaModelo, resumirSiHaceFalta } from "./memoria.js";
+import { textoAprobacion, detalleAprobacion } from "./aprobacion-texto.js";
+import { historialParaModelo, resumirSiHaceFalta, extraerHechosSiHaceFalta } from "./memoria.js";
+import { memoriaParaPrompt } from "../dominio/memoria-lp.js";
 import { entregarTexto } from "./entrega.js";
 import { registro } from "../registro/registro.js";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "groq-sdk/resources/chat/completions";
@@ -68,6 +70,9 @@ interface Estado {
   toolCalls: number;
   mensajesEnviados: string[];
   avisoLargoEnviado?: boolean;
+  empujonDado?: boolean;
+  empujonPermiso?: boolean;
+  enfoqueReanudacion?: string;
 }
 
 // ─── Arranque ────────────────────────────────────────────────────────────────
@@ -111,7 +116,11 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   }
 
   const r = await bucle(estado, tools, invocables, ctx);
-  if (conv && r.estado !== "esperando_aprobacion") resumirSiHaceFalta(conv, ag.memoria).catch(() => {});
+  if (conv && r.estado !== "esperando_aprobacion") {
+    resumirSiHaceFalta(conv, ag.memoria).catch(() => {});
+    const esJefe = conv.canal === "panel" || (conv.canal === "whatsapp" && conv.contacto === (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, ""));
+    extraerHechosSiHaceFalta(conv, ag.memoria, esJefe).catch(() => {});
+  }
   return r;
 }
 
@@ -147,6 +156,7 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
   const ctx = crearContexto(estado.agenteId, estado.ejId, null, estado.conversacionId);
   await ctx.traza("aprobacion", aprobada ? `Aprobado: ${pendientes[0].nombre}. Continúa.` : `Rechazado: ${pendientes[0].nombre}. Continúa sin ejecutarla.`);
   await query(`UPDATE ejecuciones SET estado='en_curso' WHERE id=$1`, [estado.ejId]);
+  estado.enfoqueReanudacion = pendientes[0].nombre;
 
   const r = await bucle(estado, tools, invocables, ctx);
   if (estado.conversacionId && r.estado !== "esperando_aprobacion") {
@@ -166,6 +176,10 @@ async function bucle(e: Estado, tools: ChatCompletionTool[], invocables: Map<str
       // 1. Procesar tool calls pendientes (del turno actual o de una reanudación).
       const pausa = await procesarPendientes(e, invocables, ctx);
       if (pausa) return pausa;
+      if (e.enfoqueReanudacion) {
+        e.mensajes.push({ role: "user", content: `(La acción ${e.enfoqueReanudacion} que esperaba aprobación ya se resolvió. Respondele al jefe SOLO sobre el resultado de esa acción, en una o dos líneas. No retomes temas anteriores.)` });
+        e.enfoqueReanudacion = undefined;
+      }
 
       // 2. Presupuesto.
       if (e.turnos >= e.maxTurnos) {
@@ -185,6 +199,20 @@ async function bucle(e: Estado, tools: ChatCompletionTool[], invocables: Map<str
       }
       e.mensajes.push(asistente);
 
+      if (!r.toolCalls.length && !r.texto.trim() && !e.empujonDado) {
+        // Pensó pero no actuó ni respondió: un empujón, una sola vez.
+        e.empujonDado = true;
+        e.mensajes.push({ role: "user", content: "No llegó ninguna acción ni respuesta. Si necesitás una herramienta, llamala ahora; si no, escribí tu respuesta final." });
+        continue;
+      }
+      // Pidió permiso por texto sin llamar nada: no vale. Un empujón (una vez).
+      const pidePermiso = /(necesito|requiero) (tu |su )?(aprobaci[oó]n|permiso|autorizaci[oó]n)|¿\s*proced(o|emos)\s*\?|¿\s*(quer[eé]s|deseas|quieres) que (proceda|lo haga|ejecute|abra)|dame (tu )?(ok|aprobaci[oó]n)/i;
+      if (!r.toolCalls.length && pidePermiso.test(r.texto) && e.toolCalls === 0 && !e.empujonPermiso && invocables.size) {
+        e.empujonPermiso = true;
+        e.mensajes.push({ role: "user", content: "No pidas permiso por texto. Llamá la herramienta que corresponde ahora mismo: si requiere aprobación, el sistema se la pide al jefe automáticamente." });
+        await ctx.traza("verificacion", "Pidió permiso por texto sin llamar la herramienta; se le exigió actuar.");
+        continue;
+      }
       if (!r.toolCalls.length) {
         respuestaFinal = r.texto;
         const afirma = /(envi[eé]|mand[eé]|consult[eé]|ejecut|llam[eé])/i.test(respuestaFinal);
@@ -242,15 +270,16 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
 
     if (inv.requiereAprobacion && tc.decision !== "aprobada") {
       // ── PAUSA ──
-      const detalle = `${inv.nombre}(${JSON.stringify(tc.argumentos)})`;
+      const detalle = detalleAprobacion(inv.nombre, tc.argumentos);
       const ap = await crearAprobacionTool({ agenteEjecucionId: e.ejId, agenteId: e.agenteId, conversacionId: e.conversacionId, tool: inv.nombre, args: tc.argumentos, detalle });
-      await ctx.traza("aprobacion", `Esperando tu aprobación para ${detalle}`);
+      await ctx.traza("aprobacion", `Esperando tu aprobación: ${detalle}`);
+      import("./eventos.js").then(({ emitir }) => emitir("aprobacion.pendiente", { tool: inv.nombre, agente_id: e.agenteId, aprobacion_id: ap.id })).catch(() => {});
       await query(
         `UPDATE ejecuciones SET estado='esperando_aprobacion', mensajes=$1, pendientes=$2, turnos_usados=$3, tool_calls=$4, mensajes_enviados=$5 WHERE id=$6`,
         [JSON.stringify(e.mensajes), JSON.stringify(e.pendientes), e.turnos, e.toolCalls, JSON.stringify(e.mensajesEnviados), e.ejId]);
       return {
         ok: true, estado: "esperando_aprobacion", aprobacionId: ap.id,
-        respuesta: `⏸ Necesito tu aprobación para ejecutar *${inv.nombre}* con: ${JSON.stringify(tc.argumentos)}.\nRespondé "ok" para aprobar o "no" para rechazar (o resolvelo desde el panel de Aprobaciones).`,
+        respuesta: textoAprobacion(inv.nombre, tc.argumentos),
         ejecucionId: e.ejId, conversacionId: e.conversacionId, turnos: e.turnos, toolCalls: e.toolCalls, mensajesEnviados: e.mensajesEnviados,
       };
     }
@@ -264,8 +293,9 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
     }
 
     // ── Aviso previo si va a tardar (skills/tools largas por WhatsApp) ──
-    const tSeg = inv.tipo === "skill" ? (registro.skill(inv.nombre)?.timeoutSeg ?? 300) : inv.tipo === "tool" ? (registro.tool(inv.nombre)?.timeoutSeg ?? 30) : 0;
-    if (e.conversacionId && tSeg > 120 && !e.avisoLargoEnviado) {
+    // Solo lo que de verdad tarda: skills del Senior y sesiones de Claude Code.
+    const esLargo = (inv.tipo === "skill" && (registro.skill(inv.nombre)?.timeoutSeg ?? 300) > 300) || inv.nombre === "codigo_ejecutar_claude" || inv.nombre === "codigo_abrir_sandbox";
+    if (e.conversacionId && esLargo && !e.avisoLargoEnviado) {
       e.avisoLargoEnviado = true;
       const conv = await obtenerConversacion(e.conversacionId);
       if (conv?.canal === "whatsapp") {
@@ -319,9 +349,16 @@ async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: C
       ? `Tus herramientas reales son exactamente estas: ${nombres.join(", ")}. Usá solo esos nombres, con los parámetros que declaran. Si una requiere aprobación, pedila igual: el sistema pausa y pide el OK.`
       : "No tenés herramientas asignadas: solo podés responder con texto.",
     "Usás tus herramientas de verdad cuando hacen falta. Nunca afirmes haber hecho algo (enviar, consultar) sin haber llamado la herramienta correspondiente. Si una herramienta devuelve error, leelo y corregí los argumentos o explicá el problema. Sé honesto.",
+    "REGLA DE ESTADO ACTUAL: cualquier pregunta sobre cómo están las cosas AHORA (qué hay en pantalla, qué archivos hay, qué campañas/envíos/procesos existen, cómo va algo) se responde llamando la herramienta en ESTE turno. Lo que viste en turnos anteriores ya no vale. Y el resultado es lo que la herramienta DEVUELVE, nunca lo que vos pusiste en sus argumentos: no inventes datos en los argumentos.",
+    "REGLA DE APROBACIONES: no pidas permiso por texto. Si una acción requiere aprobación, llamá la herramienta igual: el sistema pausa y le pide el OK al jefe por su canal. Preguntar '¿procedo?' y no llamar nada deja la tarea a medias.",
     "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que creés recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
   ].filter(Boolean).join("\n");
 
+  const memoriaLp = (ag.memoria?.modo === "persistente") ? await memoriaParaPrompt(60) : "";
   const contexto = await contextoDeAgente(ag.id);
-  return contexto ? `${partes}\n\n=== CONTEXTO / DOCUMENTOS ===\n${contexto}\n=== FIN ===` : partes;
+  return [
+    partes,
+    memoriaLp ? `=== LO QUE SABÉS DE LARGO PLAZO (memoria persistente; usalo con naturalidad, sin recitarlo) ===\n${memoriaLp}\n=== FIN MEMORIA ===` : "",
+    contexto ? `=== CONTEXTO / DOCUMENTOS ===\n${contexto}\n=== FIN ===` : "",
+  ].filter(Boolean).join("\n\n");
 }

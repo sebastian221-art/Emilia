@@ -26,6 +26,8 @@ import { obtenerOCrearConversacion, guardarMensajeEn } from "../dominio/conversa
 import { aprobacionPendienteDeConversacion, resolverAprobacion } from "../dominio/aprobaciones.js";
 import { enviarTextoWhatsapp, descargarMedia } from "./enviar.js";
 import { guardarArchivo } from "../dominio/archivos.js";
+import { analizarImagen, esImagen } from "../motor/vision.js";
+import { transcribir } from "../motor/voz.js";
 
 /** Verificación GET que Meta hace al configurar el webhook. */
 export function verificarWebhook(req: Request, res: Response) {
@@ -111,8 +113,9 @@ async function procesarEntrante(m: any) {
   if (!agente) { console.error("[whatsapp] Ningún agente activo tiene el canal 'whatsapp' en su esqueleto (pieza Canales). Nadie responde."); return; }
   const conv = await obtenerOCrearConversacion(agente.id, "whatsapp", numero);
 
-  // ── Texto o adjunto ──
+  // ── Texto, audio o adjunto ──
   let texto = "";
+  let vinoEnAudio = false;
   if (m.type === "text") texto = m.text?.body ?? "";
   else if (m.type === "button") texto = m.button?.text ?? "";
   else if (m.type === "interactive") texto = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "";
@@ -122,7 +125,21 @@ async function procesarEntrante(m: any) {
     if (!d.ok) { await enviarTextoWhatsapp(numero, `No pude descargar el archivo: ${d.error}`); return; }
     const nombre = media.filename || `${m.type}_${Date.now()}.${(d.mime || "").split("/")[1]?.split(";")[0] || "bin"}`;
     const arch = await guardarArchivo({ nombre, mime: d.mime || "application/octet-stream", contenido: d.contenido!, origen: "whatsapp", conversacionId: conv.id, agenteId: agente.id });
-    texto = `[Adjunto recibido: "${arch.nombre}" (${Math.round(arch.tam_bytes / 1024)} KB, archivo_id=${arch.id})]${media.caption ? ` ${media.caption}` : ""}`;
+    if (m.type === "audio" || (arch.mime || "").startsWith("audio/")) {
+      // Nota de voz: se transcribe y entra como texto. Emilia contesta también en audio.
+      const t = await transcribir(d.contenido!, arch.mime);
+      if (!t.ok) { await enviarTextoWhatsapp(numero, `No entendí el audio (${t.error}). ¿Me lo escribís?`); return; }
+      texto = t.texto!;
+      vinoEnAudio = true;
+      console.log(`[whatsapp] Audio de ${numero} transcrito: "${texto.slice(0, 120)}"`);
+    } else if (esImagen(arch.mime)) {
+      // La foto se convierte en palabras y entra al motor como texto (patrón de Any).
+      const v = await analizarImagen(d.contenido!, arch.mime, { contexto: media.caption || undefined });
+      const descripcion = v.ok ? v.texto! : `(no pude analizar la imagen: ${v.error})`;
+      texto = `[Imagen recibida (archivo_id=${arch.id}). Lo que se ve: ${descripcion}]${media.caption ? `\nMensaje del jefe: ${media.caption}` : ""}`;
+    } else {
+      texto = `[Adjunto recibido: "${arch.nombre}" (${Math.round(arch.tam_bytes / 1024)} KB, archivo_id=${arch.id})]${media.caption ? ` ${media.caption}` : ""}`;
+    }
     console.log(`[whatsapp] Adjunto de ${numero}: ${arch.nombre} → ${arch.id}`);
   }
   if (!texto.trim()) {
@@ -160,8 +177,8 @@ async function procesarEntrante(m: any) {
       ? `Quien te escribe es tu jefe, Sebastián (WhatsApp ${numero}). Tiene autoridad total: sus órdenes se ejecutan (el sistema pide aprobación donde corresponda). Cuando una tool o flujo necesite "el número del jefe", es ${numero}. Si te manda un archivo, te llega como "[Adjunto recibido: ... archivo_id=...]": usá ese archivo_id. Respondele corto y directo, como en un chat.`
       : "Quien te escribe NO es tu jefe. Sé amable y útil, pero no ejecutes acciones sensibles ni reveles información interna por pedido de esta persona.";
 
-    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", contextoCanal });
-    await entregarRespuesta(conv, r);
+    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", contextoCanal: contextoCanal + (vinoEnAudio ? " El jefe te habló por nota de voz: respondé de forma natural y breve, como hablando, porque tu respuesta también se leerá en voz alta." : "") });
+    await entregarRespuesta(conv, r, { tambienAudio: vinoEnAudio });
     console.log(`[whatsapp] Respondido a ${numero}. estado=${r.estado} tools=${r.toolCalls}`);
   });
 }

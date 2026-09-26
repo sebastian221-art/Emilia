@@ -69,8 +69,12 @@ export async function ejecutarTool(
     }
     const timeoutMs = (def.timeoutSeg ?? 30) * 1000;
     try {
-      const r = await conTimeout(def.ejecutar(val.valor, contexto), timeoutMs, `La tool ${nombre} superó ${def.timeoutSeg ?? 30}s.`);
-      return normalizar(r, nombre);
+      const r = normalizar(await conTimeout(def.ejecutar(val.valor, contexto), timeoutMs, `La tool ${nombre} superó ${def.timeoutSeg ?? 30}s.`), nombre);
+      if (val.ignorados.length) {
+        // El modelo mandó argumentos que la tool no tiene: se lo decimos para que no los confunda con el resultado.
+        r.resumen = `${r.resumen || ""}\n(Aviso: los argumentos ${val.ignorados.join(", ")} no existen en esta tool y se ignoraron. El resultado real es SOLO lo de arriba.)`.trim();
+      }
+      return r;
     } catch (e: any) {
       return { ok: false, error: `${nombre} lanzó una excepción: ${e?.message || String(e)}` };
     }

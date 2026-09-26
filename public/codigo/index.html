@@ -35,6 +35,7 @@ pre.diff .add { color: #6ee7b7; } pre.diff .del { color: #ff9090; } pre.diff .hd
   <a href="/tools">Tools</a>
   <a href="/flujos">Flujos</a>
   <a href="/codigo" class="activo">Código</a>
+  <a href="/empresa">Empresa</a>
   <a href="/aprobaciones">Aprobaciones</a>
 </nav>
 <main>
@@ -54,16 +55,28 @@ let proyectos = [], sandboxes = [], sesiones = [], sel = null, timer = null;
 async function cargar() {
   [proyectos, sandboxes, sesiones] = await Promise.all([api("/api/codigo/proyectos"), api("/api/codigo/sandboxes"), api("/api/codigo/sesiones?limite=25")]);
   const izq = document.getElementById("izq");
-  let html = `<h4>Proyectos</h4>` + (proyectos.length ? proyectos.map((p) => `<div class="card" onclick="verProyecto('${p.id}')"><div class="n">${esc(p.nombre)}</div><div class="s">${esc(p.ruta)} · ${esc(p.rama_base)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno. Registrá uno arriba o pedíselo al Senior.</p>`);
+  let runtime = []; try { runtime = await api("/api/codigo/runtime"); } catch {}
+  const rt = (id) => runtime.find((r) => r.proyecto_id === id);
+  let html = `<h4>Proyectos</h4>` + (proyectos.length ? proyectos.map((p) => { const r = rt(p.id); return `<div class="card" onclick="verProyecto('${p.id}')"><div class="n">${esc(p.nombre)}${r ? badgeEstado(r.estado === "corriendo" ? "en_curso" : r.estado === "caido" ? "fallida" : "pendiente").replace(/>[^<]+</, `>${r.estado}<`) : ""}</div><div class="s">${esc(p.ruta)} · ${esc(p.rama_base)}</div></div>`; }).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno. Registrá uno arriba o pedíselo al Senior.</p>`);
   html += `<h4>Sandboxes abiertos</h4>` + (sandboxes.length ? sandboxes.map((s) => `<div class="card ${sel === "sb:" + s.id ? "activo" : ""}" onclick="verSandbox('${s.id}')"><div class="n">${esc(s.proyecto_nombre)}/${esc(s.rama)}</div><div class="s">${esc(s.proposito)} · ${fechaHora(s.creado_en)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno.</p>`);
   html += `<h4>Sesiones de Claude Code</h4>` + (sesiones.length ? sesiones.map((s) => `<div class="card ${sel === "se:" + s.id ? "activo" : ""}" onclick="verSesion('${s.id}')"><div class="n">${esc(s.proyecto)}/${esc((s.rama || "").replace("senior/", ""))}${badgeEstado(s.estado)}</div><div class="s">${esc(s.encargo).slice(0, 70)}<br>${fechaHora(s.inicio)}${s.costo_usd ? ` · $${Number(s.costo_usd).toFixed(3)}` : ""}${s.turnos ? ` · ${s.turnos} turnos` : ""}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguna todavía.</p>`);
   izq.innerHTML = html;
 }
 
-function verProyecto(id) {
-  const p = proyectos.find((x) => x.id === id); sel = null; clearInterval(timer);
-  document.getElementById("panel").innerHTML = `<h2 style="font-family:monospace;margin:0">${esc(p.nombre)}</h2>
+async function verProyecto(id) {
+  const p = proyectos.find((x) => x.id === id); sel = "py:" + id; clearInterval(timer);
+  let r = null; try { r = (await api("/api/codigo/runtime")).find((x) => x.proyecto_id === id); } catch {}
+  const corriendo = r?.estado === "corriendo";
+  document.getElementById("panel").innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:monospace;margin:0">${esc(p.nombre)}</h2>${r ? badge(r.estado + (r.pid ? " · pid " + r.pid : ""), corriendo ? "ok" : r.estado === "caido" ? "error" : "neutro") : ""}</div>
     <p class="sub" style="font-size:12px">${esc(p.ruta)} · rama base <b>${esc(p.rama_base)}</b></p>
+    <h3>Proceso</h3>
+    <div style="font-size:12px;font-family:monospace;margin-bottom:8px">start: ${esc(p.cmd_start || "— (sin cmd_start)")}${p.puerto ? ` · puerto ${p.puerto}` : ""}${p.url_salud ? ` · salud ${esc(p.url_salud)}` : ""}${r?.codigo_salida != null ? ` · última salida: ${r.codigo_salida}` : ""}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      ${corriendo ? `<button onclick="rtAccion('${esc(p.nombre)}','detener')">■ Detener</button><button onclick="rtAccion('${esc(p.nombre)}','reiniciar')">↻ Reiniciar</button>` : `<button class="primario" onclick="rtAccion('${esc(p.nombre)}','iniciar')" ${p.cmd_start ? "" : "disabled"}>▶ Arrancar</button>`}
+      <button onclick="rtAccion('${esc(p.nombre)}','salud')">♥ Salud</button>
+      <button onclick="verLogs('${esc(p.nombre)}')">Logs</button>
+    </div>
+    <div id="rt-out"></div>
     <h3>Comandos</h3><div style="font-size:12px;font-family:monospace">install: ${esc(p.cmd_install || "(auto)")}<br>build: ${esc(p.cmd_build || "—")}<br>lint: ${esc(p.cmd_lint || "—")}<br>test: ${esc(p.cmd_test || "—")}</div>
     ${p.notas ? `<h3>Notas</h3><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec)">${esc(p.notas)}</div>` : ""}
     <h3>Sandboxes de este proyecto</h3>${sandboxes.filter((s) => s.proyecto_id === p.id).map((s) => `<div class="card" onclick="verSandbox('${s.id}')"><div class="n">${esc(s.rama)}</div><div class="s">${esc(s.proposito)}</div></div>`).join("") || `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno abierto.</p>`}`;
@@ -82,6 +95,19 @@ async function verSandbox(id) {
   document.getElementById("sb-ses").innerHTML = ses.length ? ses.map((x) => `<div class="card" onclick="verSesion('${x.id}')"><div class="n">${badgeEstado(x.estado)} ${esc(x.encargo).slice(0, 80)}</div><div class="s">${fechaHora(x.inicio)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Sin sesiones.</p>`;
   const d = await api(`/api/codigo/sandboxes/${id}/diff`);
   document.getElementById("sb-diff").innerHTML = `<div style="font-size:12px;color:var(--e-text-sec);white-space:pre-wrap;margin-bottom:8px">${esc(d.resumen)}</div><pre class="diff">${colorDiff(d.diff)}${d.truncado ? "\n[...recortado]" : ""}</pre>`;
+}
+async function rtAccion(nombre, accion) {
+  const out = document.getElementById("rt-out");
+  out.innerHTML = `<p style="font-size:12px;color:var(--e-text-muted);margin-top:8px">${accion}…</p>`;
+  try { const r = await post(`/api/codigo/runtime/${nombre}/${accion}`); out.innerHTML = renderResultado({ ok: r.ok !== false, resumen: r.pid ? `pid ${r.pid}` : r.status ? `HTTP ${r.status} · ${r.latencia_ms} ms` : "ok", error: r.error }); }
+  catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
+  await cargar(); const p = proyectos.find((x) => x.nombre === nombre); if (p && accion !== "salud") setTimeout(() => verProyecto(p.id), 1500);
+}
+async function verLogs(nombre) {
+  const out = document.getElementById("rt-out");
+  const l = await api(`/api/codigo/runtime/${nombre}/logs?ultimas=150`);
+  out.innerHTML = `<div class="log" style="margin-top:8px">${l.length ? l.map((x) => `<div class="${/error|exception|fatal/i.test(x) ? "error" : ""}">${esc(x)}</div>`).join("") : "(sin log)"}</div>`;
+  const lg = out.querySelector(".log"); if (lg) lg.scrollTop = lg.scrollHeight;
 }
 function colorDiff(t) {
   return String(t || "").split("\n").map((l) => { const e = esc(l); if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("@@")) return `<span class="hdr">${e}</span>`; if (l.startsWith("+")) return `<span class="add">${e}</span>`; if (l.startsWith("-")) return `<span class="del">${e}</span>`; return e; }).join("\n");
@@ -119,13 +145,15 @@ function mostrarRegistro() {
     <label>Ruta absoluta del repo</label><input id="r-ruta" placeholder="C:\\Users\\Sebas\\Sebastian_proyects\\jelcom-envios" />
     <div class="fila"><div><label>Comando build</label><input id="r-build" placeholder="npx tsc --noEmit -p ." /></div><div><label>Comando test</label><input id="r-test" placeholder="npm test" /></div></div>
     <div class="fila"><div><label>Comando lint</label><input id="r-lint" /></div><div><label>Comando install</label><input id="r-install" placeholder="(auto: npm install)" /></div></div>
+    <div class="fila"><div><label>Comando start (para arrancarlo)</label><input id="r-start" placeholder="npm run dev" /></div><div><label>Puerto</label><input id="r-puerto" type="number" placeholder="4000" /></div></div>
+    <label>URL de salud</label><input id="r-salud" placeholder="http://localhost:4000/api/salud" />
     <label>Notas para el Senior (stack, convenciones, cuidados)</label><textarea id="r-notas" rows="3"></textarea>
     <button class="primario" style="margin-top:12px" onclick="registrar()">Registrar</button><div id="r-out"></div>`;
 }
 async function registrar() {
   const v = (i) => document.getElementById(i).value.trim();
   try {
-    const r = await post("/api/codigo/proyectos", { nombre: v("r-nombre"), ruta: v("r-ruta"), rama_base: v("r-rama") || "main", cmd_build: v("r-build") || undefined, cmd_test: v("r-test") || undefined, cmd_lint: v("r-lint") || undefined, cmd_install: v("r-install") || undefined, notas: v("r-notas") });
+    const r = await post("/api/codigo/proyectos", { nombre: v("r-nombre"), ruta: v("r-ruta"), rama_base: v("r-rama") || "main", cmd_build: v("r-build") || undefined, cmd_test: v("r-test") || undefined, cmd_lint: v("r-lint") || undefined, cmd_install: v("r-install") || undefined, cmd_start: v("r-start") || undefined, puerto: v("r-puerto") ? Number(v("r-puerto")) : undefined, url_salud: v("r-salud") || undefined, notas: v("r-notas") });
     document.getElementById("r-out").innerHTML = renderResultado(r); await cargar();
   } catch (e) { document.getElementById("r-out").innerHTML = renderResultado({ ok: false, error: e.message }); }
 }

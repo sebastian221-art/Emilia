@@ -74,7 +74,7 @@ export const whatsappEnviarDocumento: DefTool = {
 export const whatsappListarAdjuntos: DefTool = {
   nombre: "whatsapp_listar_adjuntos",
   modulo: MODULO,
-  descripcion: "Lista los archivos recibidos recientemente (adjuntos de WhatsApp o generados). Devuelve archivo_id, nombre, tipo y fecha. Usalo para encontrar la base que te mandaron.",
+  descripcion: "Lista los archivos recibidos recientemente (adjuntos de WhatsApp, imágenes, o generados). Devuelve archivo_id, nombre, tipo y fecha. Usalo para encontrar la base o la imagen que te mandaron.",
   parametros: { type: "object", properties: { limite: { type: "integer", description: "Cuántos listar.", default: 8, minimum: 1, maximum: 30 } }, required: [] },
   riesgo: "lectura",
   requiereAprobacion: false,

@@ -301,7 +301,45 @@ export const seniorReplicar: DefSkill = {
   },
 };
 
+// ─── Auto-mejora: crear una capacidad nueva de Emilia ───────────────────────
+const CONTRATO_CAPACIDAD = `CONTRATO DEL REGISTRO DE EMILIA (src/registro/tipos.ts):
+- Una TOOL es un objeto DefTool: { nombre (snake_case, empieza con "<modulo>_"), modulo, descripcion (lo lee el modelo: qué hace y cuándo usarla), parametros (JSON Schema con type "object", properties, required), riesgo ("lectura"|"escritura"|"ejecucion"|"sistema"), requiereAprobacion (true si es irreversible/sensible), timeoutSeg?, async ejecutar(args, ctx) → { ok, datos?, resumen?, error? } }.
+  ctx tiene: agenteId, ejecucionId, conversacionId, traza(tipo, texto), ejecutarTool(nombre, args), modelo(mensajes).
+- Una SKILL es DefSkill: igual pero con tools: string[] (las tools que puede usar) y ejecutar (código, usando ctx.ejecutarTool) o procedimiento (texto para el modelo).
+- Un FLUJO es DefFlujo: { nombre, modulo, descripcion, parametros, riesgo, inicio, pasos: PasoFlujo[] } con pasos tool|skill|condicion|aprobacion|esperar|repetir|subflujo|fin.
+- Cada archivo exporta un array (ej. export const toolsClima: DefTool[] = [...]).
+- Para que se cargue, se agrega UNA línea al manifiesto src/registro/modulos.ts: { ruta: "tools/<archivo>.ts", exporta: "<nombreDelArray>", tipo: "tools" }.
+- Mirá src/tools/sistema.ts y src/tools/jelcom.ts como ejemplos canónicos. Sin dependencias nuevas salvo necesidad real (justificar). Credenciales SIEMPRE por process.env (documentá el nombre de la variable en la descripción del módulo).
+- Verificación: npx tsc --noEmit -p . debe pasar, y el nombre de la tool debe validar contra el registro (snake_case, prefijo del módulo).`;
+
+export const seniorCrearCapacidad: DefSkill = {
+  nombre: "senior_crear_capacidad", modulo: MODULO,
+  descripcion: "AUTO-MEJORA: escribe una capacidad nueva de Emilia (tool, skill o flujo) como módulo en su propio código, siguiendo el contrato del registro, en un sandbox del proyecto 'emilia'. Verifica (tsc) y la revisa un segundo Claude. Devuelve el sandbox listo para integrar; después se recarga el registro. No integra por sí sola.",
+  cuandoUsar: "Cuando falta una herramienta que ninguna tool actual cubre (ej. 'consultar el clima', 'leer Google Sheets', 'mandar correo') o el jefe pide 'creá una tool/skill que…'.",
+  parametros: {
+    type: "object",
+    properties: {
+      tipo: { type: "string", enum: ["tool", "skill", "flujo"] },
+      nombre: { type: "string", description: "snake_case con prefijo de módulo, ej. clima_consultar.", minLength: 3 },
+      modulo: { type: "string", description: "Módulo/archivo, ej. clima → src/tools/clima.ts.", minLength: 2 },
+      especificacion: { type: "string", description: "Qué hace exactamente, parámetros, comportamiento, errores, qué API/servicio usa y con qué credencial (.env).", minLength: 20 },
+    },
+    required: ["tipo", "nombre", "modulo", "especificacion"],
+  },
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 5400,
+  tools: toolsBase,
+  async ejecutar(a, ctx) {
+    const carpeta = a.tipo === "tool" ? "tools" : a.tipo === "skill" ? "skills" : "flujos";
+    const exporta = `${carpeta}${a.modulo.charAt(0).toUpperCase()}${a.modulo.slice(1)}`;
+    return ejecutarEncargo(ctx, {
+      proyecto: "emilia", proposito: `capacidad ${a.nombre}`, sistema: `${REGLAS}\n\n${CONTRATO_CAPACIDAD}`,
+      encargo: `Creá la ${a.tipo} "${a.nombre}" en el módulo "${a.modulo}": archivo src/${carpeta}/${a.modulo}.ts (si ya existe, agregala ahí), exportando el array "${exporta}" (o el existente). Especificación:\n${a.especificacion}\n\nPasos: 1) leé src/registro/tipos.ts y un ejemplo (src/tools/sistema.ts). 2) implementá con manejo de errores y descripción clara para el modelo. 3) registrala en src/registro/modulos.ts (una línea; si el módulo ya estaba, no dupliques). 4) si usa credenciales, leelas de process.env y documentá la variable. 5) corré npx tsc --noEmit -p . y dejalo en verde. 6) en el informe: archivo creado, nombre exacto de la capacidad, parámetros, y qué variable de .env hace falta si aplica.`,
+      verificar: true, maxIteraciones: 3, maxTurnos: 100, timeoutSeg: 2400, revisionCruzada: true,
+    });
+  },
+};
+
 export const skillsSenior: DefSkill[] = [
   seniorAnalizar, seniorExplicar, seniorPlanificar, seniorImplementar, seniorReparar,
-  seniorAuditarSeguridad, seniorAtacar, seniorProbarLimites, seniorPredecirFallas, seniorReplicar,
+  seniorAuditarSeguridad, seniorAtacar, seniorProbarLimites, seniorPredecirFallas, seniorReplicar, seniorCrearCapacidad,
 ];

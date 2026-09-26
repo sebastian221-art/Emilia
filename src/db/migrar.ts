@@ -8,7 +8,7 @@ import { db } from "./cliente.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Orden de aplicación. Cada archivo es idempotente.
-const ARCHIVOS = ["esquema.sql", "esquema-registro.sql", "esquema-motor.sql", "esquema-flujos.sql", "esquema-archivos.sql", "esquema-codigo.sql"];
+const ARCHIVOS = ["esquema.sql", "esquema-registro.sql", "esquema-motor.sql", "esquema-flujos.sql", "esquema-archivos.sql", "esquema-codigo.sql", "esquema-runtime.sql", "esquema-empresa.sql", "esquema-memoria.sql", "esquema-eventos.sql"];
 
 async function migrar() {
   for (const archivo of ARCHIVOS) {

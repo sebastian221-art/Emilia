@@ -6,15 +6,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Aprobaciones · Emilia</title>
 <link rel="stylesheet" href="/comun/estilos.css" />
+<link rel="stylesheet" href="/comun/lienzo.css" />
 <style>
-.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.card { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; margin-bottom: 10px; }
-.card.tool { border-left: 3px solid #fdba74; }
-.card.flujo { border-left: 3px solid #b388ff; }
-.tit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 500; }
-.det { font-size: 13px; color: var(--e-text-sec); margin: 8px 0; white-space: pre-wrap; font-family: monospace; }
-.meta { font-size: 11px; color: var(--e-text-muted); }
-.vacio { text-align: center; padding: 60px 20px; color: var(--e-text-muted); }
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.layout { display: grid; grid-template-columns: 1fr 360px; gap: 14px; height: calc(100vh - 170px); }
+.lienzo-cont { height: 100%; }
+.central { position: absolute; width: 180px; background: var(--e-surface); border: 2px solid var(--e-accent); border-radius: 16px; padding: 14px; z-index: 3; box-shadow: 0 0 40px rgba(124,58,237,.4); text-align: center; cursor: move; }
+.central .av { width: 44px; height: 44px; border-radius: 50%; margin: 0 auto 6px; background: radial-gradient(circle at 35% 30%, #7c3aed, #4c1d95); display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; box-shadow: 0 0 20px rgba(124,58,237,.6); }
+.nodo-l { position: absolute; width: 230px; background: var(--e-surface); border: 1px solid var(--e-border-strong); border-radius: 12px; padding: 10px 12px; cursor: move; user-select: none; z-index: 2; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
+.nodo-l.tool { border-left: 3px solid #fdba74; } .nodo-l.flujo { border-left: 3px solid #b388ff; }
+.nodo-l:hover, .nodo-l.activo { border-color: var(--e-accent); }
+.nodo-l .t { font-size: 12px; font-weight: 600; }
+.nodo-l .d { font-size: 10px; color: var(--e-text-sec); margin-top: 4px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nodo-l .b { display: flex; gap: 5px; margin-top: 8px; }
+.nodo-l .b button { font-size: 11px; padding: 4px 9px; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; overflow-y: auto; }
+.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 6px; }
+.det { font-size: 12px; font-family: monospace; white-space: pre-wrap; color: var(--e-text-sec); background: var(--e-bg2); border-radius: 10px; padding: 10px; }
+.vacio { text-align: center; padding: 40px; color: var(--e-text-muted); font-size: 13px; }
+.hint { position: absolute; top: 14px; left: 16px; font-size: 12px; color: var(--e-text-muted); z-index: 5; }
 </style>
 </head>
 <body>
@@ -26,41 +36,66 @@
   <a href="/tools">Tools</a>
   <a href="/flujos">Flujos</a>
   <a href="/codigo">Código</a>
+  <a href="/empresa">Empresa</a>
   <a href="/aprobaciones" class="activo">Aprobaciones</a>
 </nav>
 <main>
   <div class="top">
-    <div><h1>Aprobaciones pendientes</h1><p class="sub">Acciones que un agente o un flujo quieren ejecutar y esperan tu OK. Al aprobar, continúan exactamente donde quedaron.</p></div>
+    <div><h1>Aprobaciones</h1><p class="sub">Acciones que esperan tu OK, alrededor tuyo. Aprobá o rechazá desde el nodo; al aprobar, continúan donde quedaron.</p></div>
     <span id="n" class="badge pend"></span>
   </div>
-  <div id="lista"><div class="vacio">Cargando…</div></div>
+  <div class="layout">
+    <div class="lienzo-cont" id="lienzo">
+      <div class="hint">Naranja = tool de un agente · violeta = paso de flujo</div>
+      <div class="mundo" id="mundo"><svg id="svg"></svg><div id="nodos"></div></div>
+      <div class="zoom-ctrl"><button onclick="L.zoomOut()">−</button><span class="zoom-nivel" id="zn">100%</span><button onclick="L.zoomIn()">+</button><button onclick="L.centrar()" title="Centrar">⌂</button></div>
+    </div>
+    <div class="panel" id="panel"><div class="vacio">Elegí una aprobación para ver el detalle.</div></div>
+  </div>
 </main>
 <script src="/comun/espejo.js"></script>
+<script src="/comun/lienzo-base.js"></script>
 <script>
-let agentes = {};
+let lista = [], agentes = {}, sel = null;
+const L = crearLienzo("lienzo", "mundo", "svg", "zn", { centroX: 500, centroY: 350, nodos: [] });
+const pos = {};
 async function cargar() {
   try { for (const a of await api("/api/agentes")) agentes[a.id] = a.nombre; } catch {}
-  const lista = await api("/api/aprobaciones");
+  lista = await api("/api/aprobaciones");
   document.getElementById("n").textContent = lista.length ? `${lista.length} pendiente(s)` : "";
-  document.getElementById("lista").innerHTML = lista.length ? lista.map((a) => `
-    <div class="card ${a.tipo}" id="ap-${a.id}">
-      <div class="tit">${a.tipo === "tool" ? "⚙" : "→"} ${esc(a.titulo)}${badge(a.tipo === "tool" ? "tool en tarea del agente" : "paso de flujo", a.tipo === "tool" ? "aprobacion" : "codigo")}</div>
-      <div class="det">${esc(a.detalle || "")}</div>
-      <div class="meta">${a.agente_id ? `agente: ${esc(agentes[a.agente_id] || a.agente_id)} · ` : ""}${fechaHora(a.creado_en)}${a.conversacion_id ? " · desde una conversación (también se puede responder ok/no por WhatsApp)" : ""}</div>
-      <div style="display:flex;gap:8px;margin-top:10px"><button class="primario" onclick="resolver('${a.id}',true)">✔ Aprobar</button><button onclick="resolver('${a.id}',false)">✘ Rechazar</button></div>
-      <div id="r-${a.id}"></div>
-    </div>`).join("") : `<div class="vacio">Nada pendiente. 🎉</div>`;
+  L.nodos.length = 0;
+  L.nodos.push({ id: "jefe", x: 410, y: 310, w: 180, h: 90, tipo: "jefe" });
+  const R = 320, n = lista.length;
+  lista.forEach((a, i) => { const ang = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1); const p = pos[a.id] || { x: 385 + R * Math.cos(ang), y: 335 + R * Math.sin(ang) }; pos[a.id] = p; L.nodos.push({ id: a.id, x: p.x, y: p.y, w: 230, h: 90, padre: "jefe", ap: a }); });
+  render();
 }
+function render() {
+  document.getElementById("nodos").innerHTML = L.nodos.map((nd) => {
+    if (nd.tipo === "jefe") return `<div class="central nodo-l" id="nl-jefe" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'jefe')"><div class="av">👤</div><div style="font-family:var(--syne);font-weight:600;font-size:13px">Sebastián</div><div style="font-size:10px;color:var(--e-text-muted);margin-top:3px">${lista.length ? lista.length + " esperando" : "nada pendiente 🎉"}</div></div>`;
+    const a = nd.ap;
+    return `<div class="nodo-l ${a.tipo} ${sel === a.id ? "activo" : ""}" id="nl-${a.id}" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'${a.id}')" onclick="if(!L.seMovio())ver('${a.id}')">
+      <div class="t">${a.tipo === "tool" ? "⚙" : "→"} ${esc(a.titulo)}</div>
+      <div class="d">${esc(a.detalle || "")}</div>
+      <div style="font-size:10px;color:var(--e-text-muted);margin-top:3px">${a.agente_id ? esc(agentes[a.agente_id] || "") + " · " : ""}${hora(a.creado_en)}</div>
+      <div class="b"><button class="primario" onclick="event.stopPropagation();resolver('${a.id}',true)">✔ Aprobar</button><button onclick="event.stopPropagation();resolver('${a.id}',false)">✘ Rechazar</button></div>
+    </div>`;
+  }).join("");
+  L.lineas();
+}
+function ver(id) { const a = lista.find((x) => x.id === id); if (!a) return; sel = id; render();
+  document.getElementById("panel").innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>${esc(a.titulo)}</b>${badge(a.tipo === "tool" ? "tool en tarea" : "paso de flujo", a.tipo === "tool" ? "aprobacion" : "codigo")}</div>
+    <h3>Qué quiere hacer</h3><div class="det">${esc(a.detalle || "")}</div>
+    ${a.args ? `<h3>Argumentos</h3><div class="det">${esc(JSON.stringify(a.args, null, 2))}</div>` : ""}
+    <h3>Contexto</h3><div style="font-size:12px;color:var(--e-text-sec)">${a.agente_id ? `agente: ${esc(agentes[a.agente_id] || a.agente_id)}<br>` : ""}${fechaHora(a.creado_en)}${a.conversacion_id ? "<br>desde una conversación (también se puede responder ok/no por WhatsApp)" : ""}</div>
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="primario" onclick="resolver('${a.id}',true)">✔ Aprobar</button><button onclick="resolver('${a.id}',false)">✘ Rechazar</button></div><div id="r-out"></div>`; }
 async function resolver(id, aprobada) {
-  const out = document.getElementById(`r-${id}`);
+  const out = document.getElementById("r-out") || document.getElementById("panel");
   out.innerHTML = `<p style="font-size:12px;color:var(--e-text-muted);margin-top:8px">${aprobada ? "Aprobando y reanudando…" : "Rechazando…"}</p>`;
-  try {
-    const r = await post(`/api/aprobaciones/${id}/resolver`, { aprobada });
-    out.innerHTML = renderResultado({ ok: r.ok, estado: r.estado, resumen: r.respuesta || (r.tipo === "flujo" ? `Flujo ${r.estado}` : ""), error: r.error });
-    setTimeout(cargar, 2500);
-  } catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
+  try { const r = await post(`/api/aprobaciones/${id}/resolver`, { aprobada }); out.innerHTML = renderResultado({ ok: r.ok, estado: r.estado, resumen: r.respuesta || (r.tipo === "flujo" ? `Flujo ${r.estado}` : ""), error: r.error }); }
+  catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
+  setTimeout(cargar, 2000);
 }
-cargar(); setInterval(cargar, 4000);
+cargar().then(() => L.init()); setInterval(cargar, 5000);
 </script>
 </body>
 </html>

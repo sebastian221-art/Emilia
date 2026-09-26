@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- ARCHIVO: public/empresa/index.html -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Empresa · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<link rel="stylesheet" href="/comun/lienzo.css" />
+<style>
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.layout { display: grid; grid-template-columns: 1fr 340px; gap: 14px; height: calc(100vh - 170px); }
+.lienzo-cont { height: 100%; }
+.central { position: absolute; width: 200px; background: var(--e-surface); border: 2px solid var(--e-accent); border-radius: 16px; padding: 16px; z-index: 3; box-shadow: 0 0 40px rgba(124,58,237,.4); text-align: center; cursor: move; }
+.central .av { width: 46px; height: 46px; border-radius: 50%; margin: 0 auto 8px; background: radial-gradient(circle at 35% 30%, #7c3aed, #4c1d95); box-shadow: 0 0 20px rgba(124,58,237,.6); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; }
+.central .n { font-family: var(--syne); font-weight: 600; font-size: 14px; }
+.nodo-l { position: absolute; width: 190px; background: var(--e-surface); border: 1px solid var(--e-border-strong); border-radius: 12px; padding: 10px 12px; cursor: move; user-select: none; z-index: 2; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
+.nodo-l:hover, .nodo-l.activo { border-color: var(--e-accent); }
+.nodo-l.pausado { opacity: .55; }
+.nodo-l .t { font-size: 12px; font-weight: 600; font-family: var(--syne); }
+.nodo-l .s { font-size: 10px; color: var(--e-text-sec); margin-top: 3px; }
+.nodo-l .ag { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; }
+.nodo-l .ag .av { width: 22px; height: 22px; border-radius: 50%; background: var(--e-accent-bg); color: var(--e-accent); display: flex; align-items: center; justify-content: center; font-size: 11px; }
+.nodo-l.libre { border-style: dashed; width: 150px; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; overflow-y: auto; }
+.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 6px; }
+.vacio { text-align: center; padding: 40px; color: var(--e-text-muted); font-size: 13px; }
+.hint { position: absolute; top: 14px; left: 16px; font-size: 12px; color: var(--e-text-muted); z-index: 5; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/codigo">Código</a>
+  <a href="/empresa" class="activo">Empresa</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <div class="top">
+    <div><h1>Empresa</h1><p class="sub">La administradora al centro; cada puesto con su agente, proyecto/campaña y flujos. Rueda = zoom · arrastrar el fondo = mover · clic en un puesto = detalle. Se crean por chat con la administradora.</p></div>
+  </div>
+  <div class="layout">
+    <div class="lienzo-cont" id="lienzo">
+      <div class="hint">Puestos alrededor de la administradora · agentes sin puesto en gris</div>
+      <div class="mundo" id="mundo"><svg id="svg"></svg><div id="nodos"></div></div>
+      <div class="zoom-ctrl"><button onclick="L.zoomOut()">−</button><span class="zoom-nivel" id="zn">100%</span><button onclick="L.zoomIn()">+</button><button onclick="L.centrar()" title="Centrar">⌂</button></div>
+    </div>
+    <div class="panel" id="panel"><div class="vacio">Elegí un puesto o un agente.</div></div>
+  </div>
+</main>
+<script src="/comun/espejo.js"></script>
+<script src="/comun/lienzo-base.js"></script>
+<script>
+const POS_KEY = "emilia.empresa.posiciones";
+let E = null, sel = null;
+const L = crearLienzo("lienzo", "mundo", "svg", "zn", { centroX: 500, centroY: 350, nodos: [], alSoltar: () => guardarPos() });
+function posGuardadas() { try { return JSON.parse(sessionStorage.getItem(POS_KEY) || "{}"); } catch { return {}; } }
+function guardarPos() { const m = {}; for (const n of L.nodos) m[n.id] = { x: n.x, y: n.y }; sessionStorage.setItem(POS_KEY, JSON.stringify(m)); }
+
+async function cargar() {
+  E = await api("/api/empresa");
+  const pos = posGuardadas();
+  L.nodos.length = 0;
+  // Administradora al centro
+  L.nodos.push({ id: "admin", x: pos.admin?.x ?? 400, y: pos.admin?.y ?? 310, w: 200, h: 90, tipo: "admin" });
+  // Puestos en círculo
+  const R = 300; const n = E.puestos.length;
+  E.puestos.forEach((p, i) => { const ang = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1); L.nodos.push({ id: "p-" + p.id, x: pos["p-" + p.id]?.x ?? 405 + R * Math.cos(ang), y: pos["p-" + p.id]?.y ?? 320 + R * Math.sin(ang), w: 190, h: 80, tipo: "puesto", padre: "admin", puesto: p }); });
+  // Agentes sin puesto, abajo, punteados
+  const libres = E.agentes.filter((a) => !a.puesto && !a.es_administrador);
+  libres.forEach((a, i) => L.nodos.push({ id: "a-" + a.id, x: pos["a-" + a.id]?.x ?? 200 + i * 170, y: pos["a-" + a.id]?.y ?? 720, w: 150, h: 50, tipo: "agente", padre: "admin", punteada: true, opacidad: .4, agente: a }));
+  render();
+}
+function render() {
+  const cont = document.getElementById("nodos");
+  cont.innerHTML = L.nodos.map((nd) => {
+    if (nd.tipo === "admin") return `<div class="central nodo-l" id="nl-admin" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'admin')" onclick="if(!L.seMovio())verAdmin()"><div class="av">✦</div><div class="n">${esc(E.administradora?.nombre || "—")}</div><div style="font-size:10px;color:var(--e-text-muted);margin-top:3px">administradora</div></div>`;
+    if (nd.tipo === "puesto") { const p = nd.puesto; const ag = E.agentes.find((a) => a.id === p.agente_id); const activos = (p.flujos || []).filter((f) => f.activo).length;
+      return `<div class="nodo-l ${p.estado === "pausado" ? "pausado" : ""} ${sel === nd.id ? "activo" : ""}" id="nl-${nd.id}" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'${nd.id}')" onclick="if(!L.seMovio())verPuesto('${p.id}')">
+        <div class="t">${esc(p.titulo)}</div>
+        <div class="s">${p.proyecto ? "proyecto " + esc(p.proyecto) : p.campana_jelcom_id ? "campaña #" + p.campana_jelcom_id : esc(p.nombre)} · ${activos ? "🟢 " + activos + " flujo(s)" : "⚪ sin flujos"}</div>
+        <div class="ag"><div class="av">${ag ? esc(ag.nombre[0]) : "?"}</div>${ag ? esc(ag.nombre) : "sin agente"}</div></div>`; }
+    const a = nd.agente;
+    return `<div class="nodo-l libre ${sel === nd.id ? "activo" : ""}" id="nl-${nd.id}" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'${nd.id}')" onclick="if(!L.seMovio())verAgente('${a.id}')"><div class="t">${esc(a.nombre)}</div><div class="s">${esc(a.tipo)} · ${esc(a.estado)} · sin puesto</div></div>`;
+  }).join("");
+  L.lineas();
+}
+function verAdmin() { sel = "admin"; render(); const a = E.administradora; document.getElementById("panel").innerHTML = a ? `<h2 style="font-family:var(--syne);margin:0">${esc(a.nombre)}</h2><p class="sub">Administradora: dirige, crea puestos y agentes, y te reporta lo que los trabajadores le dicen.</p><h3>Puestos</h3>${E.puestos.map((p) => `<div style="font-size:12px;padding:4px 0">• ${esc(p.titulo)} → ${esc(p.agente || "—")}</div>`).join("") || "<p class='sub'>Ninguno.</p>"}<p style="margin-top:12px"><a href="/agentes/${a.id}" style="color:var(--e-accent);font-size:12px">abrir su espacio →</a></p>` : `<div class="vacio">Sin administradora.</div>`; }
+function verPuesto(id) { const p = E.puestos.find((x) => x.id === id); sel = "p-" + id; render(); const ag = E.agentes.find((a) => a.id === p.agente_id);
+  document.getElementById("panel").innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:var(--syne);margin:0;font-size:16px">${esc(p.titulo)}</h2>${badge(p.estado, p.estado === "activo" ? "ok" : "neutro")}</div>
+    <p class="sub" style="font-size:12px">${esc(p.nombre)}${p.proyecto ? ` · proyecto <b>${esc(p.proyecto)}</b>` : ""}${p.campana_jelcom_id ? ` · campaña Jelcom <b>#${p.campana_jelcom_id}</b>` : ""} · reporta a ${esc(p.reporta_a_nombre || "—")}</p>
+    <h3>Encargado</h3><div style="font-size:13px">${ag ? `<b>${esc(ag.nombre)}</b> <a href="/agentes/${ag.id}" style="color:var(--e-accent);font-size:11px">abrir</a><div style="font-size:12px;color:var(--e-text-sec);margin-top:4px">${esc(ag.mision || "")}</div>` : "sin agente"}</div>
+    <h3>Responsabilidades</h3><div style="font-size:12px;color:var(--e-text-sec);white-space:pre-wrap">${esc(p.responsabilidades || p.descripcion || "—")}</div>
+    <h3>Flujos permanentes</h3>${(p.flujos || []).length ? p.flujos.map((f) => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--e-border)">${f.activo ? "🟢" : "⚪"} <span style="font-family:monospace">${esc(f.flujo)}</span>${f.nodo ? ` <span style="color:var(--e-text-muted)">@${esc(f.nodo)}</span>` : ""}<div style="color:var(--e-text-muted);font-size:11px">${esc(JSON.stringify(f.args))}</div>${f.ejecucion_id ? `<a href="/flujos" style="font-size:11px;color:var(--e-accent)">ver en Flujos</a>` : ""}</div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno. Pedile a la administradora: "que ${esc(ag?.nombre || "el agente")} vigile…".</p>`}`; }
+function verAgente(id) { const a = E.agentes.find((x) => x.id === id); sel = "a-" + id; render(); document.getElementById("panel").innerHTML = `<h2 style="font-family:var(--syne);margin:0;font-size:16px">${esc(a.nombre)}</h2><p class="sub">${esc(a.tipo)} · ${esc(a.estado)} · sin puesto</p><div style="font-size:12px;color:var(--e-text-sec);margin-top:8px">${esc(a.mision || "")}</div><p style="margin-top:12px"><a href="/agentes/${a.id}" style="color:var(--e-accent);font-size:12px">abrir su espacio →</a></p><p style="font-size:12px;color:var(--e-text-muted);margin-top:10px">Para darle un puesto: "creá el puesto X con el agente ${esc(a.nombre)}…".</p>`; }
+cargar().then(() => L.init());
+setInterval(async () => { const s = sel; await cargar(); sel = s; render(); }, 10000);
+</script>
+</body>
+</html>

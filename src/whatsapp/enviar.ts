@@ -51,6 +51,13 @@ export async function enviarDocumentoWhatsapp(numero: string, contenido: Buffer,
   });
 }
 
+/** Manda un audio (mp3/ogg) como mensaje de audio. */
+export async function enviarAudioWhatsapp(numero: string, contenido: Buffer, mime = "audio/mpeg"): Promise<ResultadoEnvio> {
+  const subida = await subirMedia(contenido, mime.includes("ogg") ? "audio.ogg" : "audio.mp3", mime);
+  if (!subida.ok) return subida;
+  return postMensaje({ messaging_product: "whatsapp", to: limpiar(numero), type: "audio", audio: { id: subida.id } });
+}
+
 export async function subirMedia(contenido: Buffer, nombre: string, mime: string): Promise<ResultadoEnvio> {
   let cfg; try { cfg = config(); } catch (e: any) { return { ok: false, error: e.message }; }
   try {

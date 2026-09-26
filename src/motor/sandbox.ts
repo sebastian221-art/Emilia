@@ -112,7 +112,7 @@ export async function pushSandbox(ruta: string, rama: string): Promise<SalidaCom
 /** Integra la rama del sandbox en la rama base del repo REAL (merge --no-ff). El repo real debe estar limpio. */
 export async function integrarEnBase(proyecto: Proyecto, rama: string): Promise<SalidaComando> {
   const st = await git(proyecto.ruta, "status --porcelain");
-  if (st.stdout.trim()) return { codigo: 1, stdout: "", stderr: "El repo real tiene cambios sin commit; guardalos o descartalos antes de integrar.", duracion_ms: 0, timeout: false };
+  if (st.stdout.trim()) return { codigo: 1, stdout: "", stderr: `El repo real (${proyecto.ruta}) tiene cambios sin commit; hacé commit o descartalos a mano antes de integrar. Archivos:\n${st.stdout.trim().slice(0, 1200)}`, duracion_ms: 0, timeout: false };
   const co = await git(proyecto.ruta, `checkout ${proyecto.rama_base}`);
   if (co.codigo !== 0) return co;
   return git(proyecto.ruta, `merge --no-ff "${rama}" -m "Integra ${rama} (Senior Developer)"`, 120);

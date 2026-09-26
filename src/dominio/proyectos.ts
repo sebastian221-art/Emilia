@@ -6,6 +6,7 @@ import { query } from "../db/cliente.js";
 export interface Proyecto {
   id: string; nombre: string; ruta: string; rama_base: string;
   cmd_install: string | null; cmd_test: string | null; cmd_build: string | null; cmd_lint: string | null;
+  cmd_start: string | null; puerto: number | null; url_salud: string | null; env_extra: Record<string, string>; autoarranque: boolean;
   notas: string; creado_en: string;
 }
 export interface Sandbox { id: string; proyecto_id: string; ruta: string; rama: string; estado: string; proposito: string; creado_en: string }
@@ -28,13 +29,22 @@ export async function registrarProyecto(p: Partial<Proyecto> & { nombre: string;
   if (!RE_SLUG.test(p.nombre)) throw new Error("El nombre del proyecto debe ser snake_case en minúsculas (ej. jelcom_envios).");
   const ruta = path.resolve(p.ruta);
   try { await fs.access(path.join(ruta, ".git")); } catch { throw new Error(`"${ruta}" no existe o no es un repositorio git (falta .git).`); }
+  // Upsert que conserva lo que ya estaba si el campo no viene (COALESCE con lo existente).
   const [f] = await query<Proyecto>(
-    `INSERT INTO proyectos (nombre, ruta, rama_base, cmd_install, cmd_test, cmd_build, cmd_lint, notas)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     ON CONFLICT (nombre) DO UPDATE SET ruta=EXCLUDED.ruta, rama_base=EXCLUDED.rama_base, cmd_install=EXCLUDED.cmd_install,
-       cmd_test=EXCLUDED.cmd_test, cmd_build=EXCLUDED.cmd_build, cmd_lint=EXCLUDED.cmd_lint, notas=EXCLUDED.notas, actualizado_en=now()
+    `INSERT INTO proyectos (nombre, ruta, rama_base, cmd_install, cmd_test, cmd_build, cmd_lint, cmd_start, puerto, url_salud, env_extra, autoarranque, notas)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12::boolean,false),$13)
+     ON CONFLICT (nombre) DO UPDATE SET
+       ruta=EXCLUDED.ruta, rama_base=COALESCE(NULLIF(EXCLUDED.rama_base,''), proyectos.rama_base),
+       cmd_install=COALESCE(EXCLUDED.cmd_install, proyectos.cmd_install), cmd_test=COALESCE(EXCLUDED.cmd_test, proyectos.cmd_test),
+       cmd_build=COALESCE(EXCLUDED.cmd_build, proyectos.cmd_build), cmd_lint=COALESCE(EXCLUDED.cmd_lint, proyectos.cmd_lint),
+       cmd_start=COALESCE(EXCLUDED.cmd_start, proyectos.cmd_start), puerto=COALESCE(EXCLUDED.puerto, proyectos.puerto),
+       url_salud=COALESCE(EXCLUDED.url_salud, proyectos.url_salud),
+       env_extra=CASE WHEN EXCLUDED.env_extra = '{}'::jsonb THEN proyectos.env_extra ELSE EXCLUDED.env_extra END,
+       autoarranque=COALESCE($12::boolean, proyectos.autoarranque),
+       notas=CASE WHEN EXCLUDED.notas = '' THEN proyectos.notas ELSE EXCLUDED.notas END, actualizado_en=now()
      RETURNING *`,
-    [p.nombre, ruta, p.rama_base || "main", p.cmd_install || null, p.cmd_test || null, p.cmd_build || null, p.cmd_lint || null, p.notas || ""]);
+    [p.nombre, ruta, p.rama_base || "main", p.cmd_install || null, p.cmd_test || null, p.cmd_build || null, p.cmd_lint || null,
+     p.cmd_start || null, p.puerto ?? null, p.url_salud || null, JSON.stringify(p.env_extra || {}), p.autoarranque ?? null, p.notas || ""]);
   return f;
 }
 export async function borrarProyecto(nombreOId: string): Promise<void> {

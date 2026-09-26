@@ -24,6 +24,11 @@ import { iniciarRegistro } from "./registro/cargar.js";
 import { retomarFlujos } from "./motor/flujo.js";
 import { recuperarSesionesHuerfanas } from "./motor/claude-code.js";
 import { rutasCodigo } from "./rutas/codigo.js";
+import { rutasEmpresa } from "./rutas/empresa.js";
+import { rutasEventos } from "./rutas/eventos.js";
+import { iniciarReloj } from "./motor/eventos.js";
+import { limpiarArchivosViejos } from "./dominio/archivos.js";
+import { retomarProcesos } from "./motor/runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUB = path.join(__dirname, "..", "public");
@@ -49,13 +54,15 @@ app.use(rutasRegistro);
 app.use(rutasRecordatorio);
 app.use(rutasFlujos);
 app.use(rutasCodigo);
+app.use(rutasEmpresa);
+app.use(rutasEventos);
 
 // ── Webhook de WhatsApp ──
 app.get("/webhook/whatsapp", verificarWebhook);
 app.post("/webhook/whatsapp", recibirMensaje);
 
 // ── URLs limpias de las páginas ───────────────────────────────────────────
-const PAGINAS = ["crear", "agentes", "skills", "tools", "flujos", "aprobaciones", "codigo"];
+const PAGINAS = ["crear", "agentes", "skills", "tools", "flujos", "aprobaciones", "codigo", "empresa"];
 for (const p of PAGINAS) {
   app.get([`/${p}`, `/${p}/`], (_req, res) => {
     const idx = path.join(PUB, p, "index.html");
@@ -93,6 +100,10 @@ iniciarRegistro()
       console.log(`Emilia en http://localhost:${PORT}`);
       await recuperarSesionesHuerfanas();
       await retomarFlujos();
+      await retomarProcesos();
+      iniciarReloj();
+      limpiarArchivosViejos().catch((e) => console.warn("[archivos] limpieza:", e?.message || e));
+      setInterval(() => limpiarArchivosViejos().catch(() => {}), 24 * 3600 * 1000);
       await iniciarTunel(PORT);
     });
   })

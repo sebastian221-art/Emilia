@@ -136,12 +136,12 @@ export interface DefSkill {
 type Args = Record<string, unknown> | ((ctx: Record<string, any>) => Record<string, unknown>);
 
 export type PasoFlujo =
-  | { id: string; tipo: "tool"; tool: string; args: Args; guardarEn?: string; siFalla?: "fallar" | "continuar" }
+  | { id: string; tipo: "tool"; tool: string; args: Args; guardarEn?: string; siFalla?: "fallar" | "continuar"; /** true = un paso `aprobacion` anterior ya cubrió esta acción; no vuelve a pedir OK. */ preaprobado?: boolean }
   | { id: string; tipo: "skill"; skill: string; args: Args; guardarEn?: string; siFalla?: "fallar" | "continuar" }
   | { id: string; tipo: "condicion"; si: (ctx: Record<string, any>) => boolean; entonces: string; sino: string }
   | { id: string; tipo: "aprobacion"; mensaje: string | ((ctx: Record<string, any>) => string) }
   | { id: string; tipo: "esperar"; segundos: number | ((ctx: Record<string, any>) => number) }
-  | { id: string; tipo: "repetir"; hasta: (ctx: Record<string, any>) => boolean; maxVeces: number; cuerpo: string[]; cadaSegundos?: number }
+  | { id: string; tipo: "repetir"; hasta: (ctx: Record<string, any>) => boolean; maxVeces: number; cuerpo: string[]; cadaSegundos?: number | ((ctx: Record<string, any>) => number) }
   | { id: string; tipo: "subflujo"; flujo: string; args: Args; guardarEn?: string }
   | { id: string; tipo: "fin"; resultado?: (ctx: Record<string, any>) => unknown; fallo?: boolean };
 

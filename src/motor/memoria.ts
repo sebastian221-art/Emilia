@@ -15,6 +15,8 @@
 import type { ChatCompletionMessageParam } from "groq-sdk/resources/chat/completions";
 import { llamarModelo } from "./groq.js";
 import { mensajesDesde, guardarResumen, ultimosMensajes, type Conversacion, type Mensaje } from "../dominio/conversaciones.js";
+import { guardarHecho, listarHechos } from "../dominio/memoria-lp.js";
+import { query } from "../db/cliente.js";
 
 const VENTANA_DEF = 20;
 const UMBRAL_RESUMEN = 40;   // cuando hay más de esto sin resumir, se resume lo que sobra de la ventana
@@ -87,4 +89,46 @@ export async function resumirSiHaceFalta(conv: Conversacion, cfg: ConfigMemoria 
 /** Formato corto de un mensaje para trazas/UI. */
 export function resumenMensaje(m: Mensaje): string {
   return `${m.rol}: ${m.contenido.slice(0, 80)}`;
+}
+
+
+// ─── Memoria de largo plazo: extracción automática ──────────────────────────
+const CADA_MENSAJES = Number(process.env.MEMORIA_LP_CADA || 6);
+
+/**
+ * Cada N mensajes del jefe en una conversación, lee lo nuevo y extrae hechos
+ * DURABLES sobre él o su mundo (no tareas del momento). Solo en modo
+ * 'persistente'. Los guarda con upsert por clave; lo que ya está no se repite.
+ */
+export async function extraerHechosSiHaceFalta(conv: Conversacion, cfg: ConfigMemoria | undefined, esJefe: boolean): Promise<void> {
+  if ((cfg?.modo || "por_sesion") !== "persistente" || !esJefe) return;
+  const [fila] = await query<{ memoria_extraida_hasta: string | null }>(`SELECT memoria_extraida_hasta FROM conversaciones WHERE id=$1`, [conv.id]);
+  const nuevos = (await mensajesDesde(conv.id, fila?.memoria_extraida_hasta ?? null)).filter((m) => m.rol === "usuario" || m.rol === "agente");
+  const delJefe = nuevos.filter((m) => m.rol === "usuario");
+  if (delJefe.length < CADA_MENSAJES) return;
+
+  const existentes = await listarHechos("jefe", 80);
+  const texto = nuevos.map((m) => `${m.rol === "usuario" ? "Jefe" : "Agente"}: ${m.contenido.slice(0, 600)}`).join("\n");
+  const prompt = `Sos el módulo de memoria de largo plazo de un asistente personal. Del siguiente fragmento de conversación, extraé SOLO hechos durables sobre el jefe (Sebastián) o su mundo: datos personales que él dijo, preferencias (cómo quiere las cosas), su trabajo, proyectos, personas, decisiones tomadas. NO extraigas tareas puntuales, estados momentáneos, ni cosas que ya están en la lista de hechos conocidos (salvo que cambien).
+Hechos ya conocidos:\n${existentes.map((h) => `- [${h.clave}] ${h.contenido}`).join("\n") || "(ninguno)"}
+
+Fragmento:\n${texto}
+
+Respondé SOLO con JSON: {"hechos":[{"sujeto":"jefe","clave":"slug_corto","contenido":"frase concreta","categoria":"personal|preferencia|trabajo|proyecto|persona|decision","fuente":"dicho|inferido","confianza":0.0-1.0}]}. Si no hay nada nuevo: {"hechos":[]}. Usá la misma clave que un hecho conocido si lo actualiza.`;
+  try {
+    const r = await llamarModelo([{ role: "user", content: prompt }], []);
+    const parsed = JSON.parse(r.texto.replace(/```json|```/g, "").trim());
+    let n = 0;
+    for (const h of parsed?.hechos || []) {
+      if (!h?.clave || !h?.contenido) continue;
+      if (Number(h.confianza ?? 0.8) < 0.5) continue;
+      await guardarHecho({ sujeto: h.sujeto || "jefe", clave: h.clave, contenido: h.contenido, categoria: h.categoria, confianza: Number(h.confianza ?? 0.8), fuente: h.fuente || "dicho", conversacionId: conv.id, agenteId: conv.agente_id });
+      n++;
+    }
+    const hasta = nuevos[nuevos.length - 1].creado_en;
+    await query(`UPDATE conversaciones SET memoria_extraida_hasta=$1 WHERE id=$2`, [hasta, conv.id]);
+    if (n) console.log(`[memoria-lp] ${n} hecho(s) nuevo(s) desde la conversación ${conv.id.slice(0, 8)}.`);
+  } catch (e: any) {
+    console.warn(`[memoria-lp] No se pudo extraer: ${e?.message || e}`);
+  }
 }

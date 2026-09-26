@@ -32,6 +32,22 @@ function dentro(base: string, rel: string): string {
   return abs;
 }
 
+/**
+ * El sandbox aísla el cwd, no el sistema. Estas guardas evitan que un comando
+ * "escape": rutas absolutas fuera del sandbox y operaciones destructivas.
+ */
+function comandoPeligroso(cmd: string, sandbox: string): string | null {
+  const c = cmd.toLowerCase();
+  if (/\b(rm\s+-rf?\s+[\/~]|rmdir\s+\/s|del\s+\/[sq]|format\s+[a-z]:|shutdown|reg\s+(add|delete)|diskpart)\b/.test(c)) return "Comando destructivo bloqueado. Si de verdad hace falta, pedíselo al jefe.";
+  const abs = cmd.match(/[a-zA-Z]:\\[^\s"']+|[a-zA-Z]:\/[^\s"']+|(?<![\w.])\/(?:home|users|etc|var|mnt)\/[^\s"']+/g) || [];
+  const base = path.resolve(sandbox).toLowerCase().replace(/\\/g, "/");
+  for (const r of abs) {
+    const n = path.resolve(r.replace(/["']/g, "")).toLowerCase().replace(/\\/g, "/");
+    if (!n.startsWith(base)) return `El comando toca una ruta fuera del sandbox (${r}). Dentro del sandbox usá rutas relativas; para el proyecto real usá las tools runtime_* / proyecto_*.`;
+  }
+  return null;
+}
+
 // ─── Proyectos ───────────────────────────────────────────────────────────────
 export const codigoListarProyectos: DefTool = {
   nombre: "codigo_listar_proyectos", modulo: MODULO,
@@ -56,6 +72,10 @@ export const codigoRegistrarProyecto: DefTool = {
       cmd_test: { type: "string", description: "Comando de tests, ej. npm test." },
       cmd_build: { type: "string", description: "Comando de build/compilación, ej. npx tsc --noEmit." },
       cmd_lint: { type: "string", description: "Comando de lint." },
+      cmd_start: { type: "string", description: "Comando para ARRANCAR el proyecto, ej. npm run dev (lo usa runtime_iniciar)." },
+      puerto: { type: "integer", description: "Puerto en el que escucha (se inyecta como PORT)." },
+      url_salud: { type: "string", description: "URL de health check, ej. http://localhost:4000/api/salud." },
+      autoarranque: { type: "boolean", description: "Arrancarlo solo cuando arranca Emilia." },
       notas: { type: "string", description: "Lo que el Senior debe saber del proyecto (stack, convenciones, cuidados)." },
     },
     required: ["nombre", "ruta"],
@@ -190,6 +210,8 @@ export const codigoEjecutarComando: DefTool = {
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 1900,
   async ejecutar(a) {
     const s = await sandboxAbierto(a.sandbox_id);
+    const bloqueo = comandoPeligroso(String(a.comando), s.ruta);
+    if (bloqueo) return { ok: false, error: bloqueo };
     const r = await ejecutarComando(s.ruta, a.comando, a.timeout_seg || 120);
     return { ok: r.codigo === 0 && !r.timeout, datos: { codigo: r.codigo, stdout: r.stdout.slice(-6000), stderr: r.stderr.slice(-3000), duracion_ms: r.duracion_ms, timeout: r.timeout }, resumen: `$ ${a.comando} → código ${r.codigo}${r.timeout ? " (timeout)" : ""}\n${(r.stdout || r.stderr).slice(-1500)}`, error: r.codigo === 0 && !r.timeout ? undefined : `Salió con código ${r.codigo}${r.timeout ? " por timeout" : ""}: ${(r.stderr || r.stdout).slice(-800)}` };
   },

@@ -44,8 +44,8 @@ export async function aprobacionPendienteDeConversacion(conversacionId: string):
   const [a] = await query<Aprobacion>(
     `SELECT * FROM aprobaciones
      WHERE estado = 'pendiente' AND (
-       conversacion_id = $1
-       OR conversacion_id IN (SELECT id FROM conversaciones WHERE canal = 'delegacion' AND contacto = $1)
+       conversacion_id = $1::uuid
+       OR conversacion_id IN (SELECT id FROM conversaciones WHERE canal = 'delegacion' AND contacto = $1::text)
      )
      ORDER BY creado_en ASC LIMIT 1`,
     [conversacionId]

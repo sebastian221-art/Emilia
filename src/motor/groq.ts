@@ -75,8 +75,25 @@ export async function llamarModelo(
         }
       } catch { /* si no parsea, seguimos abajo */ }
     }
+    // El modelo escribió texto suelto donde iba una tool call (output_parse_failed) → reintentar
+    // una vez con un empujón; si vuelve a fallar, cae al reintento solo texto.
+    if (msg.includes("output_parse_failed") || msg.includes("Parsing failed") || msg.includes("could not be parsed")) {
+      try {
+        const resp = await get().chat.completions.create({
+          model: modelo, temperature,
+          messages: [...mensajes, { role: "system", content: "Tu salida anterior no se pudo interpretar. Respondé de una de dos formas: o llamás una herramienta con sus argumentos en JSON válido, o escribís tu respuesta final en texto. No mezcles razonamiento suelto con llamadas." }],
+          tools: tools.length ? tools : undefined,
+          tool_choice: tools.length ? "auto" : undefined,
+        });
+        const m = resp.choices[0]?.message;
+        return {
+          texto: (m?.content ?? "").trim(), razonamiento: (m as any)?.reasoning,
+          toolCalls: (m?.tool_calls ?? []).map((t) => { let args: Record<string, unknown> = {}; try { args = JSON.parse(t.function.arguments || "{}"); } catch {} return { id: t.id, nombre: t.function.name, argumentos: args }; }),
+        };
+      } catch { /* cae al siguiente rescate */ }
+    }
     // Intentó llamar tool cuando no le dimos ninguna → reintentar solo texto.
-    if (msg.includes("Tool choice is none") || msg.includes("tool_use_failed")) {
+    if (msg.includes("Tool choice is none") || msg.includes("tool_use_failed") || msg.includes("output_parse_failed") || msg.includes("Parsing failed")) {
       try {
         const resp = await get().chat.completions.create({
           model: modelo, temperature,

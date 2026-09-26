@@ -16,6 +16,7 @@ import type { DefFlujo, PasoFlujo } from "../registro/tipos.js";
 import { ejecutarTool, ejecutarSkill, crearContexto } from "./ejecutor.js";
 import { entregarTexto } from "./entrega.js";
 import { obtenerFlujo } from "../dominio/flujos.js";
+import { textoAprobacion, detalleAprobacion } from "./aprobacion-texto.js";
 
 export interface OpcionesFlujo {
   agenteId?: string | null;
@@ -79,6 +80,20 @@ export async function reanudarFlujo(ejecucionId: string, aprobado: boolean): Pro
   return avanzar(ejecucionId);
 }
 
+/** Cancela un flujo activo (lo que esté esperando). Queda como fallido con motivo "cancelado". */
+export async function cancelarFlujo(ejecucionId: string, motivo = "Cancelado por el jefe."): Promise<EstadoFlujo> {
+  const fila = await cargar(ejecucionId);
+  if (["completado", "fallido"].includes(fila.estado)) return { ejecucionId, estado: fila.estado, mensaje: "Ya había terminado." };
+  const t = temporizadores.get(ejecucionId); if (t) { clearTimeout(t); temporizadores.delete(ejecucionId); }
+  await query(`UPDATE aprobaciones SET estado='rechazada', resuelto_en=now() WHERE ejecucion_id=$1 AND estado='pendiente'`, [ejecucionId]);
+  return finalizar(fila, "fallido", undefined, motivo, fila.contexto);
+}
+
+/** Flujos activos (opcionalmente por nombre). */
+export async function flujosActivos(nombre?: string): Promise<any[]> {
+  return query(`SELECT id, nombre_flujo, estado, nodo_actual, args, inicio, conversacion_id FROM flujo_ejecuciones WHERE estado IN ('en_curso','esperando','esperando_aprobacion','esperando_subflujo') ${nombre ? "AND nombre_flujo=$1" : ""} ORDER BY inicio DESC`, nombre ? [nombre] : []);
+}
+
 /** Al arrancar el servidor: retoma esperas vencidas, programa las futuras, y reanuda lo que quedó en curso. */
 export async function retomarFlujos(): Promise<void> {
   const filas = await query<Fila>(`SELECT * FROM flujo_ejecuciones WHERE estado IN ('en_curso','esperando')`);
@@ -112,9 +127,9 @@ async function avanzar(ejecucionId: string): Promise<EstadoFlujo> {
       switch (paso.tipo) {
         case "tool": {
           const defTool = registro.tool(paso.tool);
-          if (defTool?.requiereAprobacion && !ctx.__aprobados[paso.id]) {
+          if (defTool?.requiereAprobacion && !paso.preaprobado && !ctx.__aprobados[paso.id]) {
             const args = resolverArgs(paso.args, ctx);
-            return pausarPorAprobacion(fila, paso.id, `Ejecutar ${paso.tool} con ${JSON.stringify(args)}`);
+            return pausarPorAprobacion(fila, paso.id, detalleAprobacion(paso.tool, args), textoAprobacion(paso.tool, args, `(flujo ${def.nombre})`));
           }
           const args = resolverArgs(paso.args, ctx);
           const r = await ejecutarTool(paso.tool, args, ctxEj);
@@ -215,7 +230,7 @@ async function avanzar(ejecucionId: string): Promise<EstadoFlujo> {
 /** Espera `cadaSegundos` del repetir activo. Devuelve un estado si la espera se persistió (hay que salir). */
 async function esperarIteracion(fila: Fila, ctx: Record<string, any>, def: DefFlujo): Promise<EstadoFlujo | null> {
   const rep = def.pasos.find((p) => p.id === ctx.__retorno?.repetir) as Extract<PasoFlujo, { tipo: "repetir" }> | undefined;
-  const espera = rep?.cadaSegundos || 0;
+  const espera = typeof rep?.cadaSegundos === "function" ? Number(seguro(() => (rep!.cadaSegundos as any)(ctx), 0)) || 0 : (rep?.cadaSegundos || 0);
   if (espera <= 0) return null;
   if (espera <= ESPERA_INLINE_SEG) { await dormir(espera * 1000); return null; }
   const hasta = new Date(Date.now() + espera * 1000);
@@ -226,14 +241,14 @@ async function esperarIteracion(fila: Fila, ctx: Record<string, any>, def: DefFl
 }
 
 // ─── Pausas y cierre ─────────────────────────────────────────────────────────
-async function pausarPorAprobacion(fila: Fila, pasoId: string, detalle: string): Promise<EstadoFlujo> {
+async function pausarPorAprobacion(fila: Fila, pasoId: string, detalle: string, textoJefe?: string): Promise<EstadoFlujo> {
   await query(
     `INSERT INTO aprobaciones (tipo, ejecucion_id, agente_id, conversacion_id, titulo, detalle, nodo_id)
      VALUES ('flujo',$1,$2,$3,$4,$5,$6)`,
     [fila.id, fila.agente_id, fila.conversacion_id, `Flujo ${fila.nombre_flujo}`, detalle, pasoId]);
   await query(`UPDATE flujo_ejecuciones SET estado='esperando_aprobacion', nodo_actual=$1, contexto=$2 WHERE id=$3`, [pasoId, JSON.stringify(fila.contexto), fila.id]);
   await log(fila.id, `✋ ${pasoId}: esperando aprobación — ${detalle}`);
-  if (fila.conversacion_id) await entregarTexto(fila.conversacion_id, `⏸ Flujo *${fila.nombre_flujo}*: ${detalle}\nRespondé "ok" para aprobar o "no" para detenerlo.`);
+  if (fila.conversacion_id) await entregarTexto(fila.conversacion_id, textoJefe || `⏸ *Necesito tu OK*\n${detalle}\n(flujo ${fila.nombre_flujo})\nRespondé *ok* para aprobar o *no* para detenerlo.`);
   return { ejecucionId: fila.id, estado: "esperando_aprobacion", mensaje: detalle };
 }
 
@@ -252,6 +267,8 @@ async function finalizar(fila: Fila, estado: "completado" | "fallido", resultado
   }
   // Retorno al padre si era sub-flujo.
   if (fila.padre_id && fila.paso_padre) await continuarPadre(fila.padre_id, fila.paso_padre, estado, resultado, error);
+  // Evento para disparadores (no para sub-flujos, para no duplicar).
+  if (!fila.padre_id) { const { emitir } = await import("./eventos.js"); emitir(`flujo.${estado}`, { flujo: fila.nombre_flujo, ejecucion_id: fila.id, error, resultado }).catch(() => {}); }
   return { ejecucionId: fila.id, estado, resultado, error };
 }
 
