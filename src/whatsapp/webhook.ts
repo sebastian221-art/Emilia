@@ -20,10 +20,12 @@ import { query } from "../db/cliente.js";
 import { tieneCanal, obtenerAgente } from "../dominio/agentes.js";
 import { correrTarea, reanudarEjecucion } from "../motor/loop.js";
 import { reanudarFlujo } from "../motor/flujo.js";
-import { encolar } from "../motor/cola.js";
+import { encolar, pendientesEnCola } from "../motor/cola.js";
+import { solicitarCancelacion, RE_PARAR, limpiarCancelacion } from "../motor/cancelacion.js";
+import { cancelarSesion } from "../motor/claude-code.js";
 import { entregarRespuesta } from "../motor/entrega.js";
 import { obtenerOCrearConversacion, guardarMensajeEn } from "../dominio/conversaciones.js";
-import { aprobacionPendienteDeConversacion, resolverAprobacion } from "../dominio/aprobaciones.js";
+import { aprobacionPendienteDelJefe, resolverAprobacion } from "../dominio/aprobaciones.js";
 import { enviarTextoWhatsapp, descargarMedia } from "./enviar.js";
 import { guardarArchivo } from "../dominio/archivos.js";
 import { analizarImagen, esImagen } from "../motor/vision.js";
@@ -72,8 +74,11 @@ async function agenteDeWhatsapp(): Promise<any | undefined> {
   return elegido ? obtenerAgente(elegido.id) : undefined;
 }
 
-const RE_APRUEBA = /^\s*(ok|okay|oka|sí|si|dale|apruebo|aprobado|aprobar|listo|hazlo|hacelo|confirmo|va)\s*[.!]*\s*$/i;
-const RE_RECHAZA = /^\s*(no|nop|rechazo|rechazar|cancela|cancelar|cancelado|para|detente|frena)\s*[.!]*\s*$/i;
+// Exactas (siempre valen) y tolerantes (solo cuando hay una aprobación pendiente): "Ok disparalo", "sí dale", "no, cancelá".
+const RE_APRUEBA = /^\s*(ok|okay|oka|okey|sí|si|dale|apruebo|aprobado|aprobar|listo|hazlo|hacelo|confirmo|va|adelante|procede|proced[eé])\s*[.!]*\s*$/i;
+const RE_RECHAZA = /^\s*(no|nop|rechazo|rechazar|cancela|cancelar|cancelado|cancelalo|para|detente|frena)\s*[.!]*\s*$/i;
+const RE_APRUEBA_TOL = /^\s*(ok|okay|okey|oka|sí|si|dale|apruebo|aprobado|hazlo|hacelo|confirmo|adelante|procede|dispar[aá](lo)?|lanz[aá](lo)?|manda(lo)?|envia(lo)?|env[ií]alo|integr[aá](lo)?)\b/i;
+const RE_RECHAZA_TOL = /^\s*(no|nop|rechazo|cancel[aá](lo)?|par[aá](lo)?|detente|frena|mejor no|todav[ií]a no)\b/i;
 
 export async function recibirMensaje(req: Request, res: Response) {
   const rawBody: Buffer | undefined = (req as any).rawBody;
@@ -109,9 +114,45 @@ async function procesarEntrante(m: any) {
     return;
   }
 
-  const agente = await agenteDeWhatsapp();
+  let agente = await agenteDeWhatsapp();
   if (!agente) { console.error("[whatsapp] Ningún agente activo tiene el canal 'whatsapp' en su esqueleto (pieza Canales). Nadie responde."); return; }
-  const conv = await obtenerOCrearConversacion(agente.id, "whatsapp", numero);
+  // ── ¿Con quién habla el jefe? "hablar con Echo" / "@echo" cambia el dueño del canal; "volver" / "emilia" regresa. ──
+  if (esJefe && m.type === "text") {
+    const t = String(m.text?.body || "").trim();
+    const mCambio = t.match(/(?:^|\b)(?:quiero )?(?:hablar|hablá|habla|charlar|conversar|pasame|pásame|contactar)\s*(?:con|a)?\s*([a-záéíóúñ]{2,20})\b/i) || t.match(/^@\s*([a-záéíóúñ]{2,20})\s*[.!]*$/i);
+    const mVolver = /^(volver|volv[eé] a emilia|emilia|salir|listo,? volv[eé])\s*[.!]*$/i.test(t);
+    if (mCambio || mVolver) {
+      const { fijarDuenoCanal, quitarDuenoCanal } = await import("./dueno-canal.js");
+      if (mVolver) { await quitarDuenoCanal(numero); await enviarTextoWhatsapp(numero, "Volviste con Emilia."); return; }
+      const [ag] = await query<any>(`SELECT id, nombre, estado FROM agentes WHERE lower(nombre)=lower($1) LIMIT 1`, [mCambio![1]]);
+      if (!ag) return;   // no era un nombre de agente: seguí como mensaje normal
+      if (ag.estado !== "activo") { await enviarTextoWhatsapp(numero, `${ag.nombre} está ${ag.estado}.`); return; }
+      await fijarDuenoCanal(numero, ag.id);
+      await enviarTextoWhatsapp(numero, `Ahora hablás con *${ag.nombre}*. Escribí "volver" para regresar con Emilia.`);
+      return;
+    }
+    const { duenoCanal } = await import("./dueno-canal.js");
+    const dueno = await duenoCanal(numero);
+    if (dueno) { const [ag] = await query<any>(`SELECT * FROM agentes WHERE id=$1 AND estado='activo'`, [dueno]); if (ag) agente = ag; }
+  }
+  // UN SOLO CUADERNO por agente y jefe: si el que atiende no es la administradora, usa la MISMA conversación
+  // que usa cuando la administradora le delega (canal delegación, colgada de la conversación WhatsApp de la admin).
+  // Así lo que hace por delegación y lo que hacés con él directo comparten memoria, y sus respuestas te llegan igual.
+  const admin = await agenteDeWhatsapp();
+  const convRaiz = await obtenerOCrearConversacion(admin.id, "whatsapp", numero);
+  const conv = agente.id === admin.id ? convRaiz : await obtenerOCrearConversacion(agente.id, "delegacion", convRaiz.id);
+
+  // ── Botón de emergencia: se procesa ANTES de la cola ──
+  if (esJefe && m.type === "text" && RE_PARAR.test(m.text?.body || "")) {
+    solicitarCancelacion(conv.id);
+    const ses = await query<{ id: string }>(`SELECT id FROM sesiones_codigo WHERE estado='en_curso' AND conversacion_id=$1`, [conv.id]);
+    for (const x of ses) await cancelarSesion(x.id).catch(() => {});
+    await guardarMensajeEn(conv, "usuario", m.text.body);
+    const enCola = pendientesEnCola(conv.id);
+    await enviarTextoWhatsapp(numero, `⛔ Parando. ${enCola ? `Hay ${enCola} tarea(s) en curso/cola: se detienen en su próximo paso.` : "No había nada corriendo."}${ses.length ? ` Cancelé ${ses.length} sesión(es) de Claude Code.` : ""}`);
+    await guardarMensajeEn(conv, "agente", "⛔ Parando todo.");
+    return;
+  }
 
   // ── Texto, audio o adjunto ──
   let texto = "";
@@ -154,31 +195,38 @@ async function procesarEntrante(m: any) {
 
     // ── ¿Es una respuesta a una aprobación pendiente? ──
     const puedeAprobar = agente.gobierno?.aprobar_por_whatsapp !== false;
-    if (esJefe && puedeAprobar && (RE_APRUEBA.test(texto) || RE_RECHAZA.test(texto))) {
-      const ap = await aprobacionPendienteDeConversacion(conv.id);
+    const apPend = esJefe && puedeAprobar ? await aprobacionPendienteDelJefe(numero) : undefined;
+    const corto = texto.trim().length <= 40;
+    const apruebaTxt = RE_APRUEBA.test(texto) || (!!apPend && corto && RE_APRUEBA_TOL.test(texto));
+    const rechazaTxt = RE_RECHAZA.test(texto) || (!!apPend && corto && RE_RECHAZA_TOL.test(texto) && !apruebaTxt);
+    if (apPend && (apruebaTxt || rechazaTxt)) {
+      const ap = apPend;
       if (ap?.tipo === "tool" && ap.agente_ejecucion_id) {
-        const aprobada = RE_APRUEBA.test(texto);
+        const aprobada = apruebaTxt;
         await resolverAprobacion(ap.id, aprobada);
         const r = await reanudarEjecucion(ap.agente_ejecucion_id, aprobada);
         await entregarRespuesta(conv, r);
         return;
       }
       if (ap?.tipo === "flujo" && ap.ejecucion_id) {
-        const aprobada = RE_APRUEBA.test(texto);
+        const aprobada = apruebaTxt;
         await resolverAprobacion(ap.id, aprobada);
         await reanudarFlujo(ap.ejecucion_id, aprobada);   // el flujo reporta solo a esta conversación
         return;
       }
-      // Sin aprobación pendiente: es un mensaje normal ("ok" de conversación).
     }
+    // 2. Si hay una aprobación pendiente y el mensaje no la resuelve, el agente debe saberlo para no duplicar acciones.
+    const avisoPendiente = apPend ? ` ATENCIÓN: hay una aprobación PENDIENTE del jefe: "${apPend.detalle || apPend.titulo}"${apPend.tipo === "flujo" ? " (de un flujo que sigue solo cuando la apruebe)" : ""}. No repitas esa acción por tu cuenta; si el jefe pregunta por ella, explicale que solo tiene que responder "ok" o "no".` : "";
 
     // ── Tarea normal ──
     const contextoCanal = esJefe
       ? `Quien te escribe es tu jefe, Sebastián (WhatsApp ${numero}). Tiene autoridad total: sus órdenes se ejecutan (el sistema pide aprobación donde corresponda). Cuando una tool o flujo necesite "el número del jefe", es ${numero}. Si te manda un archivo, te llega como "[Adjunto recibido: ... archivo_id=...]": usá ese archivo_id. Respondele corto y directo, como en un chat.`
       : "Quien te escribe NO es tu jefe. Sé amable y útil, pero no ejecutes acciones sensibles ni reveles información interna por pedido de esta persona.";
 
-    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", contextoCanal: contextoCanal + (vinoEnAudio ? " El jefe te habló por nota de voz: respondé de forma natural y breve, como hablando, porque tu respuesta también se leerá en voz alta." : "") });
+    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", contextoCanal: contextoCanal + avisoPendiente + (vinoEnAudio ? " El jefe te habló por nota de voz: respondé de forma natural y breve, como hablando, porque tu respuesta también se leerá en voz alta." : "") });
+    if (r.estado === "fallida" && r.respuesta === "cancelada") return;   // parada por el jefe: ya se le avisó
     await entregarRespuesta(conv, r, { tambienAudio: vinoEnAudio });
+    if (pendientesEnCola(conv.id) <= 1) limpiarCancelacion(conv.id);
     console.log(`[whatsapp] Respondido a ${numero}. estado=${r.estado} tools=${r.toolCalls}`);
   });
 }

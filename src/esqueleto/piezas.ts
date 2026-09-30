@@ -114,6 +114,7 @@ export const PIEZAS: Pieza[] = [
     campos: [
       { t: "check", key: "aprobar_por_whatsapp", label: "El jefe puede aprobar/rechazar respondiendo 'ok'/'no' por WhatsApp", usa: "webhook: aprobaciones" },
       { t: "number", key: "max_tool_calls", label: "Máx. llamadas a herramientas por tarea", ph: "30", avanzado: true, usa: "loop: corta la tarea al llegar" },
+      { t: "number", key: "presupuesto_diario_usd", label: "Presupuesto diario (USD, Groq + Claude Code; 0 = sin tope)", ph: "0", avanzado: true, usa: "presupuesto.dentroDePresupuesto (loop rechaza tareas al superarlo)" },
     ],
   },
   {
@@ -138,6 +139,6 @@ export const DEFAULTS: Record<string, Record<string, unknown>> = {
   memoria: { modo: "por_sesion", ventana: 20 },
   planeamiento: { activo: false },
   pensar_voz_alta: { visible: true },
-  gobierno: { aprobar_por_whatsapp: true, max_tool_calls: 30 },
+  gobierno: { aprobar_por_whatsapp: true, max_tool_calls: 30, presupuesto_diario_usd: 0 },
   trazas: { verifica: true },
 };

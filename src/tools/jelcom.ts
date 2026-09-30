@@ -19,7 +19,22 @@ function cfg() {
   return { base: `${url}/api/external`, key };
 }
 
-async function llamar(metodo: string, ruta: string, body?: unknown, opciones: { form?: FormData; binario?: boolean; timeoutSeg?: number } = {}): Promise<ResultadoTool & { status?: number }> {
+/** Llamada a Jelcom con reintentos ante errores transitorios (502/503/504, timeouts): Railway duerme la app a veces. */
+async function llamar(metodo: string, ruta: string, body?: unknown, opciones: { form?: FormData; binario?: boolean; timeoutSeg?: number; intentos?: number } = {}): Promise<ResultadoTool & { status?: number }> {
+  const max = opciones.intentos ?? 3;
+  let ultimo: ResultadoTool & { status?: number } = { ok: false, error: "sin intentos" };
+  for (let i = 1; i <= max; i++) {
+    ultimo = await llamarUnaVez(metodo, ruta, body, opciones);
+    const transitorio = !ultimo.ok && ((ultimo.status && [502, 503, 504].includes(ultimo.status)) || /timeout|ECONNRESET|ECONNREFUSED|fetch failed|failed to respond/i.test(ultimo.error || ""));
+    if (!transitorio || i === max) break;
+    console.warn(`[jelcom] ${metodo} ${ruta} → ${ultimo.status || ""} ${ultimo.error}; reintento ${i}/${max - 1} en ${3 * i}s`);
+    await new Promise((r) => setTimeout(r, 3000 * i));
+  }
+  if (!ultimo.ok && max > 1 && ultimo.status && [502, 503, 504].includes(ultimo.status)) ultimo.error = `${ultimo.error} (Jelcom no respondió en ${max} intentos: probablemente la app en Railway está dormida o reiniciando; probá en un minuto)`;
+  return ultimo;
+}
+
+async function llamarUnaVez(metodo: string, ruta: string, body?: unknown, opciones: { form?: FormData; binario?: boolean; timeoutSeg?: number } = {}): Promise<ResultadoTool & { status?: number }> {
   let c; try { c = cfg(); } catch (e: any) { return { ok: false, error: e.message }; }
   try {
     const headers: Record<string, string> = { "x-api-key": c.key };
@@ -46,7 +61,7 @@ async function llamar(metodo: string, ruta: string, body?: unknown, opciones: { 
 export const jelcomListarCampanas: DefTool = {
   nombre: "jelcom_listar_campanas", modulo: MODULO,
   descripcion: "Lista las campañas (clientes/proyectos) de Jelcom Envíos con su id, nombre y cuántos envíos tienen.",
-  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false,
+  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar() {
     const r = await llamar("GET", "/campanas");
     if (!r.ok) return r;
@@ -59,7 +74,7 @@ export const jelcomCrearCampana: DefTool = {
   nombre: "jelcom_crear_campana", modulo: MODULO,
   descripcion: "Crea una campaña (cliente/proyecto) nueva en Jelcom Envíos.",
   parametros: { type: "object", properties: { nombre: { type: "string", description: "Nombre de la campaña/cliente.", minLength: 2 }, cuenta_wa_id: { type: "integer", description: "Cuenta de WhatsApp por defecto (opcional)." } }, required: ["nombre"] },
-  riesgo: "escritura", requiereAprobacion: false,
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("POST", "/campanas", { nombre: a.nombre, cuenta_wa_id: a.cuenta_wa_id });
     return r.ok ? { ok: true, datos: r.datos, resumen: `Campaña "${a.nombre}" creada con id ${(r.datos as any)?.id}.` } : r;
@@ -69,7 +84,7 @@ export const jelcomCrearCampana: DefTool = {
 export const jelcomListarCuentasWhatsapp: DefTool = {
   nombre: "jelcom_listar_cuentas_whatsapp", modulo: MODULO,
   descripcion: "Lista las cuentas de WhatsApp Business configuradas en Jelcom (id, nombre, número). Necesaria para envíos por WhatsApp.",
-  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false,
+  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar() {
     const r = await llamar("GET", "/cuentas");
     if (!r.ok) return r;
@@ -81,7 +96,7 @@ export const jelcomListarCuentasWhatsapp: DefTool = {
 export const jelcomListarCuentasSms: DefTool = {
   nombre: "jelcom_listar_cuentas_sms", modulo: MODULO,
   descripcion: "Lista las cuentas de SMS configuradas en Jelcom (id, nombre, proveedor). Necesaria para envíos por SMS.",
-  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false,
+  parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar() {
     const r = await llamar("GET", "/cuentas-sms");
     if (!r.ok) return r;
@@ -102,7 +117,7 @@ export const jelcomListarEnvios: DefTool = {
       limite: { type: "integer", description: "Máximo a devolver (los más recientes).", default: 15, minimum: 1, maximum: 100 },
     }, required: [],
   },
-  riesgo: "lectura", requiereAprobacion: false,
+  riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     const q = new URLSearchParams();
     if (a.campana_id) q.set("campana_id", String(a.campana_id));
@@ -118,7 +133,7 @@ export const jelcomListarEnvios: DefTool = {
 export const jelcomVerEnvio: DefTool = {
   nombre: "jelcom_ver_envio", modulo: MODULO,
   descripcion: "Detalle de un envío: canal, estado, campaña, cuenta, cuerpo/plantilla y contadores (base, válidos, enviados, errores).",
-  parametros: { type: "object", properties: { envio_id: ID }, required: ["envio_id"] }, riesgo: "lectura", requiereAprobacion: false,
+  parametros: { type: "object", properties: { envio_id: ID }, required: ["envio_id"] }, riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("GET", `/envios/${a.envio_id}`);
     if (!r.ok) return r;
@@ -132,7 +147,7 @@ export const jelcomEstadoEnvio: DefTool = {
   nombre: "jelcom_estado_envio", modulo: MODULO,
   descripcion: "Estado en vivo de un envío: contadores actuales, tasa de error y los últimos logs (progreso, errores del proveedor). Es lo que se usa para monitorear.",
   parametros: { type: "object", properties: { envio_id: ID, ultimos_logs: { type: "integer", description: "Cuántas líneas de log devolver.", default: 15, minimum: 1, maximum: 100 } }, required: ["envio_id"] },
-  riesgo: "lectura", requiereAprobacion: false,
+  riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("GET", `/envios/${a.envio_id}/logs`);
     if (!r.ok) return r;
@@ -157,7 +172,7 @@ export const jelcomAnalizarSms: DefTool = {
   nombre: "jelcom_analizar_sms", modulo: MODULO,
   descripcion: "Analiza un texto de SMS: cuántos caracteres y segmentos ocupa (cada segmento cuesta). Usalo antes de crear un envío SMS para avisar si el texto es largo.",
   parametros: { type: "object", properties: { texto: { type: "string", description: "Texto del SMS.", minLength: 1 } }, required: ["texto"] },
-  riesgo: "lectura", requiereAprobacion: false,
+  riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("POST", "/envios/analizar-sms", { texto: a.texto });
     return r.ok ? { ok: true, datos: r.datos, resumen: `SMS: ${JSON.stringify(r.datos)}` } : r;
@@ -183,7 +198,7 @@ export const jelcomCrearEnvio: DefTool = {
     },
     required: ["campana_id", "nombre", "canal"],
   },
-  riesgo: "escritura", requiereAprobacion: false,
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     if (a.canal === "sms" && (!a.cuerpo || !a.cuenta_sms_id)) return { ok: false, error: "Para SMS necesito 'cuerpo' y 'cuenta_sms_id'." };
     if (a.canal === "whatsapp" && (!a.plantilla || !a.cuenta_wa_id)) return { ok: false, error: "Para WhatsApp necesito 'plantilla' y 'cuenta_wa_id'." };
@@ -195,13 +210,79 @@ export const jelcomCrearEnvio: DefTool = {
   },
 };
 
+/** Lee una base (CSV o XLSX) y devuelve encabezados, muestra y cuántos teléfonos plausibles hay. */
+async function inspeccionarBase(contenido: Buffer, nombre: string): Promise<{ formato: string; encabezados: string[]; filas: number; muestra: string[][]; columna_telefono: string | null; telefonos_plausibles: number; problemas: string[] }> {
+  const problemas: string[] = [];
+  let filas: string[][] = [];
+  const ext = nombre.toLowerCase().split(".").pop() || "";
+  if (ext === "xlsx" || ext === "xls") {
+    try {
+      const nombreMod = "xlsx"; const XLSX: any = await import(nombreMod);
+      const wb = XLSX.read(contenido, { type: "buffer" }); const ws = wb.Sheets[wb.SheetNames[0]];
+      filas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as string[][];
+    } catch { problemas.push("No pude leer el Excel localmente (falta el paquete 'xlsx'); Jelcom lo validará al subir."); }
+  } else {
+    const texto = contenido.toString("utf-8").replace(/^\uFEFF/, "");
+    const sep = (texto.match(/;/g) || []).length > (texto.match(/,/g) || []).length ? ";" : (texto.match(/\t/g) || []).length > (texto.match(/,/g) || []).length ? "\t" : ",";
+    filas = texto.split(/\r?\n/).filter((l) => l.trim()).map((l) => l.split(sep).map((c) => c.trim().replace(/^"|"$/g, "")));
+  }
+  if (!filas.length) return { formato: ext, encabezados: [], filas: 0, muestra: [], columna_telefono: null, telefonos_plausibles: 0, problemas: [...problemas, "El archivo está vacío o no se pudo leer."] };
+  const encabezados = filas[0].map((h) => String(h || "").trim());
+  const datos = filas.slice(1);
+  // Reglas reales de Jelcom (backend/src/services/depurar.js): tras quitar todo lo que no sea
+  // número, debe quedar en 10 dígitos y empezar en 3 (celular Colombia). Se guarda como 57XXXXXXXXXX.
+  const normalizar = (v: string) => { let d = String(v || "").replace(/\D/g, ""); if (d.length === 12 && d.startsWith("57")) d = d.slice(2); if (d.length === 11 && d.startsWith("0")) d = d.slice(1); return d; };
+  const plausible = (v: string) => { const d = normalizar(v); return d.length === 10 && d.startsWith("3"); };
+  let mejor: { col: number; n: number } = { col: -1, n: 0 };
+  for (let c = 0; c < encabezados.length; c++) { const n = datos.filter((f) => plausible(f[c])).length; if (n > mejor.n) mejor = { col: c, n }; }
+  const colTel = mejor.col >= 0 ? encabezados[mejor.col] : null;
+  // Encabezados que Jelcom reconoce (si no hay ninguno, toma la PRIMERA celda no vacía de cada fila).
+  const esperado = /^(tel[eé]fono|celular|m[oó]vil|movil|phone|n[uú]mero|numero|num_tel|cel|tel)$/i;
+  const tieneEncabezado = encabezados.some((h) => esperado.test(h.trim()));
+  if (!tieneEncabezado) problemas.push(`Ninguna columna se llama telefono/celular/movil/phone/numero/cel/tel, así que Jelcom va a tomar la PRIMERA celda de cada fila${encabezados[0] ? ` (ahora es "${encabezados[0]}")` : ""}. Si el teléfono no está en la primera columna, renombrá el encabezado a "telefono".`);
+  const crudos = datos.filter((f) => String(f[mejor.col >= 0 ? mejor.col : 0] || "").trim()).length;
+  if (mejor.n === 0) problemas.push(`Ningún número cumple la regla de Jelcom: tras quitar símbolos debe quedar en 10 dígitos y empezar en 3 (celular Colombia; el 57 lo agrega Jelcom). Ejemplos de lo que hay: ${datos.slice(0, 3).map((f) => f[mejor.col >= 0 ? mejor.col : 0]).join(", ")}.`);
+  else if (mejor.n < crudos * 0.9) problemas.push(`Solo ${mejor.n} de ${crudos} filas cumplen 10 dígitos empezando en 3 en "${colTel}"; el resto lo va a descartar.`);
+  return { formato: ext, encabezados, filas: datos.length, muestra: datos.slice(0, 3), columna_telefono: colTel, telefonos_plausibles: mejor.n, problemas };
+}
+
+export const jelcomInspeccionarBase: DefTool = {
+  nombre: "jelcom_inspeccionar_base", modulo: MODULO,
+  descripcion: "Mira una base (CSV/Excel) ANTES de subirla y la valida con las MISMAS reglas de Jelcom: encabezado reconocido (telefono, celular, movil, phone, numero, num_tel, cel, tel; si no hay, se usa la primera celda de cada fila) y teléfono que tras quitar símbolos quede en 10 dígitos empezando en 3 (Jelcom le antepone 57). Dice cuántos servirían y qué corregir.",
+  parametros: { type: "object", properties: { archivo_id: { type: "string", minLength: 8 } }, required: ["archivo_id"] },
+  riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 60,
+  async ejecutar(a) {
+    const { meta, contenido } = await leerArchivo(a.archivo_id);
+    const r = await inspeccionarBase(contenido, meta.nombre);
+    const ok = r.telefonos_plausibles > 0 && r.problemas.length === 0;
+    return { ok: true, datos: { ...r, apta: ok }, resumen: `Base "${meta.nombre}" (${r.formato}): ${r.filas} filas · columnas: ${r.encabezados.join(", ") || "(sin encabezados)"} · teléfono probable: ${r.columna_telefono || "ninguna"} (${r.telefonos_plausibles} válidos para Jelcom)\nMuestra: ${r.muestra.map((f) => f.join(" | ")).join(" // ")}\n${r.problemas.length ? "⚠ " + r.problemas.join(" ") : "✔ Parece apta para subir."}` };
+  },
+};
+
+export const jelcomEliminarEnvio: DefTool = {
+  nombre: "jelcom_eliminar_envio", modulo: MODULO,
+  descripcion: "Elimina un envío de Jelcom (borradores o envíos de prueba). Requiere aprobación. Si Jelcom no permite borrar ese envío, lo dice.",
+  parametros: { type: "object", properties: { envio_id: ID }, required: ["envio_id"] },
+  riesgo: "escritura", requiereAprobacion: true, timeoutSeg: 60,
+  async ejecutar(a) {
+    const r = await llamar("DELETE", `/envios/${a.envio_id}`);
+    if (!r.ok) return { ok: false, error: `Jelcom no lo eliminó: ${r.error}` };
+    return { ok: true, resumen: `Envío #${a.envio_id} eliminado.` };
+  },
+};
+
 export const jelcomSubirBase: DefTool = {
   nombre: "jelcom_subir_base", modulo: MODULO,
-  descripcion: "Sube la base de contactos (Excel/CSV) a un envío y la depura. Devuelve válidos, duplicados e inválidos. El archivo se identifica por archivo_id (el adjunto que mandaron por WhatsApp).",
-  parametros: { type: "object", properties: { envio_id: ID, archivo_id: { type: "string", description: "Id del archivo con la base.", minLength: 8 } }, required: ["envio_id", "archivo_id"] },
+  descripcion: "Sube la base de contactos (Excel/CSV) a un envío y la depura. Antes valida localmente con las reglas de Jelcom (teléfono de 10 dígitos que empieza en 3; encabezado telefono/celular/movil/phone/numero/cel/tel, o la primera columna si no hay) y NO sube si ninguna fila serviría. Devuelve válidos, duplicados e inválidos.",
+  parametros: { type: "object", properties: { envio_id: ID, archivo_id: { type: "string", description: "Id del archivo con la base.", minLength: 8 }, forzar: { type: "boolean", description: "Subir aunque la validación local diga que no hay números válidos.", default: false } }, required: ["envio_id", "archivo_id"] },
   riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 180,
   async ejecutar(a) {
     const { meta, contenido } = await leerArchivo(a.archivo_id);
+    // Candado: si ningún número cumple la regla de Jelcom, no se sube (evita envíos con base vacía).
+    const insp = await inspeccionarBase(contenido, meta.nombre).catch(() => null);
+    if (insp && insp.telefonos_plausibles === 0 && !a.forzar) {
+      return { ok: false, error: `No subí nada: en "${meta.nombre}" ningún número cumple la regla de Jelcom (10 dígitos empezando en 3). Columnas: ${insp.encabezados.join(", ") || "(sin encabezados)"}. ${insp.problemas.join(" ")} Pedile al jefe la base corregida, o usá forzar=true si igual querés intentarlo.` };
+    }
     const fd = new FormData();
     fd.append("archivo", new Blob([new Uint8Array(contenido)], { type: meta.mime }), meta.nombre);
     const r = await llamar("POST", `/envios/${a.envio_id}/base`, undefined, { form: fd, timeoutSeg: 180 });
@@ -215,7 +296,7 @@ export const jelcomDispararEnvio: DefTool = {
   nombre: "jelcom_disparar_envio", modulo: MODULO,
   descripcion: "DISPARA el envío: empieza a mandar mensajes reales a toda la base. Irreversible. Requiere aprobación del jefe.",
   parametros: { type: "object", properties: { envio_id: ID }, required: ["envio_id"] },
-  riesgo: "ejecucion", requiereAprobacion: true,
+  riesgo: "ejecucion", requiereAprobacion: true, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("POST", `/envios/${a.envio_id}/enviar`);
     return r.ok ? { ok: true, datos: r.datos, resumen: `Envío #${a.envio_id} disparado.` } : r;
@@ -226,7 +307,7 @@ export const jelcomReanudarEnvio: DefTool = {
   nombre: "jelcom_reanudar_envio", modulo: MODULO,
   descripcion: "Reanuda un envío pausado (sigue con los contactos pendientes). Requiere aprobación.",
   parametros: { type: "object", properties: { envio_id: ID }, required: ["envio_id"] },
-  riesgo: "ejecucion", requiereAprobacion: true,
+  riesgo: "ejecucion", requiereAprobacion: true, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("POST", `/envios/${a.envio_id}/enviar`);
     return r.ok ? { ok: true, datos: r.datos, resumen: `Envío #${a.envio_id} reanudado.` } : r;
@@ -237,7 +318,7 @@ export const jelcomPausarEnvio: DefTool = {
   nombre: "jelcom_pausar_envio", modulo: MODULO,
   descripcion: "Pausa un envío en curso (se puede reanudar después). Usalo si hay una tasa de errores alta o un problema del proveedor.",
   parametros: { type: "object", properties: { envio_id: ID }, required: ["envio_id"] },
-  riesgo: "escritura", requiereAprobacion: false,
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 100,
   async ejecutar(a) {
     const r = await llamar("POST", `/envios/${a.envio_id}/pausar`);
     if (!r.ok) return r;
@@ -280,7 +361,7 @@ function resumirEnvio(e: any) {
   };
 }
 
-export const toolsJelcom: DefTool[] = [
+export const toolsJelcom: DefTool[] = [jelcomInspeccionarBase, jelcomEliminarEnvio, 
   jelcomListarCampanas, jelcomCrearCampana, jelcomListarCuentasWhatsapp, jelcomListarCuentasSms,
   jelcomListarEnvios, jelcomVerEnvio, jelcomEstadoEnvio, jelcomAnalizarSms,
   jelcomCrearEnvio, jelcomSubirBase, jelcomDispararEnvio, jelcomReanudarEnvio, jelcomPausarEnvio, jelcomDividirEnvio, jelcomDescargarInforme,

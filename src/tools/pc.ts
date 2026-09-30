@@ -87,10 +87,10 @@ export const pcAdjuntar: DefTool = {
 export const pcVerPantalla: DefTool = {
   nombre: "pc_ver_pantalla", modulo: MODULO,
   descripcion: "Captura la pantalla del PC y la describe con visión (o responde una pregunta sobre lo que se ve). Devuelve también el archivo_id de la captura.",
-  parametros: { type: "object", properties: { pregunta: { type: "string", description: "Qué mirar en particular (opcional)." } }, required: [] },
+  parametros: { type: "object", properties: { pregunta: { type: "string", description: "Qué mirar en particular (opcional)." }, todos_los_monitores: { type: "boolean", description: "true para capturar todos los monitores (por defecto solo el principal).", default: false } }, required: [] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 90,
   async ejecutar(a, ctx) {
-    const c = await capturarPantalla();
+    const c = await capturarPantalla({ todo: !!a.todos_los_monitores, maxAncho: 1600 });
     const arch = await guardarArchivo({ nombre: path.basename(c.ruta), mime: "image/png", contenido: c.contenido, origen: "generado", conversacionId: ctx.conversacionId ?? null, agenteId: ctx.agenteId });
     const v = await analizarImagen(c.contenido, "image/png", { pregunta: a.pregunta || "Describí qué hay en esta pantalla: qué programa/ventana está activa, qué texto importante se ve, y si hay errores o diálogos. En español, concreto." });
     return { ok: v.ok, datos: { archivo_id: arch.id, descripcion: v.texto }, resumen: v.ok ? `${v.texto}\n(captura: archivo_id ${arch.id})` : undefined, error: v.ok ? undefined : v.error };

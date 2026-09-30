@@ -61,3 +61,26 @@ export async function resolverAprobacion(id: string, aprobada: boolean): Promise
   );
   return a;
 }
+
+
+/**
+ * Aprobación pendiente más antigua cuyo ORIGEN es el jefe con este número, sin
+ * importar en qué conversación se creó (directa, delegación de cualquier
+ * profundidad, o flujo). Sube por la cadena de delegaciones hasta la
+ * conversación de WhatsApp raíz y compara el contacto.
+ */
+export async function aprobacionPendienteDelJefe(numero: string): Promise<Aprobacion | undefined> {
+  const limpio = numero.replace(/\D/g, "");
+  const pendientes = await query<Aprobacion>(`SELECT * FROM aprobaciones WHERE estado='pendiente' AND conversacion_id IS NOT NULL ORDER BY creado_en ASC LIMIT 30`);
+  for (const a of pendientes) {
+    let convId: string | null = a.conversacion_id;
+    for (let i = 0; i < 6 && convId; i++) {
+      const [c] = await query<{ canal: string; contacto: string }>(`SELECT canal, contacto FROM conversaciones WHERE id=$1`, [convId]);
+      if (!c) break;
+      if (c.canal === "whatsapp") { if (c.contacto.replace(/\D/g, "") === limpio) return a; break; }
+      if (c.canal === "delegacion") { convId = c.contacto; continue; }
+      break;
+    }
+  }
+  return undefined;
+}

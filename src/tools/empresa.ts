@@ -24,7 +24,7 @@ const PAQUETES: Record<string, { tools: (n: string) => boolean; skills: (n: stri
   codigo:     { tools: (n) => n.startsWith("codigo_") || n.startsWith("runtime_") || n.startsWith("proyecto_") || n.startsWith("github_") || n.startsWith("conocimiento_") || n.startsWith("observar_") || n === "whatsapp_enviar_texto", skills: (n) => n.startsWith("senior_"), flujos: (n) => n.startsWith("senior_") || n.startsWith("proyecto_") },
   vigilancia: { tools: (n) => n.startsWith("runtime_") || n.startsWith("codigo_") || n.startsWith("proyecto_instalar") || n.startsWith("flujo_") || n === "whatsapp_enviar_texto", skills: (n) => n.startsWith("vigilar_") || n === "senior_reparar", flujos: (n) => n.startsWith("vigilar_") },
   vision_voz: { tools: (n) => n.startsWith("vision_") || n.startsWith("voz_"), skills: () => false, flujos: () => false },
-  pc:         { tools: (n) => n.startsWith("pc_") || n.startsWith("navegador_"), skills: () => false, flujos: () => false },
+  pc:         { tools: (n) => n.startsWith("pc_") || n.startsWith("navegador_") || n.startsWith("office_") || n.startsWith("grabacion_"), skills: () => false, flujos: () => false },
   memoria:    { tools: (n) => n.startsWith("memoria_"), skills: () => false, flujos: () => false },
   automatizacion: { tools: (n) => n.startsWith("disparador_") || n.startsWith("evento_"), skills: () => false, flujos: () => false },
   automejora: { tools: (n) => n.startsWith("registro_"), skills: (n) => n === "senior_crear_capacidad", flujos: (n) => n.startsWith("capacidad_") },

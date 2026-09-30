@@ -13,7 +13,7 @@ import { obtenerConversacion } from "../dominio/conversaciones.js";
 
 export async function actividadActual() {
   const [tareas, sesiones, flujos, aprobaciones, pasos] = await Promise.all([
-    query<any>(`SELECT e.id, e.estado, e.origen, e.inicio, e.turnos_usados, e.tool_calls, ag.nombre AS agente,
+    query<any>(`SELECT e.id, e.estado, e.origen, e.inicio, e.turnos_usados, e.tool_calls, ag.nombre AS agente, ag.identidad->>'color' AS color,
                   (SELECT p.tipo || ': ' || left(p.detalle, 160) FROM pasos p WHERE p.ejecucion_id=e.id ORDER BY p.creado_en DESC LIMIT 1) AS ultimo_paso
                 FROM ejecuciones e JOIN agentes ag ON ag.id=e.agente_id
                 WHERE e.estado IN ('en_curso','esperando_aprobacion') AND e.inicio > now() - interval '6 hours' ORDER BY e.inicio DESC LIMIT 20`),
@@ -26,7 +26,7 @@ export async function actividadActual() {
                   (SELECT l->>'texto' FROM jsonb_array_elements(log) l ORDER BY l->>'t' DESC LIMIT 1) AS ultimo_log
                 FROM flujo_ejecuciones WHERE estado IN ('en_curso','esperando','esperando_aprobacion','esperando_subflujo') ORDER BY inicio DESC LIMIT 20`),
     query<any>(`SELECT a.id, a.tipo, a.titulo, a.detalle, a.creado_en, ag.nombre AS agente FROM aprobaciones a LEFT JOIN agentes ag ON ag.id=a.agente_id WHERE a.estado='pendiente' ORDER BY a.creado_en`),
-    query<any>(`SELECT p.tipo, left(p.detalle, 220) AS detalle, p.creado_en, ag.nombre AS agente FROM pasos p JOIN ejecuciones e ON e.id=p.ejecucion_id JOIN agentes ag ON ag.id=e.agente_id ORDER BY p.creado_en DESC LIMIT 60`),
+    query<any>(`SELECT p.tipo, left(p.detalle, 220) AS detalle, p.creado_en, ag.nombre AS agente, ag.identidad->>'color' AS color FROM pasos p JOIN ejecuciones e ON e.id=p.ejecucion_id JOIN agentes ag ON ag.id=e.agente_id ORDER BY p.creado_en DESC LIMIT 60`),
   ]);
   return { ahora: new Date().toISOString(), tareas, sesiones_claude: sesiones, sesiones_activas_en_proceso: sesionesActivas().length, flujos, aprobaciones, ultimos_pasos: pasos };
 }

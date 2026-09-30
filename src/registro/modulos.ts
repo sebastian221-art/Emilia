@@ -13,9 +13,9 @@ export interface ModuloCapacidades { ruta: string; exporta: string; tipo: "tools
 export const MODULOS: ModuloCapacidades[] = [
   // ── tools ──
   { ruta: "tools/sistema.ts",      exporta: "toolsSistema",      tipo: "tools" },
+  { ruta: "tools/archivo.ts",      exporta: "toolsArchivo",      tipo: "tools" },
   { ruta: "tools/whatsapp.ts",     exporta: "toolsWhatsapp",     tipo: "tools" },
   { ruta: "tools/jelcom.ts",       exporta: "toolsJelcom",       tipo: "tools" },
-  { ruta: "tools/clima.ts",        exporta: "toolsClima",        tipo: "tools" },
   { ruta: "tools/codigo.ts",       exporta: "toolsCodigo",       tipo: "tools" },
   { ruta: "tools/agentes.ts",      exporta: "toolsAgentes",      tipo: "tools" },
   { ruta: "tools/observar.ts",     exporta: "toolsObservar",     tipo: "tools" },
@@ -27,10 +27,13 @@ export const MODULOS: ModuloCapacidades[] = [
   { ruta: "tools/flujos.ts",       exporta: "toolsFlujos",       tipo: "tools" },
   { ruta: "tools/empresa.ts",      exporta: "toolsEmpresa",      tipo: "tools" },
   { ruta: "tools/pc.ts",           exporta: "toolsPc",           tipo: "tools" },
+  { ruta: "tools/pc-operar.ts",    exporta: "toolsPcOperar",     tipo: "tools" },
+  { ruta: "tools/pc-extra.ts",     exporta: "toolsPcExtra",      tipo: "tools" },
   { ruta: "tools/navegador.ts",    exporta: "toolsNavegador",    tipo: "tools" },
   { ruta: "tools/memoria.ts",      exporta: "toolsMemoria",      tipo: "tools" },
   { ruta: "tools/disparadores.ts", exporta: "toolsDisparadores", tipo: "tools" },
   { ruta: "tools/registro.ts",     exporta: "toolsRegistro",     tipo: "tools" },
+  { ruta: "tools/evaluacion.ts",   exporta: "toolsEvaluacion",   tipo: "tools" },
   // ── skills ──
   { ruta: "skills/sistema.ts",     exporta: "skillsSistema",     tipo: "skills" },
   { ruta: "skills/jelcom.ts",      exporta: "skillsJelcom",      tipo: "skills" },

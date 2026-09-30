@@ -123,6 +123,8 @@ function validar(esq: EsquemaJson, v: unknown, ruta: string, errores: string[]):
       const obj = v as Record<string, unknown>;
       const salida: Record<string, unknown> = {};
       const props = esq.properties || {};
+      // Objeto libre (sin properties declaradas, ej. celdas:{"A1":"x"}, args de un flujo): pasa tal cual.
+      if (!Object.keys(props).length) return { ...obj };
       for (const r of esq.required || []) {
         if (obj[r] === undefined || obj[r] === null || obj[r] === "") errores.push(`${ruta}.${r}: es obligatorio.`);
       }

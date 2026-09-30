@@ -47,6 +47,21 @@ rutasChat.get("/api/ejecuciones/:id/pasos", async (req, res, next) => {
 });
 
 // Enviar un mensaje desde el panel: conversación 'panel', en cola, con memoria.
+/** Adjuntar un archivo al chat del panel (base64 en JSON, sin dependencias). Queda como adjunto de la conversación, igual que por WhatsApp. */
+rutasChat.post("/api/agentes/:id/chat/adjuntos", async (req, res, next) => {
+  try {
+    const { nombre, mime, base64 } = req.body || {};
+    if (!nombre || !base64) return res.status(400).json({ error: "Falta nombre o base64" });
+    const contenido = Buffer.from(String(base64).replace(/^data:[^;]+;base64,/, ""), "base64");
+    if (contenido.length > 20 * 1024 * 1024) return res.status(413).json({ error: "Máximo 20 MB" });
+    const conv = await obtenerOCrearConversacion(req.params.id, "panel", "panel");
+    const { guardarArchivo } = await import("../dominio/archivos.js");
+    const arch = await guardarArchivo({ nombre: String(nombre), mime: String(mime || "application/octet-stream"), contenido, origen: "panel", conversacionId: conv.id, agenteId: req.params.id });
+    await guardarMensajeEn(conv, "usuario", `[Adjunto recibido: "${arch.nombre}" (${Math.round(arch.tam_bytes / 1024)} KB, archivo_id=${arch.id})]`);
+    res.json({ ok: true, archivo_id: arch.id, nombre: arch.nombre, kb: Math.round(arch.tam_bytes / 1024) });
+  } catch (e) { next(e); }
+});
+
 rutasChat.post("/api/agentes/:id/chat", async (req, res, next) => {
   try {
     const { mensaje } = req.body;

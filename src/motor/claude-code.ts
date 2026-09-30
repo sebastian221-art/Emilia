@@ -76,6 +76,7 @@ export async function iniciarSesionClaude(op: OpcionesSesion): Promise<SesionCod
       // Fallo de autenticación real: Claude lo devuelve como error corto, no dentro de un informe.
       const authFall = (resultado.is_error || txt.length < 400) && /failed to authenticate|oauth (session|token)|not logged in|please run \/login|session expired|invalid api key|credit balance is too low/i.test(txt);
       const ok = !resultado.is_error && resultado.subtype !== "error_max_turns" && resultado.subtype !== "error_during_execution" && !authFall;
+      if (resultado.total_cost_usd) { const { registrarConsumo } = await import("./presupuesto.js"); registrarConsumo({ agenteId: op.agenteId ?? null, proveedor: "claude_code", modelo: process.env.CLAUDE_CODE_MODELO || "claude", costoUsd: Number(resultado.total_cost_usd) }).catch(() => {}); }
       await finalizar(sesion.id, ok ? "completada" : "fallida", {
         resultado: txt, session: resultado.session_id, costo: resultado.total_cost_usd, turnos: resultado.num_turns, duracion: resultado.duration_ms,
         error: ok ? undefined : authFall ? `Claude Code no pudo autenticarse (${txt.slice(0, 160)}). En la máquina donde corre Emilia, abrí una terminal, corré "claude", escribí /login, completá el navegador y volvé a intentar.` : `Claude Code terminó con ${resultado.subtype || "error"}${resultado.is_error ? ": " + txt.slice(0, 300) : ""}`,

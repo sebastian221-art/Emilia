@@ -14,9 +14,13 @@ import type { ResultadoTarea } from "./loop.js";
 import { query } from "../db/cliente.js";
 
 /** Nombre del agente dueño de una conversación (para firmar reportes en cadena). */
+const EMOJI_COLOR: [RegExp, string][] = [[/^#?(f|e)[0-9a-f]?[5-9a-f]/i, "🟠"], [/^#?[0-9a-f]{0,2}[89ab]/i, "🔵"], [/^#?[0-9a-f]{2}[c-f]/i, "🟢"]];
 async function firma(conv: Conversacion): Promise<string> {
-  const [a] = await query<{ nombre: string }>(`SELECT nombre FROM agentes WHERE id=$1`, [conv.agente_id]);
-  return a?.nombre ? `👤 ${a.nombre}: ` : "";
+  const [a] = await query<{ nombre: string; color: string | null }>(`SELECT nombre, identidad->>'color' AS color FROM agentes WHERE id=$1`, [conv.agente_id]);
+  if (!a?.nombre) return "";
+  const c = (a.color || "").toLowerCase();
+  const emoji = c.startsWith("#f") || c.startsWith("#e") ? "🟠" : c.startsWith("#2") || c.startsWith("#1") || c.startsWith("#0") ? "🟢" : c.startsWith("#3") || c.startsWith("#6") || c.startsWith("#9") ? "🔵" : "👤";
+  return `${emoji} *${a.nombre}*: `;
 }
 
 /** Un texto suelto a la conversación (lo usan los flujos para reportar). */

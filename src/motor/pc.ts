@@ -64,27 +64,52 @@ export async function resolverRuta(entrada: string): Promise<string> {
 
 const DIR_CAPTURAS = path.resolve(process.env.DATA_DIR || "data", "capturas");
 
-/** Captura de pantalla completa → PNG en disco. */
-export async function capturarPantalla(): Promise<{ ruta: string; contenido: Buffer }> {
+export interface Captura { ruta: string; contenido: Buffer; ancho: number; alto: number; escala: number; origenX: number; origenY: number }
+
+/**
+ * Captura de pantalla → PNG. Por defecto SOLO el monitor principal, reducida a
+ * `maxAncho` px (los modelos de visión ubican mejor en imágenes moderadas), con
+ * rejilla de coordenadas opcional (líneas cada 100 px de la imagen, numeradas)
+ * para que el modelo LEA posiciones en vez de estimarlas.
+ * `escala` = píxeles reales por píxel de la imagen (para mapear clics).
+ */
+export async function capturarPantalla(op: { todo?: boolean; maxAncho?: number; rejilla?: boolean } = {}): Promise<Captura> {
   exigirPc();
   await fs.mkdir(DIR_CAPTURAS, { recursive: true });
   const ruta = path.join(DIR_CAPTURAS, `captura_${Date.now()}.png`);
+  const maxAncho = op.maxAncho ?? 1280;
   if (esWindows) {
     const r = await powershell(`
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-$b = [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { $_.Bounds } | Measure-Object -Property Width -Sum
-$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-$g = [System.Drawing.Graphics]::FromImage($bmp)
+$bounds = ${op.todo ? "[System.Windows.Forms.SystemInformation]::VirtualScreen" : "[System.Windows.Forms.Screen]::PrimaryScreen.Bounds"}
+$src = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+$g = [System.Drawing.Graphics]::FromImage($src)
 $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-$bmp.Save('${ruta.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)
-$g.Dispose(); $bmp.Dispose()`, 30);
+$g.Dispose()
+$escala = [Math]::Max(1.0, $bounds.Width / ${maxAncho})
+$w = [int]([Math]::Round($bounds.Width / $escala)); $h = [int]([Math]::Round($bounds.Height / $escala))
+$dst = New-Object System.Drawing.Bitmap $w, $h
+$g2 = [System.Drawing.Graphics]::FromImage($dst)
+$g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+$g2.DrawImage($src, 0, 0, $w, $h)
+${op.rejilla ? `
+$pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(140, 255, 0, 255)), 1
+$font = New-Object System.Drawing.Font 'Arial', 9, [System.Drawing.FontStyle]::Bold
+$brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(230, 255, 0, 255))
+for ($x = 100; $x -lt $w; $x += 100) { $g2.DrawLine($pen, $x, 0, $x, $h); $g2.DrawString([string]$x, $font, $brush, $x + 2, 2) }
+for ($y = 100; $y -lt $h; $y += 100) { $g2.DrawLine($pen, 0, $y, $w, $y); $g2.DrawString([string]$y, $font, $brush, 2, $y + 2) }` : ""}
+$g2.Dispose()
+$dst.Save('${ruta.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)
+$src.Dispose(); $dst.Dispose()
+"$w $h $escala $($bounds.X) $($bounds.Y)"`, 40);
     if (r.codigo !== 0) throw new Error(`No pude capturar la pantalla: ${(r.stderr || r.stdout).slice(-300)}`);
+    const [w, h, esc, ox, oy] = r.stdout.trim().split("\n").pop()!.trim().split(/\s+/).map((v) => Number(String(v).replace(",", ".")));
+    return { ruta, contenido: await fs.readFile(ruta), ancho: w, alto: h, escala: esc || 1, origenX: ox || 0, origenY: oy || 0 };
   } else {
     const r = await ejecutarComando(os.homedir(), `import -window root "${ruta}" || scrot "${ruta}"`, 30);
     if (r.codigo !== 0) throw new Error(`No pude capturar la pantalla (falta 'import' o 'scrot').`);
+    return { ruta, contenido: await fs.readFile(ruta), ancho: 0, alto: 0, escala: 1, origenX: 0, origenY: 0 };
   }
-  return { ruta, contenido: await fs.readFile(ruta) };
 }
 
 /** Abre una app, archivo o URL con el programa por defecto. */

@@ -33,8 +33,19 @@ export async function leerArchivo(id: string): Promise<{ meta: Archivo; contenid
   if (!meta) throw new Error(`Archivo ${id} no existe.`);
   return { meta, contenido: await fs.readFile(meta.ruta) };
 }
+/**
+ * Archivos "a la vista" de una conversación: los suyos y, si es una conversación
+ * de delegación, también los de la conversación padre (lo que el jefe mandó por
+ * WhatsApp al administrador). Si no hay nada, cae a los recientes del sistema.
+ */
 export async function archivosDeConversacion(convId: string, limite = 10): Promise<Archivo[]> {
-  return query<Archivo>(`SELECT * FROM archivos WHERE conversacion_id=$1 ORDER BY creado_en DESC LIMIT $2`, [convId, limite]);
+  const propios = await query<Archivo>(`SELECT * FROM archivos WHERE conversacion_id=$1 ORDER BY creado_en DESC LIMIT $2`, [convId, limite]);
+  const [conv] = await query<{ canal: string; contacto: string }>(`SELECT canal, contacto FROM conversaciones WHERE id=$1`, [convId]);
+  let heredados: Archivo[] = [];
+  if (conv?.canal === "delegacion" && conv.contacto) heredados = await query<Archivo>(`SELECT * FROM archivos WHERE conversacion_id=$1 ORDER BY creado_en DESC LIMIT $2`, [conv.contacto, limite]);
+  const todos = [...propios, ...heredados.filter((h) => !propios.some((p) => p.id === h.id))].slice(0, limite);
+  if (todos.length) return todos;
+  return query<Archivo>(`SELECT * FROM archivos WHERE origen IN ('whatsapp','panel') ORDER BY creado_en DESC LIMIT $1`, [limite]);
 }
 /**
  * Limpieza: borra del disco y de la tabla los audios (recibidos o generados) con

@@ -147,6 +147,7 @@ function render() {
     c.innerHTML = `
       <div id="chat-hist" style="display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:420px;overflow-y:auto;padding:4px"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
+        <label title="Adjuntar archivo (base, imagen, documento): queda como adjunto de esta conversación" style="display:flex;align-items:center;cursor:pointer;padding:0 8px;border:1px solid var(--e-border);border-radius:8px;background:var(--e-surface)">📎<input type="file" style="display:none" onchange="adjuntarChat(this)" /></label>
         <input id="chat-input" placeholder="Escribile a ${agente.nombre}…" style="flex:1" onkeydown="if(event.key==='Enter')enviarChat()" />
         <button class="primario" id="chat-btn" onclick="enviarChat()">Enviar</button>
       </div>
@@ -491,6 +492,8 @@ async function guardarBiblioteca(tipo) {
   if (tab === "esqueleto") renderPiezasEsq(); else render();
 }
 
+const colorAgente = () => (agente?.identidad?.color) || "#7c3aed";
+
 function campoEdHTML(c, val) {
   const oc = `data-key="${c.key}" data-tipo="${c.t}"`;
   const usa = c.usa ? `<span style="font-size:10px;color:var(--e-text-muted);margin-left:6px" title="Dónde lo lee el motor">⚙ ${c.usa}</span>` : "";
@@ -502,6 +505,12 @@ function campoEdHTML(c, val) {
   if (c.t === "select")
     return `<label>${c.label}${usa}</label><select ${oc}>${c.ops.map(o=>`<option value="${o[0]}" ${val===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select>${ayuda}`;
   return `<label>${c.label}${usa}</label><input ${oc} type="${c.t}" placeholder="${c.ph||""}" value="${val??""}" />${ayuda}`;
+}
+
+function aplicarColor() {
+  const c = colorAgente();
+  document.documentElement.style.setProperty("--e-agente", c);
+  document.querySelectorAll(".av-agente, .burbuja.agente").forEach((el) => { el.style.borderColor = c; });
 }
 
 function renderEditor() {
@@ -659,6 +668,22 @@ function detenerRefrescoChat() {
   if (intervaloChat) { clearInterval(intervaloChat); intervaloChat = null; }
 }
 
+async function adjuntarChat(inp) {
+  const f = inp.files?.[0]; if (!f) return;
+  const nota = document.getElementById("chat-nota"); const hist = document.getElementById("chat-hist");
+  nota.textContent = `Subiendo ${f.name}…`;
+  const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(f); });
+  try {
+    const r = await (await fetch(`/api/agentes/${id}/chat/adjuntos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre: f.name, mime: f.type, base64 }) })).json();
+    if (r.error) throw new Error(r.error);
+    hist.innerHTML += burbuja("usuario", `📎 ${r.nombre} (${r.kb} KB) · archivo_id ${r.archivo_id}`);
+    hist.scrollTop = hist.scrollHeight;
+    nota.textContent = `Adjunto listo. Ahora pedile lo que quieras con ese archivo (ej. "analizá esa base").`;
+    ultimoConteoMsgs = 0;
+  } catch (e) { nota.textContent = "No se pudo adjuntar: " + e.message; }
+  inp.value = "";
+}
+
 async function enviarChat() {
   const inp = document.getElementById("chat-input");
   const btn = document.getElementById("chat-btn");
@@ -707,6 +732,4 @@ async function cargar() {
 cargar().then(() => { if (tab === "chat") iniciarRefrescoChat(); });
 </script>
 </body>
-
-
 </html>

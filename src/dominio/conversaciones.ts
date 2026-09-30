@@ -8,7 +8,7 @@
 
 import { query } from "../db/cliente.js";
 
-export type Canal = "panel" | "whatsapp" | "delegacion";   // delegacion: un agente le encarga a otro; contacto = conversación padre
+export type Canal = "panel" | "whatsapp" | "delegacion" | "evaluacion";   // delegacion: un agente le encarga a otro; contacto = conversación padre
 
 export interface Conversacion {
   id: string;
@@ -32,7 +32,7 @@ export interface Mensaje {
 }
 
 export async function obtenerOCrearConversacion(agenteId: string, canal: Canal, contacto: string): Promise<Conversacion> {
-  const titulo = canal === "panel" ? "Chat del panel" : canal === "delegacion" ? "Delegaciones recibidas" : `WhatsApp ${contacto}`;
+  const titulo = canal === "panel" ? "Chat del panel" : canal === "delegacion" ? "Delegaciones recibidas" : canal === "evaluacion" ? "Evaluación" : `WhatsApp ${contacto}`;
   const [c] = await query<Conversacion>(
     `INSERT INTO conversaciones (agente_id, canal, contacto, titulo) VALUES ($1,$2,$3,$4)
      ON CONFLICT (agente_id, canal, contacto) DO UPDATE SET agente_id = EXCLUDED.agente_id

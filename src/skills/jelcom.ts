@@ -30,16 +30,18 @@ export const jelcomCrearEnvioGuiado: DefSkill = {
   },
   riesgo: "escritura",
   requiereAprobacion: false,
-  tools: ["jelcom_listar_campanas", "jelcom_crear_campana", "jelcom_listar_cuentas_sms", "jelcom_listar_cuentas_whatsapp", "jelcom_analizar_sms", "jelcom_crear_envio", "jelcom_subir_base", "jelcom_ver_envio", "whatsapp_listar_adjuntos"],
-  procedimiento: `1. Entendé el pedido: canal (sms o whatsapp), cliente/campaña, y el contenido (texto del SMS o nombre de plantilla e idioma).
-2. Campaña: si te dieron campana_id usala. Si no, listá las campañas y buscá una cuyo nombre coincida con el cliente del pedido. Si no existe, crearla con el nombre del cliente.
-3. Cuenta: si te dieron cuenta_id usala. Si no, listá las cuentas del canal. Si hay UNA sola, usala. Si hay varias y el pedido no dice cuál, TERMINÁ con "FALLO: falta elegir cuenta" y listá las opciones con su id para que el jefe elija (no adivines).
-4. Si es SMS, analizá el texto con jelcom_analizar_sms y anotá cuántos segmentos ocupa.
-5. Base: si te dieron archivo_id usalo. Si no, buscá con whatsapp_listar_adjuntos el adjunto más reciente que parezca una base (xlsx, xls, csv). Si no hay ninguno, TERMINÁ con "FALLO: no encontré la base; pedile al jefe que la mande como archivo".
-6. Creá el envío con jelcom_crear_envio (nombre descriptivo: cliente + canal + fecha).
-7. Subí la base con jelcom_subir_base y leé válidos/duplicados/inválidos.
-8. Verificá con jelcom_ver_envio que el envío quedó con total de válidos > 0.
-9. Terminá con "OK:" seguido de: envio_id, nombre, canal, campaña, cuenta usada, válidos/duplicados/inválidos, y segmentos si es SMS. Sin disparar nada.`,
+  tools: ["jelcom_listar_campanas", "jelcom_crear_campana", "jelcom_listar_cuentas_sms", "jelcom_listar_cuentas_whatsapp", "jelcom_analizar_sms", "jelcom_inspeccionar_base", "jelcom_listar_envios", "jelcom_crear_envio", "jelcom_subir_base", "jelcom_ver_envio", "whatsapp_listar_adjuntos"],
+  procedimiento: `REGLA DE ORO: NUNCA crees más de UN envío por pedido, y NUNCA crees el envío si la base no es apta. Primero se valida, después se crea.
+1. Entendé el pedido: canal (sms o whatsapp), cliente/campaña, contenido (texto del SMS o nombre de plantilla e idioma), y si dice "sin base" (entonces saltá los pasos 5 y 8).
+2. Campaña: si te dieron campana_id usala. Si no, listá las campañas y buscá una cuyo nombre coincida con el cliente. Si no existe, crearla con el nombre del cliente.
+3. Cuenta: si te dieron cuenta_id usala. Si no, listá las cuentas del canal. Si hay UNA, usala. Si hay varias y el pedido no dice cuál, TERMINÁ con "FALLO: falta elegir cuenta" y listá las opciones con su id (no adivines).
+4. Si es SMS, analizá el texto con jelcom_analizar_sms y anotá los segmentos.
+5. Base (salvo "sin base"), ANTES de crear nada: si te dieron archivo_id usalo; si no, buscá con archivo_listar o whatsapp_listar_adjuntos el más reciente que sea xlsx/xls/csv; si no hay, TERMINÁ con "FALLO: no encontré la base; pedile al jefe que la mande como archivo". Luego jelcom_inspeccionar_base OBLIGATORIO: si da 0 válidos, TERMINÁ con "FALLO: la base no sirve: <columnas, cuál es el teléfono, qué corregir>" SIN crear ningún envío. Recordá la regla de Jelcom: el teléfono debe quedar en 10 dígitos empezando en 3 (sin el 57, que Jelcom agrega), y el encabezado debe ser telefono/celular/movil/phone/numero/cel/tel o estar en la primera columna.
+6. Antes de crear, mirá jelcom_listar_envios: si ya existe un borrador de hoy con la misma campaña, cuenta y texto, REUTILIZALO en vez de crear otro.
+7. Creá el envío con jelcom_crear_envio (nombre: cliente + canal + fecha) solo si no reutilizaste uno.
+8. Subí la base con jelcom_subir_base y leé válidos/duplicados/inválidos. Si válidos = 0, TERMINÁ con "FALLO: Jelcom marcó toda la base inválida" y el detalle de la inspección (no reintentes, no crees otro envío).
+9. Verificá con jelcom_ver_envio.
+10. Terminá con "OK:" seguido de: envio_id, nombre, canal, campaña, cuenta, válidos/duplicados/inválidos (o "sin base"), y segmentos si es SMS. Sin disparar nada.`,
 };
 
 // ─── 2. Monitorear (una observación) ────────────────────────────────────────

@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import "dotenv/config";
+import { query } from "./db/cliente.js";
 import { instalarBitacora } from "./motor/bitacora.js";
 instalarBitacora();
 
@@ -104,6 +105,8 @@ iniciarRegistro()
       await retomarFlujos();
       await retomarProcesos();
       iniciarReloj();
+      const podarAprobaciones = () => query(`UPDATE aprobaciones SET estado='rechazada', resuelto_en=now() WHERE estado='pendiente' AND creado_en < now() - interval '24 hours'`).then((r: any) => { if (r?.length) console.log(`[aprobaciones] ${r.length} aprobaciones viejas rechazadas.`); }).catch(() => {});
+      podarAprobaciones(); setInterval(podarAprobaciones, 3600 * 1000);
       limpiarArchivosViejos().catch((e) => console.warn("[archivos] limpieza:", e?.message || e));
       setInterval(() => limpiarArchivosViejos().catch(() => {}), 24 * 3600 * 1000);
       await iniciarTunel(PORT);

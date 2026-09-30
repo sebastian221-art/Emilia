@@ -22,6 +22,9 @@ import { iniciarFlujo } from "./flujo.js";
 import { textoAprobacion, detalleAprobacion } from "./aprobacion-texto.js";
 import { historialParaModelo, resumirSiHaceFalta, extraerHechosSiHaceFalta } from "./memoria.js";
 import { memoriaParaPrompt } from "../dominio/memoria-lp.js";
+import { dentroDePresupuesto, registrarConsumo } from "./presupuesto.js";
+import { elegirModulos, definicionesActivas, esPseudoToolModulo, moduloDe, resumenModulos } from "./enrutador.js";
+import { cancelada } from "./cancelacion.js";
 import { entregarTexto } from "./entrega.js";
 import { registro } from "../registro/registro.js";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "groq-sdk/resources/chat/completions";
@@ -43,7 +46,9 @@ export interface ResultadoTarea {
 
 export interface OpcionesTarea {
   conversacionId?: string | null;
-  origen?: "panel" | "whatsapp" | "flujo" | "api";
+  origen?: "panel" | "whatsapp" | "flujo" | "api" | "evaluacion";
+  /** Modo simulado (evaluaciones): las tools que no son de lectura NO se ejecutan; se devuelve un resultado ficticio. */
+  simulado?: boolean;
   /** Texto extra para el system prompt (ej. "hablás con tu jefe por WhatsApp"). */
   contextoCanal?: string;
 }
@@ -73,6 +78,12 @@ interface Estado {
   empujonDado?: boolean;
   empujonPermiso?: boolean;
   enfoqueReanudacion?: string;
+  flujoLanzado?: boolean;
+  simulado?: boolean;
+  modulosActivos?: Set<string>;
+  firmasRecientes?: string[];
+  repeticionesSeguidas?: number;
+  empujonHonestidad?: boolean;
 }
 
 // ─── Arranque ────────────────────────────────────────────────────────────────
@@ -82,8 +93,19 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   if (ag.estado !== "activo") throw new Error(`El agente está en estado '${ag.estado}'. Activalo para que trabaje.`);
   if (!process.env.GROQ_API_KEY) throw new Error("Falta GROQ_API_KEY en el .env de emilia. Agregala y reiniciá el servidor.");
 
+  if (cancelada(op.conversacionId)) {
+    const [ej0] = await query<{ id: string }>(`INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen, respuesta, fin) VALUES ($1,'fallida',$2,$3,'cancelada',now()) RETURNING id`, [agenteId, op.conversacionId ?? null, op.origen || "panel"]);
+    return { ok: false, estado: "fallida", respuesta: "cancelada", ejecucionId: ej0.id, conversacionId: op.conversacionId ?? null, turnos: 0, toolCalls: 0, mensajesEnviados: [] };
+  }
+  const pres = await dentroDePresupuesto(ag);
+  if (!pres.ok) {
+    const [ej0] = await query<{ id: string }>(`INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen, respuesta, fin) VALUES ($1,'fallida',$2,$3,$4,now()) RETURNING id`, [agenteId, op.conversacionId ?? null, op.origen || "panel", "presupuesto agotado"]);
+    return { ok: false, estado: "fallida", respuesta: `Hoy ya gasté ${pres.gastado.toFixed(2)} USD de mi tope de ${pres.tope} USD. Para seguir, subí el presupuesto en mi esqueleto (gobierno → presupuesto diario) o esperá a mañana.`, ejecucionId: ej0.id, conversacionId: op.conversacionId ?? null, turnos: 0, toolCalls: 0, mensajesEnviados: [] };
+  }
   const conv = op.conversacionId ? await obtenerConversacion(op.conversacionId) : undefined;
-  const { definiciones: tools, invocables } = await herramientasDeAgente(agenteId);
+  const { invocables } = await herramientasDeAgente(agenteId);
+  const modulosActivos = await elegirModulos(mensajeUsuario, invocables, conv?.resumen?.slice(0, 300));
+  const tools = definicionesActivas(invocables, modulosActivos);
   const sistema = await armarSistema(ag, invocables, conv, op.contextoCanal);
 
   const [ej] = await query<{ id: string }>(
@@ -100,7 +122,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
     temperatura: Number(ag.cerebro?.temperatura ?? 0.3),
     maxTurnos: Number(ag.cerebro?.turnos) || 20,
     maxToolCalls: Number(ag.gobierno?.max_tool_calls) || 30,
-    mensajes, pendientes: [], turnos: 0, toolCalls: 0, mensajesEnviados: [],
+    mensajes, pendientes: [], turnos: 0, toolCalls: 0, mensajesEnviados: [], simulado: !!op.simulado, modulosActivos,
   };
   const ctx = crearContexto(agenteId, ej.id, null, conv?.id ?? null);
 
@@ -137,7 +159,11 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
 
   const ag = await obtenerAgente(fila.agente_id);
   if (!ag) throw new Error("Agente no encontrado");
-  const { definiciones: tools, invocables } = await herramientasDeAgente(fila.agente_id);
+  const { invocables } = await herramientasDeAgente(fila.agente_id);
+  const ultimoUsuario = [...(fila.mensajes || [])].reverse().find((m: any) => m.role === "user")?.content || "";
+  const modulosActivos = await elegirModulos(String(ultimoUsuario), invocables);
+  for (const p of (fila.pendientes || []) as ToolCallPendiente[]) modulosActivos.add(moduloDe(p.nombre));
+  const tools = definicionesActivas(invocables, modulosActivos);
 
   const pendientes: ToolCallPendiente[] = fila.pendientes || [];
   if (!pendientes.length) throw new Error("La ejecución no tiene tool calls pendientes.");
@@ -151,7 +177,7 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
     maxToolCalls: Number(ag.gobierno?.max_tool_calls) || 30,
     mensajes: fila.mensajes || [], pendientes,
     turnos: fila.turnos_usados || 0, toolCalls: fila.tool_calls || 0,
-    mensajesEnviados: fila.mensajes_enviados || [],
+    mensajesEnviados: fila.mensajes_enviados || [], modulosActivos,
   };
   const ctx = crearContexto(estado.agenteId, estado.ejId, null, estado.conversacionId);
   await ctx.traza("aprobacion", aprobada ? `Aprobado: ${pendientes[0].nombre}. Continúa.` : `Rechazado: ${pendientes[0].nombre}. Continúa sin ejecutarla.`);
@@ -167,9 +193,10 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
 }
 
 // ─── El bucle ────────────────────────────────────────────────────────────────
-async function bucle(e: Estado, tools: ChatCompletionTool[], invocables: Map<string, Invocable>, ctx: ContextoEjecucion): Promise<ResultadoTarea> {
+async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables: Map<string, Invocable>, ctx: ContextoEjecucion): Promise<ResultadoTarea> {
   const ag = e.ag;
   let respuestaFinal = "";
+  let tools = toolsIniciales;
 
   try {
     while (true) {
@@ -190,7 +217,9 @@ async function bucle(e: Estado, tools: ChatCompletionTool[], invocables: Map<str
 
       // 3. Siguiente turno con el modelo.
       e.turnos++;
+      if (e.modulosActivos) tools = definicionesActivas(invocables, e.modulosActivos);
       const r = await llamarModelo(e.mensajes, tools, { modelo: e.modelo, temperatura: e.temperatura });
+      if (r.uso) registrarConsumo({ agenteId: e.agenteId, ejecucionId: e.ejId, proveedor: "groq", modelo: r.uso.modelo, tokensIn: r.uso.entrada, tokensOut: r.uso.salida }).catch(() => {});
       if (r.razonamiento && ag.pensar_voz_alta?.visible) await ctx.traza("pensamiento", r.razonamiento);
 
       const asistente: any = { role: "assistant", content: r.texto || null };
@@ -206,7 +235,7 @@ async function bucle(e: Estado, tools: ChatCompletionTool[], invocables: Map<str
         continue;
       }
       // Pidió permiso por texto sin llamar nada: no vale. Un empujón (una vez).
-      const pidePermiso = /(necesito|requiero) (tu |su )?(aprobaci[oó]n|permiso|autorizaci[oó]n)|¿\s*proced(o|emos)\s*\?|¿\s*(quer[eé]s|deseas|quieres) que (proceda|lo haga|ejecute|abra)|dame (tu )?(ok|aprobaci[oó]n)/i;
+      const pidePermiso = /(necesito|requiero) (tu |su )?(ok|aprobaci[oó]n|permiso|autorizaci[oó]n)|¿\s*proced(o|emos)\s*\?|¿\s*(quer[eé]s|deseas|quieres) que (proceda|lo haga|ejecute|abra|integre|cree)|dame (tu )?(ok|aprobaci[oó]n)|respond[eé] \*?ok\*?|⏸/i;
       if (!r.toolCalls.length && pidePermiso.test(r.texto) && e.toolCalls === 0 && !e.empujonPermiso && invocables.size) {
         e.empujonPermiso = true;
         e.mensajes.push({ role: "user", content: "No pidas permiso por texto. Llamá la herramienta que corresponde ahora mismo: si requiere aprobación, el sistema se la pide al jefe automáticamente." });
@@ -215,15 +244,28 @@ async function bucle(e: Estado, tools: ChatCompletionTool[], invocables: Map<str
       }
       if (!r.toolCalls.length) {
         respuestaFinal = r.texto;
-        const afirma = /(envi[eé]|mand[eé]|consult[eé]|ejecut|llam[eé])/i.test(respuestaFinal);
-        if (afirma && e.toolCalls === 0 && (ag.trazas?.verifica ?? true)) {
-          await ctx.traza("verificacion", "El agente afirma haber hecho acciones pero no usó ninguna herramienta real.");
-        } else {
-          await ctx.traza("verificacion", `Completado con ${e.toolCalls} llamada(s) real(es) a herramientas.`);
+        const afirma = /\b(envi[eé]|mand[eé]|consult[eé]|ejecut[eé]|llam[eé]|cre[eé]|abr[ií]|guard[eé]|integr[eé]|hice|realic[eé]|lanc[eé]|configur[eé]|actualic[eé])\b/i.test(respuestaFinal);
+        const usadas = (e.firmasRecientes || []).map((f) => f.split("|")[0]);
+        const diceNavegador = /desde el navegador|en el navegador|abr[ií] el navegador/i.test(respuestaFinal) && !usadas.some((u) => u.startsWith("navegador_"));
+        const sinTools = afirma && e.toolCalls === 0;
+        if ((sinTools || diceNavegador) && (ag.trazas?.verifica ?? true) && !e.empujonHonestidad) {
+          // Una sola vez: exigir que la respuesta coincida con lo que realmente hizo.
+          e.empujonHonestidad = true;
+          e.mensajes.push({ role: "user", content: `Tu respuesta afirma acciones que no coinciden con las herramientas que usaste en esta tarea (${usadas.length ? usadas.join(", ") : "ninguna"}). Reescribila diciendo EXACTAMENTE qué hiciste (con qué herramienta) y qué NO hiciste. Si en realidad falta hacer algo, llamá la herramienta ahora.` });
+          await ctx.traza("verificacion", `Respuesta rechazada por no coincidir con las acciones reales (${sinTools ? "afirma sin herramientas" : "dice navegador sin usarlo"}); se le exigió corregir.`);
+          continue;
         }
+        if (sinTools) await ctx.traza("verificacion", "El agente afirma haber hecho acciones pero no usó ninguna herramienta real.");
+        else await ctx.traza("verificacion", `Completado con ${e.toolCalls} llamada(s) real(es) a herramientas.`);
         break;
       }
 
+      if (e.flujoLanzado) {
+        // El flujo ya se encarga: no dejar que el agente duplique el trabajo.
+        for (const tc of r.toolCalls) e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: "No ejecutado: ya lanzaste un flujo que se encarga de esto y te avisará. Respondé al jefe en una línea y terminá." });
+        await ctx.traza("verificacion", `Ignoradas ${r.toolCalls.length} tool call(s) posteriores al lanzamiento de un flujo.`);
+        continue;
+      }
       e.pendientes = r.toolCalls.map((t) => ({ id: t.id, nombre: t.nombre, argumentos: t.argumentos }));
     }
 
@@ -253,11 +295,48 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
   const nombres = [...invocables.keys()];
   while (e.pendientes.length) {
     const tc = e.pendientes[0];
+
+    if (esPseudoToolModulo(tc.nombre)) {
+      const m = String(tc.argumentos.modulo || "").toLowerCase().trim();
+      const existe = [...invocables.keys()].some((n) => moduloDe(n) === m);
+      if (existe && e.modulosActivos) { e.modulosActivos.add(m); await ctx.traza("tool", `módulo cargado: ${m}`); }
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: existe ? `Módulo ${m} cargado: ${[...invocables.keys()].filter((n) => moduloDe(n) === m).join(", ")}. Ya podés llamar esas herramientas.` : `No existe el módulo "${m}". Módulos: ${[...new Set([...invocables.keys()].map(moduloDe))].join(", ")}.` });
+      e.pendientes.shift();
+      continue;
+    }
+
     const inv = invocables.get(tc.nombre);
 
     if (!inv) {
-      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `La herramienta '${tc.nombre}' no existe. Tus herramientas disponibles son: ${nombres.join(", ") || "(ninguna)"}. Usá una de esas con su nombre exacto.` });
-      await ctx.traza("error", `Tool call a nombre inexistente: ${tc.nombre}`);
+      // ¿Existe en el registro pero la tiene otro agente? → indicar a quién delegar.
+      const existeGlobal = registro.tool(tc.nombre) || registro.skill(tc.nombre) || registro.flujo(tc.nombre);
+      if (existeGlobal && invocables.has("agente_delegar")) {
+        // Las asignaciones viven en agentes.tools/skills/flujos como {items:[nombres], ids:[...]}.
+        const duenos = await query<{ nombre: string }>(`SELECT nombre FROM agentes WHERE estado='activo' AND id<>$2 AND (
+            (tools->'items') ? $1 OR (skills->'items') ? $1 OR (flujos->'items') ? $1)`, [tc.nombre, e.agenteId]).catch(() => [] as any);
+        const quien = (duenos as { nombre: string }[]).map((d) => d.nombre);
+        e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `'${tc.nombre}' existe pero NO es tuya: ${quien.length ? `la tiene ${quien.join(" y ")}` : "no está asignada a nadie"}. ${quien.length ? `Delegá con agente_delegar(agente: "${quien[0]}", tarea: <el pedido completo con contexto y archivo_ids>, esperar: false) y avisale al jefe que se lo pasaste.` : "Pedile al jefe que la asigne (registro_asignar)."}` });
+        await ctx.traza("verificacion", `Intentó ${tc.nombre} (de ${quien.join("/") || "nadie"}); se le indicó delegar.`);
+        e.pendientes.shift();
+        continue;
+      }
+      const parecidas = masParecidas(tc.nombre, nombres, 3);
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `La herramienta '${tc.nombre}' NO existe.${parecidas.length ? ` ¿Quisiste decir ${parecidas.map((x) => `'${x}'`).join(" o ")}? Usá el nombre exacto.` : ""} Herramientas disponibles: ${nombres.join(", ") || "(ninguna)"}.` });
+      await ctx.traza("error", `Tool call a nombre inexistente: ${tc.nombre}${parecidas.length ? " (parecidas: " + parecidas.join(", ") + ")" : ""}`);
+      e.pendientes.shift();
+      continue;
+    }
+
+    // ── 3. Bucle mecánico: misma tool con los mismos argumentos, dos veces seguidas ──
+    const firmaTc = `${tc.nombre}|${JSON.stringify(tc.argumentos || {})}`;
+    e.firmasRecientes = e.firmasRecientes || [];
+    const repetida = e.firmasRecientes.length && e.firmasRecientes[e.firmasRecientes.length - 1] === firmaTc;
+    const vecesSeguidas = repetida ? (e.repeticionesSeguidas || 1) + 1 : 1;
+    e.repeticionesSeguidas = vecesSeguidas;
+    e.firmasRecientes.push(firmaTc); if (e.firmasRecientes.length > 20) e.firmasRecientes.shift();
+    if (vecesSeguidas >= 2 && inv.riesgo !== "lectura" || vecesSeguidas >= 3) {
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `NO EJECUTADO: es la ${vecesSeguidas}ª vez seguida que llamás ${tc.nombre} con exactamente los mismos argumentos. Repetirlo no cambia el resultado. Cambiá de estrategia o reportale al jefe el error exacto que te devolvió antes.` });
+      await ctx.traza("verificacion", `Bloqueada llamada repetida (${vecesSeguidas}x): ${tc.nombre}`);
       e.pendientes.shift();
       continue;
     }
@@ -292,6 +371,21 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       continue;
     }
 
+    if (cancelada(e.conversacionId)) {
+      await ctx.traza("verificacion", "Detenido por el jefe.");
+      await query(`UPDATE ejecuciones SET estado='fallida', respuesta='cancelada', fin=now() WHERE id=$1`, [e.ejId]);
+      return { ok: false, estado: "fallida", respuesta: "cancelada", ejecucionId: e.ejId, conversacionId: e.conversacionId, turnos: e.turnos, toolCalls: e.toolCalls, mensajesEnviados: e.mensajesEnviados };
+    }
+
+    // ── Modo simulado (evaluaciones): nada que escriba/ejecute se corre de verdad ──
+    if (e.simulado && inv.riesgo !== "lectura") {
+      e.toolCalls++;
+      await ctx.traza("tool", `[SIMULADO] ${inv.nombre}(${JSON.stringify(tc.argumentos).slice(0, 200)})`);
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ ok: true, simulado: true, resumen: `(simulación) ${inv.nombre} se habría ejecutado con esos argumentos. Continuá como si hubiera salido bien.` }) });
+      e.pendientes.shift();
+      continue;
+    }
+
     // ── Aviso previo si va a tardar (skills/tools largas por WhatsApp) ──
     // Solo lo que de verdad tarda: skills del Senior y sesiones de Claude Code.
     const esLargo = (inv.tipo === "skill" && (registro.skill(inv.nombre)?.timeoutSeg ?? 300) > 300) || inv.nombre === "codigo_ejecutar_claude" || inv.nombre === "codigo_abrir_sandbox";
@@ -311,7 +405,9 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
     if (inv.tipo === "flujo") {
       try {
         const f = await iniciarFlujo(inv.nombre, tc.argumentos, { agenteId: e.agenteId, conversacionId: e.conversacionId, origen: "agente" });
-        resultado = { ok: true, datos: { ejecucionId: f.ejecucionId, estado: f.estado }, resumen: `Flujo ${inv.nombre} ${f.estado === "completado" ? "completado" : f.estado === "fallido" ? `falló: ${f.error}` : `iniciado (estado: ${f.estado}). Te avisa por este canal.`}` };
+        const enMarcha = f.estado !== "completado" && f.estado !== "fallido";
+        resultado = { ok: true, datos: { ejecucionId: f.ejecucionId, estado: f.estado }, resumen: `Flujo ${inv.nombre} ${f.estado === "completado" ? "completado" : f.estado === "fallido" ? `falló: ${f.error}` : `EN MARCHA (estado: ${f.estado}). El flujo hace TODO lo que sigue por su cuenta (pedir aprobaciones, integrar, recargar, avisar por este canal). NO hagas nada más al respecto ni llames otras herramientas: respondele al jefe en una línea que ya está en marcha y terminá tu turno.`}` };
+        if (enMarcha) e.flujoLanzado = true;
       } catch (err: any) { resultado = { ok: false, error: err?.message || String(err) }; }
     } else if (inv.tipo === "skill") {
       resultado = await ejecutarSkill(inv.origen === "codigo" ? inv.nombre : inv.fila, tc.argumentos, ctx);
@@ -346,7 +442,7 @@ async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: C
     conv?.canal === "whatsapp" ? `FORMATO WHATSAPP: sin tablas, sin encabezados con #, sin bloques de código; solo *negrita*, _cursiva_ y listas con guiones. Máximo ~15 líneas por mensaje. Si el resultado de una herramienta es un informe largo, mandá un RESUMEN de lo importante (5-10 líneas con lo accionable) y terminá con una pregunta corta tipo "¿te mando el detalle completo?". Si lo pide, entonces sí mandá el informe completo (podés partirlo en varios mensajes).` : "",
     contextoCanal || "",
     nombres.length
-      ? `Tus herramientas reales son exactamente estas: ${nombres.join(", ")}. Usá solo esos nombres, con los parámetros que declaran. Si una requiere aprobación, pedila igual: el sistema pausa y pide el OK.`
+      ? `Tenés ${nombres.length} herramientas agrupadas en módulos: ${resumenModulos(invocables)}. En cada tarea se te cargan los módulos relevantes; si te falta uno, llamá modulo_cargar(modulo) y sus herramientas aparecen. Usá solo nombres exactos de tu lista, con los parámetros que declaran. Nunca preguntes si podés: llamá la herramienta; cuando algo necesita OK del jefe, el sistema lo pide solo.`
       : "No tenés herramientas asignadas: solo podés responder con texto.",
     "Usás tus herramientas de verdad cuando hacen falta. Nunca afirmes haber hecho algo (enviar, consultar) sin haber llamado la herramienta correspondiente. Si una herramienta devuelve error, leelo y corregí los argumentos o explicá el problema. Sé honesto.",
     "REGLA DE ESTADO ACTUAL: cualquier pregunta sobre cómo están las cosas AHORA (qué hay en pantalla, qué archivos hay, qué campañas/envíos/procesos existen, cómo va algo) se responde llamando la herramienta en ESTE turno. Lo que viste en turnos anteriores ya no vale. Y el resultado es lo que la herramienta DEVUELVE, nunca lo que vos pusiste en sus argumentos: no inventes datos en los argumentos.",
@@ -361,4 +457,19 @@ async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: C
     memoriaLp ? `=== LO QUE SABÉS DE LARGO PLAZO (memoria persistente; usalo con naturalidad, sin recitarlo) ===\n${memoriaLp}\n=== FIN MEMORIA ===` : "",
     contexto ? `=== CONTEXTO / DOCUMENTOS ===\n${contexto}\n=== FIN ===` : "",
   ].filter(Boolean).join("\n\n");
+}
+
+
+// ─── Similitud simple para sugerir nombres de herramientas ───────────────────
+function distancia(a: string, b: string): number {
+  const m = a.length, n = b.length; const d: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+function masParecidas(nombre: string, candidatos: string[], n: number): string[] {
+  const base = nombre.toLowerCase().replace(/^(browser|web|navigator|window)_/, "navegador_").replace(/[^a-z0-9_]/g, "");
+  return candidatos
+    .map((c) => ({ c, s: distancia(base, c) / Math.max(base.length, c.length) + (c.split("_")[1] && base.includes(c.split("_")[1]) ? -0.3 : 0) + (c.split("_")[0] && base.startsWith(c.split("_")[0]) ? -0.2 : 0) }))
+    .sort((a, b) => a.s - b.s).filter((x) => x.s < 0.7).slice(0, n).map((x) => x.c);
 }

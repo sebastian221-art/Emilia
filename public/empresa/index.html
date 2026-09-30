@@ -85,9 +85,9 @@ function render() {
       return `<div class="nodo-l ${p.estado === "pausado" ? "pausado" : ""} ${sel === nd.id ? "activo" : ""}" id="nl-${nd.id}" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'${nd.id}')" onclick="if(!L.seMovio())verPuesto('${p.id}')">
         <div class="t">${esc(p.titulo)}</div>
         <div class="s">${p.proyecto ? "proyecto " + esc(p.proyecto) : p.campana_jelcom_id ? "campaña #" + p.campana_jelcom_id : esc(p.nombre)} · ${activos ? "🟢 " + activos + " flujo(s)" : "⚪ sin flujos"}</div>
-        <div class="ag"><div class="av">${ag ? esc(ag.nombre[0]) : "?"}</div>${ag ? esc(ag.nombre) : "sin agente"}</div></div>`; }
+        <div class="ag"><div class="av"${col ? ` style="background:${col}22;color:${col}"` : ""}>${ag ? esc(ag.nombre[0]) : "?"}</div>${ag ? esc(ag.nombre) : "sin agente"}</div></div>`; }
     const a = nd.agente;
-    return `<div class="nodo-l libre ${sel === nd.id ? "activo" : ""}" id="nl-${nd.id}" style="left:${nd.x}px;top:${nd.y}px" onmousedown="L.agarrar(event,'${nd.id}')" onclick="if(!L.seMovio())verAgente('${a.id}')"><div class="t">${esc(a.nombre)}</div><div class="s">${esc(a.tipo)} · ${esc(a.estado)} · sin puesto</div></div>`;
+    return `<div class="nodo-l libre ${sel === nd.id ? "activo" : ""}" id="nl-${nd.id}" style="left:${nd.x}px;top:${nd.y}px${a.color ? `;border-left:4px solid ${a.color}` : ""}" onmousedown="L.agarrar(event,'${nd.id}')" onclick="if(!L.seMovio())verAgente('${a.id}')"><div class="t">${esc(a.nombre)}</div><div class="s">${esc(a.tipo)} · ${esc(a.estado)} · sin puesto</div></div>`;
   }).join("");
   L.lineas();
 }

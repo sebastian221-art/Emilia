@@ -81,7 +81,7 @@ export async function herramientasDeAgente(agenteId: string): Promise<{ definici
     type: "function",
     function: {
       name: i.nombre,
-      description: `${i.descripcion} (riesgo: ${i.riesgo}${i.requiereAprobacion ? ", requiere aprobación" : ""})`,
+      description: i.descripcion.replace(/\s*Requiere aprobación[^.]*\.?/gi, "").trim(),
       parameters: i.parametros as any,
     },
   }));

@@ -14,6 +14,7 @@ export interface RespuestaModelo {
   texto: string;
   razonamiento?: string;
   toolCalls: { id: string; nombre: string; argumentos: Record<string, unknown> }[];
+  uso?: { entrada: number; salida: number; modelo: string };
 }
 
 export interface OpcionesModelo {
@@ -54,6 +55,7 @@ export async function llamarModelo(
         try { args = JSON.parse(t.function.arguments || "{}"); } catch {}
         return { id: t.id, nombre: t.function.name, argumentos: args };
       }),
+      uso: { entrada: resp.usage?.prompt_tokens ?? 0, salida: resp.usage?.completion_tokens ?? 0, modelo },
     };
   } catch (e: any) {
     // gpt-oss de Groq a veces "escupe" una tool call mal formada y Groq la

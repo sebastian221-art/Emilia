@@ -8,7 +8,7 @@ export const rutasEmpresa = Router();
 
 rutasEmpresa.get("/api/empresa", async (_req, res, next) => {
   try {
-    const [admin, puestos, activos, agentes] = await Promise.all([administradora(), listarPuestos(), flujosActivos(), query<any>(`SELECT id, nombre, tipo, estado, es_administrador, identidad->>'mision' AS mision FROM agentes ORDER BY creado_en`)]);
+    const [admin, puestos, activos, agentes] = await Promise.all([administradora(), listarPuestos(), flujosActivos(), query<any>(`SELECT id, nombre, tipo, estado, es_administrador, identidad->>'mision' AS mision, identidad->>'color' AS color FROM agentes ORDER BY creado_en`)]);
     res.json({
       administradora: admin ? { id: admin.id, nombre: admin.nombre } : null,
       agentes: agentes.map((a) => ({ ...a, puesto: puestos.find((p) => p.agente_id === a.id)?.nombre || null })),
