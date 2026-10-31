@@ -86,7 +86,7 @@ export async function cancelarFlujo(ejecucionId: string, motivo = "Cancelado por
   if (["completado", "fallido"].includes(fila.estado)) return { ejecucionId, estado: fila.estado, mensaje: "Ya había terminado." };
   const t = temporizadores.get(ejecucionId); if (t) { clearTimeout(t); temporizadores.delete(ejecucionId); }
   await query(`UPDATE aprobaciones SET estado='rechazada', resuelto_en=now() WHERE ejecucion_id=$1 AND estado='pendiente'`, [ejecucionId]);
-  return finalizar(fila, "fallido", undefined, motivo, fila.contexto);
+  return finalizar(fila, "fallido", undefined, motivo, fila.contexto, true);
 }
 
 /** Flujos activos (opcionalmente por nombre). */
@@ -252,8 +252,8 @@ async function pausarPorAprobacion(fila: Fila, pasoId: string, detalle: string, 
   return { ejecucionId: fila.id, estado: "esperando_aprobacion", mensaje: detalle };
 }
 
-async function finalizar(fila: Fila, estado: "completado" | "fallido", resultado?: unknown, error?: string, ctx?: Record<string, any>): Promise<EstadoFlujo> {
-  await log(fila.id, estado === "completado" ? `■ Completado.` : `■ Falló: ${error}`);
+async function finalizar(fila: Fila, estado: "completado" | "fallido", resultado?: unknown, error?: string, ctx?: Record<string, any>, cancelado = false): Promise<EstadoFlujo> {
+  await log(fila.id, estado === "completado" ? `■ Completado.` : cancelado ? `■ Cancelado: ${error}` : `■ Falló: ${error}`);
   await query(`UPDATE flujo_ejecuciones SET estado=$1, resultado=$2, error=$3, contexto=$4, fin=now() WHERE id=$5`,
     [estado, JSON.stringify(resultado ?? null), error ?? null, JSON.stringify(ctx ?? fila.contexto), fila.id]);
 
@@ -262,7 +262,7 @@ async function finalizar(fila: Fila, estado: "completado" | "fallido", resultado
     const def = registro.flujo(fila.nombre_flujo);
     const texto = estado === "completado"
       ? (def?.reporte ? seguro(() => def.reporte!(ctx ?? fila.contexto, resultado), "") : "") || `✅ Flujo *${fila.nombre_flujo}* completado.${resultado !== undefined ? `\n${JSON.stringify(resultado).slice(0, 800)}` : ""}`
-      : `❌ Flujo *${fila.nombre_flujo}* falló: ${error}`;
+      : cancelado ? `⏹ ${fila.nombre_flujo} detenido (${error}).` : `❌ Flujo *${fila.nombre_flujo}* falló: ${error}`;
     await entregarTexto(fila.conversacion_id, texto);
   }
   // Retorno al padre si era sub-flujo.

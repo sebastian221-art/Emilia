@@ -40,7 +40,7 @@ async function main() {
 
   const cfg = {
     identidad: IDENTIDAD, tipo: "trabajo",
-    cerebro: { modelo_rapido: process.env.ECHO_MODELO || "openai/gpt-oss-120b", turnos: 25, temperatura: 0.2 },
+    cerebro: { planificador: process.env.ECHO_PLANIFICADOR || "claude:haiku", ejecutor: process.env.ECHO_EJECUTOR || "openai/gpt-oss-120b", modelo_rapido: "openai/gpt-oss-120b", turnos: 25, temperatura: 0.2 },
     memoria: { modo: "por_sesion", ventana: 24 }, planeamiento: { activo: false }, pensar_voz_alta: { visible: true },
     gobierno: { aprobar_por_whatsapp: true, max_tool_calls: 40, presupuesto_diario_usd: 0 }, trazas: { verifica: true },
     canales: { items: ["whatsapp", "panel"] }, conocimiento: { items: [] },

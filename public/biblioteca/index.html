@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<!-- ARCHIVO: public/biblioteca/index.html -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Biblioteca · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<style>
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pill { font-size: 12px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--e-border); background: var(--e-surface-1); color: var(--e-text-sec); cursor: pointer; white-space: nowrap; }
+.pill b { color: var(--e-text); }
+.pill.activo { border-color: var(--e-accent); color: var(--e-accent); }
+.pill.n0 { opacity: .55; }
+.layout { display: grid; grid-template-columns: 1fr 400px; gap: 14px; height: calc(100vh - 175px); min-height: 520px; }
+.izq { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.buscar { display: flex; gap: 8px; }
+.buscar input { flex: 1; font-size: 14px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--e-border-strong); background: var(--e-surface); color: var(--e-text); }
+.buscar button, .btn { font-size: 12px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--e-border-strong); background: var(--e-surface-1); color: var(--e-text); cursor: pointer; }
+.btn.acc { background: var(--e-accent); border-color: var(--e-accent); color: #fff; }
+.btn.peligro { color: #ff9090; border-color: rgba(214,69,80,.5); }
+.btn:disabled { opacity: .5; cursor: default; }
+.grafo { position: relative; flex: 1; border: 1px solid var(--e-border); border-radius: 14px; background: radial-gradient(ellipse at 50% 40%, rgba(124,58,237,.10), transparent 60%), var(--e-surface); overflow: hidden; min-height: 300px; }
+.grafo canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+.grafo canvas.agarrando { cursor: grabbing; }
+.leyenda { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 10px; font-size: 11px; color: var(--e-text-muted); background: rgba(0,0,0,.25); padding: 6px 10px; border-radius: 8px; backdrop-filter: blur(6px); }
+.leyenda i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.hint { position: absolute; top: 10px; left: 12px; font-size: 11px; color: var(--e-text-muted); }
+.tip { position: absolute; pointer-events: none; font-size: 12px; background: var(--e-surface-1); border: 1px solid var(--e-border-strong); border-radius: 8px; padding: 6px 9px; max-width: 260px; display: none; z-index: 4; }
+.resultados { max-height: 160px; overflow-y: auto; border: 1px solid var(--e-border); border-radius: 12px; background: var(--e-surface-1); padding: 6px; display: none; }
+.res { padding: 7px 9px; border-radius: 8px; cursor: pointer; font-size: 12px; display: flex; gap: 8px; align-items: center; }
+.res:hover { background: var(--e-accent-bg); }
+.res .sc { margin-left: auto; color: var(--e-text-muted); font-size: 11px; }
+.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; overflow-y: auto; }
+.panel h2 { font-family: var(--syne); margin: 0; font-size: 17px; line-height: 1.25; }
+.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 6px; }
+.vacio { text-align: center; padding: 40px 16px; color: var(--e-text-muted); font-size: 13px; }
+.est { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 6px; font-weight: 600; letter-spacing: .02em; }
+.barra { height: 6px; border-radius: 4px; background: var(--e-border); overflow: hidden; margin-top: 6px; }
+.barra i { display: block; height: 100%; background: var(--e-accent); }
+.kv { font-size: 12px; margin: 6px 0; }
+.kv b { color: var(--e-text-sec); font-weight: 600; display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+.etq { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--e-accent-bg); color: var(--e-accent); margin: 2px 3px 0 0; }
+.acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.vec { font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--e-border); cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.vec:hover { color: var(--e-accent); }
+.vec .rel { color: var(--e-text-muted); font-size: 11px; font-family: monospace; }
+.ev { font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--e-border); }
+.ev .m { color: var(--e-text-muted); font-size: 11px; }
+.ev.contra { border-left: 3px solid #ef4444; padding-left: 8px; }
+.ev.apoya { border-left: 3px solid #22c55e; padding-left: 8px; }
+.form input, .form textarea, .form select { width: 100%; box-sizing: border-box; font-size: 12px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--e-border-strong); background: var(--e-surface); color: var(--e-text); margin-top: 3px; font-family: inherit; }
+.form textarea { min-height: 54px; resize: vertical; }
+.form label { display: block; font-size: 11px; color: var(--e-text-sec); margin-top: 8px; }
+.item { font-size: 12px; padding: 10px 0; border-bottom: 1px solid var(--e-border); }
+.item .t { font-weight: 600; }
+.item .m { color: var(--e-text-muted); font-size: 11px; margin-top: 2px; }
+.item .c { color: var(--e-text-sec); margin-top: 4px; white-space: pre-wrap; max-height: 90px; overflow: hidden; }
+.aviso { font-size: 12px; padding: 8px 10px; border-radius: 8px; background: var(--e-warn-bg); color: var(--e-warn-tx); margin-top: 10px; }
+.ok { font-size: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(34,197,94,.15); color: #6ee7b7; margin-top: 10px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+.modal .caja { width: min(560px, 92vw); background: var(--e-surface-1); border: 1px solid var(--e-border-strong); border-radius: 16px; padding: 20px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; height: auto; } .grafo { height: 360px; } }
+</style>
+</head>
+<body>
+<nav>
+  <span class="marca">Emilia</span>
+  <a href="/crear">Crear agente</a>
+  <a href="/agentes">Ver agentes</a>
+  <a href="/skills">Skills</a>
+  <a href="/tools">Tools</a>
+  <a href="/flujos">Flujos</a>
+  <a href="/codigo">Código</a>
+  <a href="/empresa">Empresa</a>
+  <a href="/biblioteca" class="activo">Biblioteca</a>
+  <a href="/actividad">Actividad</a>
+  <a href="/aprobaciones">Aprobaciones</a>
+</nav>
+<main>
+  <div class="top">
+    <div><h1>Biblioteca</h1><p class="sub">La red de conocimiento compartida. Todos los agentes la consultan y aportan; Lara la cuida; vos decidís. Clic en un nodo = ficha · arrastrar = mover · rueda = zoom.</p></div>
+    <div class="pills" id="pills"></div>
+  </div>
+  <div class="layout">
+    <div class="izq">
+      <div class="buscar">
+        <input id="q" placeholder="Buscar por significado: 'cómo mantener despierto un servicio', 'errores de Groq', 'Railway'…" autocomplete="off" />
+        <button class="btn" onclick="buscar()">Buscar</button>
+        <button class="btn" onclick="abrirAportar()">+ Aportar</button>
+      </div>
+      <div class="resultados" id="resultados"></div>
+      <div class="grafo" id="grafo">
+        <div class="hint" id="hint">Cargando la red…</div>
+        <canvas id="cv"></canvas>
+        <div class="tip" id="tip"></div>
+        <div class="leyenda"><span><i style="background:#22c55e"></i>verificado</span><span><i style="background:#3b82f6"></i>probable</span><span><i style="background:#f59e0b"></i>dudoso</span><span><i style="background:#ef4444"></i>contradicho</span><span><i style="background:#6b7280"></i>obsoleto</span><span>· tamaño = uso</span></div>
+      </div>
+    </div>
+    <div class="panel" id="panel"><div class="vacio">Elegí un nodo de la red o buscá algo.</div></div>
+  </div>
+</main>
+
+<div class="modal" id="modal"><div class="caja form" id="modalCaja"></div></div>
+
+<script src="/comun/espejo.js"></script>
+<script>
+const COLOR = { verificado: "#22c55e", probable: "#3b82f6", dudoso: "#f59e0b", contradicho: "#ef4444", obsoleto: "#6b7280" };
+const put = (url, body) => api(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+const delBody = (url, body) => api(url, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+let G = { nodos: [], conexiones: [] }, ST = {}, sel = null, vista = "nodo", resaltados = new Set();
+
+// ─── Estado general ───────────────────────────────────────────────────────────
+async function cargarTodo() {
+  [ST, G] = await Promise.all([api("/api/biblioteca/estado"), api("/api/biblioteca/grafo?limite=400")]);
+  pintarPills(); prepararGrafo();
+  document.getElementById("hint").textContent = G.nodos.length ? `${G.nodos.length} nodos · ${G.conexiones.length} conexiones` : "La red está vacía: pedile a Lara 'traé lo viejo a la bandeja' o aportá algo.";
+}
+function pintarPills() {
+  const p = (k, t, n, v) => `<span class="pill ${vista === v ? "activo" : ""} ${n ? "" : "n0"}" onclick="verLista('${v}')"><b>${n}</b> ${t}</span>`;
+  document.getElementById("pills").innerHTML =
+    `<span class="pill" onclick="cargarTodo()"><b>${ST.nodos ?? 0}</b> nodos · <b>${ST.verificados ?? 0}</b> verificados · <b>${ST.dudosos ?? 0}</b> en duda</span>` +
+    p("bandeja", "en bandeja", ST.entradas_pendientes ?? 0, "bandeja") + p("prop", "propuestas de Lara", ST.propuestas_pendientes ?? 0, "propuestas") + p("pap", "en papelera", ST.papelera ?? 0, "papelera");
+}
+
+// ─── Grafo de fuerzas en canvas ───────────────────────────────────────────────
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const cam = { x: 0, y: 0, k: 1 };
+let sim = { nodos: [], aristas: [], vivo: 0 }, drag = null, pan = null, hover = null, W = 0, H = 0;
+function prepararGrafo() {
+  const prev = new Map(sim.nodos.map((n) => [n.id, n]));
+  const N = G.nodos.length, R = Math.min(260, 60 + N * 6);
+  sim.nodos = G.nodos.map((n, i) => { const p = prev.get(n.id); const a = (i / Math.max(N, 1)) * Math.PI * 2; return { ...n, x: p?.x ?? Math.cos(a) * R + (Math.random() - .5) * 30, y: p?.y ?? Math.sin(a) * R + (Math.random() - .5) * 30, vx: 0, vy: 0, r: 7 + Math.min(14, Math.log2(1 + (n.usos || 0)) * 3 + (n.fuerza || 1) * 2) }; });
+  const idx = new Map(sim.nodos.map((n) => [n.id, n]));
+  sim.aristas = G.conexiones.map((c) => ({ a: idx.get(c.origen_id), b: idx.get(c.destino_id), rel: c.relacion, w: c.peso || 1 })).filter((e) => e.a && e.b);
+  sim.vivo = 400; redimensionar(); if (!prev.size) centrar(); loop();
+}
+function redimensionar() { const r = cv.parentElement.getBoundingClientRect(); W = cv.width = r.width * devicePixelRatio; H = cv.height = r.height * devicePixelRatio; }
+function centrar() { cam.k = 1; cam.x = W / 2; cam.y = H / 2; }
+function paso() {
+  const ns = sim.nodos; if (!ns.length) return;
+  for (let i = 0; i < ns.length; i++) { const a = ns[i]; for (let j = i + 1; j < ns.length; j++) { const b = ns[j]; let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 0.01; if (d2 > 90000) continue; const f = 1800 / d2; dx *= f; dy *= f; a.vx += dx; a.vy += dy; b.vx -= dx; b.vy -= dy; } }
+  for (const e of sim.aristas) { const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.sqrt(dx * dx + dy * dy) + 0.01, f = (d - 90) * 0.015 * Math.min(2, e.w); e.a.vx += dx / d * f; e.a.vy += dy / d * f; e.b.vx -= dx / d * f; e.b.vy -= dy / d * f; }
+  for (const n of ns) { n.vx -= n.x * 0.004; n.vy -= n.y * 0.004; if (n === drag) { n.vx = n.vy = 0; continue; } n.vx *= 0.82; n.vy *= 0.82; n.x += Math.max(-12, Math.min(12, n.vx)); n.y += Math.max(-12, Math.min(12, n.vy)); }
+}
+function dibujar() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  ctx.setTransform(cam.k * devicePixelRatio, 0, 0, cam.k * devicePixelRatio, cam.x, cam.y);
+  const dpr = 1;
+  for (const e of sim.aristas) {
+    const act = sel && (e.a.id === sel || e.b.id === sel);
+    ctx.strokeStyle = act ? "rgba(179,136,255,.9)" : "rgba(179,136,255,.22)"; ctx.lineWidth = (act ? 2 : 1) * dpr;
+    ctx.beginPath(); ctx.moveTo(e.a.x, e.a.y); ctx.lineTo(e.b.x, e.b.y); ctx.stroke();
+    if (act || cam.k > 1.4) { ctx.fillStyle = "rgba(200,190,230,.75)"; ctx.font = `${10 / cam.k}px sans-serif`; ctx.fillText(e.rel, (e.a.x + e.b.x) / 2 + 4, (e.a.y + e.b.y) / 2 - 3); }
+  }
+  for (const n of sim.nodos) {
+    const c = COLOR[n.estado] || COLOR.probable, esSel = n.id === sel, res = resaltados.has(n.id);
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fillStyle = c; ctx.globalAlpha = resaltados.size && !res && !esSel ? .3 : (n.estado === "obsoleto" ? .6 : .95); ctx.fill(); ctx.globalAlpha = 1;
+    if (esSel || res || n === hover) { ctx.strokeStyle = esSel ? "#fff" : "rgba(255,255,255,.7)"; ctx.lineWidth = (esSel ? 3 : 2) / cam.k; ctx.stroke(); }
+    if (cam.k > 0.7 || esSel || res || n.r > 12) { ctx.fillStyle = "rgba(240,236,255,.92)"; ctx.font = `${(esSel ? 13 : 11) / Math.max(cam.k, .9)}px sans-serif`; ctx.fillText(n.titulo.length > 28 ? n.titulo.slice(0, 27) + "…" : n.titulo, n.x + n.r + 4, n.y + 4); }
+  }
+}
+function loop() { if (sim.vivo > 0) { paso(); sim.vivo--; } dibujar(); if (sim.vivo > 0 || drag) requestAnimationFrame(loop); }
+function despertar(n = 60) { const estaba = sim.vivo > 0; sim.vivo = Math.max(sim.vivo, n); if (!estaba) requestAnimationFrame(loop); }
+function aMundo(ev) { const r = cv.getBoundingClientRect(); return { x: ((ev.clientX - r.left) * devicePixelRatio - cam.x) / (cam.k * devicePixelRatio), y: ((ev.clientY - r.top) * devicePixelRatio - cam.y) / (cam.k * devicePixelRatio) }; }
+function nodoEn(p) { let m = null, md = 1e9; for (const n of sim.nodos) { const d = Math.hypot(n.x - p.x, n.y - p.y); if (d < n.r + 4 / cam.k && d < md) { m = n; md = d; } } return m; }
+cv.addEventListener("mousedown", (e) => { const p = aMundo(e); const n = nodoEn(p); if (n) { drag = n; drag._moved = false; despertar(30); } else { pan = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y }; cv.classList.add("agarrando"); } });
+window.addEventListener("mousemove", (e) => {
+  if (drag) { const p = aMundo(e); drag.x = p.x; drag.y = p.y; drag._moved = true; despertar(30); return; }
+  if (pan) { cam.x = pan.cx + (e.clientX - pan.x) * devicePixelRatio; cam.y = pan.cy + (e.clientY - pan.y) * devicePixelRatio; dibujar(); return; }
+  if (e.target !== cv) return;
+  const n = nodoEn(aMundo(e)); const t = document.getElementById("tip");
+  if (n !== hover) { hover = n; dibujar(); }
+  if (n) { const r = document.getElementById("grafo").getBoundingClientRect(); t.style.display = "block"; t.style.left = (e.clientX - r.left + 14) + "px"; t.style.top = (e.clientY - r.top + 10) + "px"; t.innerHTML = `<b>${esc(n.titulo)}</b><br><span style="color:${COLOR[n.estado]}">${n.estado}</span> · ${Math.round(n.confianza * 100)}% · ${n.tipo} · usos ${n.usos}`; }
+  else t.style.display = "none";
+});
+window.addEventListener("mouseup", () => { if (drag && !drag._moved) abrirNodo(drag.id); drag = null; pan = null; cv.classList.remove("agarrando"); despertar(40); });
+cv.addEventListener("wheel", (e) => { e.preventDefault(); const r = cv.getBoundingClientRect(); const mx = (e.clientX - r.left) * devicePixelRatio, my = (e.clientY - r.top) * devicePixelRatio; const k = Math.min(3, Math.max(.3, cam.k * (e.deltaY < 0 ? 1.12 : .89))); cam.x = mx - (mx - cam.x) * (k / cam.k); cam.y = my - (my - cam.y) * (k / cam.k); cam.k = k; dibujar(); }, { passive: false });
+cv.addEventListener("dblclick", () => { centrar(); dibujar(); });
+window.addEventListener("resize", () => { redimensionar(); centrar(); dibujar(); });
+function enfocar(id) { const n = sim.nodos.find((x) => x.id === id); if (!n) return; cam.k = Math.max(cam.k, 1.2); cam.x = W / 2 - n.x * cam.k * devicePixelRatio; cam.y = H / 2 - n.y * cam.k * devicePixelRatio; dibujar(); }
+
+// ─── Búsqueda semántica ───────────────────────────────────────────────────────
+async function buscar() {
+  const q = document.getElementById("q").value.trim(); const box = document.getElementById("resultados");
+  if (!q) { box.style.display = "none"; resaltados.clear(); dibujar(); return; }
+  const r = await api(`/api/biblioteca/buscar?q=${encodeURIComponent(q)}&limite=10`);
+  resaltados = new Set(r.map((n) => n.id)); dibujar();
+  box.style.display = "block";
+  box.innerHTML = r.length ? r.map((n) => `<div class="res" onclick="abrirNodo('${n.id}')"><i style="width:9px;height:9px;border-radius:50%;background:${COLOR[n.estado]};display:inline-block"></i>${esc(n.titulo)} <span style="color:var(--e-text-muted)">${esc(n.tipo)}</span><span class="sc">${Math.round((n.score || 0) * 100)}% afín</span></div>`).join("") : `<div class="res" style="color:var(--e-text-muted)">Nada afín. Podés aportarlo o pedirle a Soga que lo investigue.</div>`;
+}
+document.getElementById("q").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); if (e.key === "Escape") { e.target.value = ""; buscar(); } });
+
+// ─── Ficha de un nodo ─────────────────────────────────────────────────────────
+function estBadge(e) { const c = COLOR[e] || "#888"; return `<span class="est" style="background:${c}22;color:${c};border:1px solid ${c}55">${esc(e)}</span>`; }
+async function abrirNodo(id) {
+  sel = id; vista = "nodo"; pintarPills(); dibujar(); enfocar(id);
+  const n = await api(`/api/biblioteca/nodos/${id}`);
+  const f = n.ficha || {}; const campos = [["que_es", "Qué es"], ["como_funciona", "Cómo funciona"], ["para_que", "Para qué"], ["cuando_usar", "Cuándo usar"], ["cuando_no", "Cuándo no"], ["trampas", "Trampas"], ["formula", "Fórmula / receta"], ["ejemplos", "Ejemplos"], ["preguntas_abiertas", "Preguntas abiertas"]];
+  const edad = Math.round((Date.now() - new Date(n.actualizado_en)) / 864e5);
+  document.getElementById("panel").innerHTML = `
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h2>${esc(n.titulo)}</h2>${estBadge(n.estado)}</div>
+    <div style="font-size:11px;color:var(--e-text-muted);margin-top:4px;font-family:monospace">${esc(n.slug)} · ${esc(n.tipo)}</div>
+    <div class="kv" style="margin-top:10px"><b>Confianza ${Math.round(n.confianza * 100)}% · fuerza ${Number(n.fuerza).toFixed(2)} · ${n.usos} usos</b><div class="barra"><i style="width:${Math.round(n.confianza * 100)}%;background:${COLOR[n.estado]}"></i></div></div>
+    ${edad > 60 ? `<div class="aviso">Sin actualizar hace ${edad} días. Puede estar viejo: refrescalo con Soga.</div>` : ""}
+    <div style="font-size:13px;margin-top:10px;line-height:1.45">${esc(n.resumen)}</div>
+    <div style="margin-top:6px">${(n.etiquetas || []).map((t) => `<span class="etq">${esc(t)}</span>`).join("")}</div>
+    <div class="acciones">
+      <button class="btn" onclick="editarNodo('${n.id}')">✎ Editar</button>
+      <button class="btn" onclick="pedir('${n.id}','refrescar')" title="Soga busca si hay algo más nuevo y lo aporta">↻ Refrescar con Soga</button>
+      <button class="btn" onclick="pedir('${n.id}','profundizar')" title="System lo estudia a fondo, lo prueba y mejora la ficha">⚗ Profundizar con System</button>
+      <button class="btn" onclick="pedir('${n.id}','verificar')" title="Lara revisa evidencias y contradicciones">✓ Verificar con Lara</button>
+      <button class="btn" onclick="marcar('${n.id}','${n.estado === "dudoso" ? "probable" : "dudoso"}')">${n.estado === "dudoso" ? "Quitar duda" : "Marcar dudoso"}</button>
+      <button class="btn" onclick="conectarDesde('${n.id}','${esc(n.slug)}')">⟷ Conectar</button>
+      <button class="btn peligro" onclick="borrarNodo('${n.id}','${esc(n.titulo)}')">🗑 Papelera</button>
+    </div>
+    ${campos.filter(([k]) => f[k]).map(([k, t]) => `<div class="kv"><b>${t}</b>${esc(typeof f[k] === "string" ? f[k] : JSON.stringify(f[k]))}</div>`).join("") || `<p class="sub" style="margin-top:10px">Sin ficha detallada todavía. Profundizá con System o editá a mano.</p>`}
+    <h3>Conexiones (${n.vecinos.length})</h3>
+    ${n.vecinos.length ? n.vecinos.map((v) => `<div class="vec" onclick="abrirNodo('${v.id}')"><i style="width:8px;height:8px;border-radius:50%;background:${COLOR[v.estado]};display:inline-block"></i>${esc(v.titulo)} <span class="rel">${esc(v.direccion === "sale" ? "→ " : "← ")}${esc(v.relacion)}</span><span style="margin-left:auto;cursor:pointer;color:var(--e-text-muted)" title="quitar conexión" onclick="event.stopPropagation();quitarConexion('${v.direccion === "sale" ? n.id : v.id}','${v.direccion === "sale" ? v.id : n.id}','${esc(v.relacion)}','${n.id}')">×</span></div>`).join("") : `<p class="sub">Aislado. Conectalo o pedile a Lara que lo relacione.</p>`}
+    <h3>Evidencias (${n.evidencias.length})</h3>
+    ${n.evidencias.length ? n.evidencias.map((e) => `<div class="ev ${e.resultado}"><div>${esc(e.afirmacion)}</div><div class="m">${esc(e.resultado)} · ${esc(e.origen)}${e.fuente ? ` · <a href="${esc(e.fuente)}" target="_blank" style="color:var(--e-accent)">${esc(e.fuente.replace(/^https?:\/\//, "").slice(0, 50))}</a>` : ""} · ${e.fecha_fuente ? "info de " + esc(e.fecha_fuente).slice(0, 10) + " · " : ""}guardado ${new Date(e.creado_en).toLocaleDateString("es-CO")}</div></div>`).join("") : `<p class="sub">Sin evidencias: por eso no puede ser 'verificado'.</p>`}
+    <h3>Uso por los agentes (${n.usos})</h3>
+    ${renderUsos(n)}
+    <h3>Trazabilidad</h3>
+    <div class="kv">Aprendido por <b style="display:inline;text-transform:none">${esc(n.aprendido_por_nombre || "—")}</b> · verificado por <b style="display:inline;text-transform:none">${esc(n.verificado_por_nombre || "—")}</b><br>creado ${new Date(n.creado_en).toLocaleString("es-CO")} · actualizado ${new Date(n.actualizado_en).toLocaleString("es-CO")}${n.ultimo_uso_en ? ` · último uso ${new Date(n.ultimo_uso_en).toLocaleString("es-CO")}` : ""}</div>`;
+}
+function renderUsos(n) { const u = Array.isArray(n.usos_lista) ? n.usos_lista : []; return u.length ? u.slice(0, 15).map((x) => `<div class="ev"><span style="color:${x.resultado === "funciono" ? "#6ee7b7" : x.resultado === "fallo" ? "#ff9090" : "var(--e-text-sec)"}">${esc(x.resultado)}</span> · ${esc(x.agente || "agente")}${x.nota ? ` · ${esc(x.nota)}` : ""}<div class="m">${new Date(x.creado_en).toLocaleString("es-CO")}</div></div>`).join("") : `<p class="sub">Nadie lo usó todavía.</p>`; }
+
+async function editarNodo(id) {
+  const n = await api(`/api/biblioteca/nodos/${id}`); const f = n.ficha || {};
+  const campo = (k, t) => `<label>${t}<textarea data-f="${k}">${esc(f[k] || "")}</textarea></label>`;
+  modal(`<h2 style="font-family:var(--syne);margin:0 0 8px">Editar: ${esc(n.titulo)}</h2>
+    <label>Título<input id="e_titulo" value="${esc(n.titulo)}"></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <label>Tipo<select id="e_tipo">${["concepto", "herramienta", "tecnica", "proyecto", "leccion", "formula", "persona", "fuente"].map((t) => `<option ${t === n.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label>Estado<select id="e_estado">${Object.keys(COLOR).map((t) => `<option ${t === n.estado ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label>Confianza (0-100)<input id="e_conf" type="number" min="0" max="100" value="${Math.round(n.confianza * 100)}"></label>
+    </div>
+    <label>Resumen<textarea id="e_resumen">${esc(n.resumen)}</textarea></label>
+    <label>Etiquetas (coma)<input id="e_etq" value="${esc((n.etiquetas || []).join(", "))}"></label>
+    <div style="max-height:40vh;overflow-y:auto;margin-top:6px;padding-right:4px">${[["que_es", "Qué es"], ["como_funciona", "Cómo funciona"], ["para_que", "Para qué"], ["cuando_usar", "Cuándo usar"], ["cuando_no", "Cuándo no"], ["trampas", "Trampas"], ["formula", "Fórmula / receta"], ["ejemplos", "Ejemplos"], ["preguntas_abiertas", "Preguntas abiertas"]].map(([k, t]) => campo(k, t)).join("")}</div>
+    <div class="acciones" style="justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn acc" id="e_guardar">Guardar</button></div>`);
+  document.getElementById("e_guardar").onclick = async () => {
+    const ficha = {}; document.querySelectorAll("#modalCaja textarea[data-f]").forEach((t) => { if (t.value.trim()) ficha[t.dataset.f] = t.value.trim(); });
+    await put(`/api/biblioteca/nodos/${id}`, { titulo: v("e_titulo"), tipo: v("e_tipo"), estado: v("e_estado"), confianza: Number(v("e_conf")) / 100, resumen: v("e_resumen"), etiquetas: v("e_etq").split(",").map((s) => s.trim()).filter(Boolean), ficha });
+    cerrarModal(); await cargarTodo(); abrirNodo(id);
+  };
+}
+const v = (id) => document.getElementById(id).value;
+async function marcar(id, estado) { await put(`/api/biblioteca/nodos/${id}`, { estado }); await cargarTodo(); abrirNodo(id); }
+async function borrarNodo(id, titulo) { if (!confirm(`¿Mandar "${titulo}" a la papelera? Se puede restaurar después.`)) return; await del(`/api/biblioteca/nodos/${id}`); sel = null; await cargarTodo(); verLista("papelera"); }
+function conectarDesde(id, slug) {
+  modal(`<h2 style="font-family:var(--syne);margin:0 0 8px">Conectar ${esc(slug)} con…</h2>
+    <label>Nodo destino<select id="c_dest">${G.nodos.filter((n) => n.id !== id).sort((a, b) => a.titulo.localeCompare(b.titulo)).map((n) => `<option value="${n.slug}">${esc(n.titulo)} (${n.slug})</option>`).join("")}</select></label>
+    <label>Relación<select id="c_rel">${["relacionado_con", "usa", "es_parte_de", "depende_de", "reemplaza_a", "compite_con", "se_contradice_con", "se_aplico_en"].map((r) => `<option>${r}</option>`).join("")}</select></label>
+    <label>Nota<input id="c_nota" placeholder="por qué se conectan"></label>
+    <div class="acciones" style="justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn acc" id="c_ok">Conectar</button></div>`);
+  document.getElementById("c_ok").onclick = async () => { await post("/api/biblioteca/conexiones", { origen: slug, destino: v("c_dest"), relacion: v("c_rel"), nota: v("c_nota") }); cerrarModal(); await cargarTodo(); abrirNodo(id); };
+}
+async function quitarConexion(origen_id, destino_id, relacion, volver) { if (!confirm("¿Quitar esta conexión?")) return; await delBody("/api/biblioteca/conexiones", { origen_id, destino_id, relacion }); await cargarTodo(); abrirNodo(volver); }
+async function pedir(id, accion) {
+  const b = event?.target; if (b) { b.disabled = true; b.textContent = "pidiendo…"; }
+  try { const r = await post(`/api/biblioteca/nodos/${id}/pedir`, { accion }); if (b) b.textContent = `✓ ${r.agente} trabaja en eso`; }
+  catch (e) { if (b) { b.disabled = false; b.textContent = "falló: " + e.message.slice(0, 40); } }
+}
+
+// ─── Listas: bandeja, propuestas, papelera ────────────────────────────────────
+async function verLista(tipo) {
+  vista = tipo; sel = null; pintarPills(); dibujar();
+  const p = document.getElementById("panel");
+  if (tipo === "bandeja") {
+    const e = await api("/api/biblioteca/bandeja");
+    p.innerHTML = `<h2>Bandeja</h2><p class="sub">Lo que los agentes aportaron y Lara todavía no integró a la red.</p>
+      <div class="acciones"><button class="btn acc" onclick="pedirLara('integrar')" ${e.length ? "" : "disabled"}>Que Lara integre todo</button><button class="btn" onclick="pedirLara('migrar')">Traer lo viejo (documentos, hallazgos, ADR)</button></div>
+      ${e.length ? e.map((x) => `<div class="item"><div class="t">${esc(x.titulo)}</div><div class="m">${esc(x.origen)} · ${esc(x.agente || "—")} · ${new Date(x.creado_en).toLocaleString("es-CO")}${(x.fuentes || []).length ? ` · ${x.fuentes.length} fuente(s)` : ""}</div><div class="c">${esc(String(x.contenido || "").slice(0, 400))}</div></div>`).join("") : `<div class="vacio">Vacía.</div>`}`;
+  } else if (tipo === "propuestas") {
+    const e = await api("/api/biblioteca/propuestas");
+    p.innerHTML = `<h2>Propuestas de Lara</h2><p class="sub">Cambios que la guardiana sugiere y que solo vos aprobás.</p>
+      <div class="acciones"><button class="btn" onclick="pedirLara('auditar')">Pedirle una auditoría ahora</button></div>
+      ${e.length ? e.map((x) => `<div class="item"><div class="t">${esc(x.tipo)}: ${esc(x.nodo_titulo || "")}${x.nodo2_titulo ? ` + ${esc(x.nodo2_titulo)}` : ""}</div><div class="c">${esc(x.motivo)}</div><div class="m">${esc(x.propuesto_por_nombre || "sistema")} · ${new Date(x.creado_en).toLocaleString("es-CO")}</div><div class="acciones"><button class="btn acc" onclick="resolver('${x.id}',true)">Aprobar</button><button class="btn" onclick="resolver('${x.id}',false)">Rechazar</button>${x.nodo_id ? `<button class="btn" onclick="abrirNodo('${x.nodo_id}')">ver nodo</button>` : ""}</div></div>`).join("") : `<div class="vacio">Nada pendiente.</div>`}`;
+  } else if (tipo === "papelera") {
+    const e = await api("/api/biblioteca/papelera");
+    p.innerHTML = `<h2>Papelera</h2><p class="sub">Nodos borrados. Restaurar los devuelve con sus conexiones y evidencias; borrar definitivo no se deshace.</p>
+      ${e.length ? e.map((x) => `<div class="item"><div class="t">${esc(x.titulo)} ${estBadge(x.estado)}</div><div class="m">borrado ${new Date(x.borrado_en).toLocaleString("es-CO")}</div><div class="c">${esc(x.resumen)}</div><div class="acciones"><button class="btn acc" onclick="restaurar('${x.id}')">Restaurar</button><button class="btn peligro" onclick="borrarDef('${x.id}','${esc(x.titulo)}')">Borrar definitivo</button></div></div>`).join("") : `<div class="vacio">Vacía.</div>`}`;
+  }
+}
+async function resolver(id, aprobar) { await post(`/api/biblioteca/propuestas/${id}`, { aprobar }); await cargarTodo(); verLista("propuestas"); }
+async function restaurar(id) { await post(`/api/biblioteca/nodos/${id}/restaurar`); await cargarTodo(); abrirNodo(id); }
+async function borrarDef(id, t) { if (!confirm(`¿Borrar "${t}" para siempre? No se puede deshacer.`)) return; await del(`/api/biblioteca/papelera/${id}`); await cargarTodo(); verLista("papelera"); }
+async function pedirLara(accion) { const b = event?.target; if (b) { b.disabled = true; b.textContent = "pidiendo…"; } try { const r = await post(`/api/biblioteca/pedir`, { accion }); if (b) b.textContent = `✓ ${r.agente} trabaja en eso`; } catch (e) { if (b) { b.disabled = false; b.textContent = "falló: " + e.message.slice(0, 40); } } }
+
+// ─── Aportar a mano ───────────────────────────────────────────────────────────
+function abrirAportar() {
+  modal(`<h2 style="font-family:var(--syne);margin:0 0 8px">Aportar conocimiento</h2><p class="sub">Va a la bandeja; Lara lo convierte en nodo (o lo fusiona con uno existente).</p>
+    <label>Título<input id="a_titulo" placeholder="p. ej. Groq repite tool calls con argumentos largos"></label>
+    <label>Contenido<textarea id="a_cont" style="min-height:120px" placeholder="Qué es, cómo funciona, cuándo sirve, trampas…"></textarea></label>
+    <label>Fuentes (una URL por línea, opcional)<textarea id="a_fuentes"></textarea></label>
+    <label>Etiquetas (coma)<input id="a_etq"></label>
+    <div class="acciones" style="justify-content:flex-end"><button class="btn" onclick="cerrarModal()">Cancelar</button><button class="btn acc" id="a_ok">Aportar</button></div>`);
+  document.getElementById("a_ok").onclick = async () => { if (!v("a_titulo").trim() || !v("a_cont").trim()) return alert("Título y contenido."); await post("/api/biblioteca/aportar", { titulo: v("a_titulo"), contenido: v("a_cont"), fuentes: v("a_fuentes").split("\n").map((s) => s.trim()).filter(Boolean), etiquetas: v("a_etq").split(",").map((s) => s.trim()).filter(Boolean) }); cerrarModal(); await cargarTodo(); verLista("bandeja"); };
+}
+function modal(html) { document.getElementById("modalCaja").innerHTML = html; document.getElementById("modal").style.display = "flex"; }
+function cerrarModal() { document.getElementById("modal").style.display = "none"; }
+document.getElementById("modal").addEventListener("mousedown", (e) => { if (e.target.id === "modal") cerrarModal(); });
+
+cargarTodo().catch((e) => { document.getElementById("hint").textContent = "Error: " + e.message; });
+setInterval(async () => { try { ST = await api("/api/biblioteca/estado"); pintarPills(); } catch {} }, 30000);
+</script>
+</body>
+</html>

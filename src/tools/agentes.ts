@@ -57,7 +57,9 @@ export const agenteDelegar: DefTool = {
     const conv = await obtenerOCrearConversacion(ag.id, "delegacion", ctx.conversacionId);
     const [padre] = await query<any>(`SELECT a.nombre FROM conversaciones c JOIN agentes a ON a.id=c.agente_id WHERE c.id=$1`, [ctx.conversacionId]);
     const jefeNum = (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, "");
-    const contextoCanal = `Te delegó esta tarea el agente ${padre?.nombre || "otro agente"} en nombre de Sebastián (el jefe)${jefeNum ? `, cuyo WhatsApp es ${jefeNum} (usalo cuando haya que mandarle algo: no se lo preguntes)` : ""}. Tu respuesta final le llega a Sebastián por su canal: escribí para él, claro y completo. Si necesitás aprobación para algo, pedila: el sistema se la muestra a él.`;
+    const [convPadre] = await query<any>(`SELECT canal FROM conversaciones WHERE id=$1`, [ctx.conversacionId]).catch(() => [] as any);
+    const porWhatsapp = convPadre?.canal === "whatsapp";
+    const contextoCanal = `Te delegó esta tarea el agente ${padre?.nombre || "otro agente"} en nombre de Sebastián (el jefe)${jefeNum ? `, cuyo WhatsApp es ${jefeNum} (usalo cuando haya que mandarle algo: no se lo preguntes)` : ""}. Tu respuesta final le llega a Sebastián por ${porWhatsapp ? "WhatsApp" : "el panel"}: escribí para él, claro y completo.${porWhatsapp ? " FORMATO WHATSAPP: sin tablas, sin encabezados con #, sin bloques de código; solo *negrita*, _cursiva_ y listas con guiones; máximo ~15 líneas (si hay más, resumí y ofrecé el detalle)." : ""} Si necesitás aprobación para algo, pedila: el sistema se la muestra a él.`;
 
     // El pedido LITERAL del jefe viaja junto con la tarea: así el trabajador no hereda un recorte del administrador.
     const [ultimoJefe] = await query<{ contenido: string }>(`SELECT contenido FROM mensajes WHERE conversacion_id=$1 AND rol='usuario' ORDER BY creado_en DESC LIMIT 1`, [ctx.conversacionId]).catch(() => [] as any);

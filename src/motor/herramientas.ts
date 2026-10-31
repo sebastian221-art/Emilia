@@ -41,6 +41,12 @@ export async function herramientasDeAgente(agenteId: string): Promise<{ definici
     // Tools de la UI vieja: ya no se ofrecen al modelo (no hay ejecutor para ellas).
   }
 
+  // ── Herramientas universales: la biblioteca compartida es de TODOS los agentes (consultar, aportar, registrar uso). ──
+  for (const nombre of ["biblioteca_consultar", "biblioteca_aportar", "biblioteca_usar"]) {
+    const def = registro.tool(nombre);
+    if (def && !invocables.has(nombre)) invocables.set(nombre, { nombre, tipo: "tool", origen: "codigo", riesgo: def.riesgo, requiereAprobacion: !!def.requiereAprobacion, descripcion: def.descripcion, parametros: def.parametros });
+  }
+
   // ── Skills asignadas ──
   for (const fila of await skillsDeAgente(agenteId)) {
     if (fila.activo === false) continue;

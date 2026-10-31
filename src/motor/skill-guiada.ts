@@ -41,7 +41,7 @@ export function desdeFilaUI(fila: any): SkillGuiada {
     salida: sec.io?.salida,
     criterioExito: sec.verificacion?.criterio,
     siFalta: sec.io?.si_falta,
-    maxPasos: Number(sec.complejidad?.presupuesto) || 10,
+    maxPasos: Number(registro.skill(fila.nombre)?.maxPasos) || Number(sec.complejidad?.presupuesto) || 10,
     riesgo: fila.nivel_riesgo,
   };
 }
@@ -61,7 +61,8 @@ export async function ejecutarSkillGuiada(sk: SkillGuiada, args: Record<string, 
   const sistema = [
     `Estás ejecutando la skill "${sk.nombre}": ${sk.descripcion}`,
     sk.entradas ? `Datos que necesita: ${sk.entradas}` : "",
-    `Procedimiento a seguir:\n${sk.procedimiento}`,
+    // {clave} dentro del procedimiento se reemplaza por el argumento recibido (si no vino, queda '—').
+    `Procedimiento a seguir:\n${sk.procedimiento.replace(/\{([a-z_]+)\}/g, (m, k) => (k in (args || {}) && args[k] != null && args[k] !== "") ? String(args[k]) : (m === m.toLowerCase() ? "—" : m))}`,
     sk.salida ? `Qué debés devolver al terminar: ${sk.salida}` : "",
     sk.criterioExito ? `Criterio de éxito: ${sk.criterioExito}` : "",
     sk.siFalta === "pregunta" ? "Si te falta un dato imprescindible, NO lo inventes: terminá y decí exactamente qué falta." : "",
@@ -76,10 +77,11 @@ export async function ejecutarSkillGuiada(sk: SkillGuiada, args: Record<string, 
     { role: "user", content: `Argumentos recibidos: ${JSON.stringify(args)}. Ejecutá el procedimiento.` },
   ];
 
-  const maxPasos = Math.max(1, Math.min(sk.maxPasos ?? 10, 30));
+  const maxPasos = Math.max(1, Math.min(sk.maxPasos ?? 10, 60));
   let pasos = 0, llamadas = 0;
   await ctx.traza("skill", `▶ ${sk.nombre} (guiada) con ${JSON.stringify(args).slice(0, 200)}`);
 
+  const yaLlamadas = new Map<string, string>();   // misma tool + mismos argumentos → no se repite (ahorra pasos y evita bucles)
   while (pasos < maxPasos) {
     pasos++;
     const r = await ctx.modelo(mensajes, tools);
@@ -96,7 +98,15 @@ export async function ejecutarSkillGuiada(sk: SkillGuiada, args: Record<string, 
 
     for (const tc of r.toolCalls) {
       llamadas++;
+      const clave = `${tc.nombre}|${tc.nombre === "web_leer" ? String(tc.argumentos?.url || "") : JSON.stringify(tc.argumentos || {})}`;
+      if (yaLlamadas.has(clave)) {
+        const previo = yaLlamadas.get(clave)!;
+        await ctx.traza("verificacion", `${sk.nombre}: llamada repetida a ${tc.nombre} con los mismos argumentos; se devolvió el resultado anterior.`);
+        mensajes.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ ok: false, error: `Ya llamaste ${tc.nombre} con exactamente esos argumentos en esta skill. No repitas: usá lo que ya tenés (abajo) o cambiá de enfoque.`, resultado_anterior: previo.slice(0, 2500) }) });
+        continue;
+      }
       const res = await ctx.ejecutarTool(tc.nombre, tc.argumentos);   // el contexto ya restringe a `permitidas`
+      yaLlamadas.set(clave, JSON.stringify(res));
       await ctx.traza("tool", `${sk.nombre} › ${tc.nombre}(${JSON.stringify(tc.argumentos).slice(0, 150)}) → ${res.ok ? "ok" : "ERROR"} ${(res.resumen || res.error || "").slice(0, 200)}`);
       mensajes.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(res).slice(0, 4000) });
     }

@@ -108,6 +108,8 @@ export interface DefSkill {
   ejecutar?: FnEjecutar;
   /** Tiempo máximo de la skill (por defecto 5 min). Las que corren Claude Code necesitan más. */
   timeoutSeg?: number;
+  /** Presupuesto de pasos (llamadas al modelo) de una skill guiada. Por defecto 10; máximo 30. */
+  maxPasos?: number;
 }
 
 // ─── FLUJO ───────────────────────────────────────────────────────────────────

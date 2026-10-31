@@ -182,7 +182,8 @@ export function serializarSkill(s: DefSkill): SkillSerializada {
     nombre: s.nombre, modulo: s.modulo, descripcion: s.descripcion, cuandoUsar: s.cuandoUsar || "",
     parametros: s.parametros, riesgo: s.riesgo, requiereAprobacion: !!s.requiereAprobacion,
     tools: s.tools, procedimiento: s.procedimiento || "", tipo: s.ejecutar ? "codigo" : "guiada", origen: "codigo",
-  };
+    ...(s.maxPasos ? { maxPasos: s.maxPasos } : {}),
+  } as SkillSerializada;
 }
 export function serializarFlujo(f: DefFlujo): FlujoSerializado {
   const pasos = f.pasos.map((p) => {

@@ -51,6 +51,8 @@ export interface OpcionesTarea {
   simulado?: boolean;
   /** Texto extra para el system prompt (ej. "hablás con tu jefe por WhatsApp"). */
   contextoCanal?: string;
+  /** Modo conversación: cada turno lo lleva el planificador (el cerebro bueno), temperatura más alta, sin empujones de "actuá". */
+  conversacion?: boolean;
 }
 
 interface ToolCallPendiente {
@@ -60,12 +62,26 @@ interface ToolCallPendiente {
   decision?: "aprobada" | "rechazada";
 }
 
+/** Cerebro doble: planificador (decide) y ejecutor (hace). Acepta la config vieja (modelo_rapido) como único cerebro. */
+function cerebros(ag: any): { planificador: string; ejecutor: string } {
+  const c = ag?.cerebro || {};
+  const claudeActiva = !!process.env.ANTHROPIC_API_KEY && (process.env.CLAUDE_API_ACTIVA || "true").toLowerCase() !== "false";
+  const resolver = (m: string) => (/^(claude|anthropic):/i.test(m) && !claudeActiva ? MODELO_POR_DEFECTO : m);
+  const ejecutor = resolver(c.ejecutor || c.modelo_rapido || MODELO_POR_DEFECTO);
+  const planificador = resolver(c.planificador || ejecutor);
+  return { planificador, ejecutor };
+}
+function proveedorDe(modelo: string) { return /^(claude|anthropic):/i.test(modelo) ? "anthropic" : "groq"; }
+
 interface Estado {
   ejId: string;
   agenteId: string;
   conversacionId: string | null;
   ag: any;
-  modelo: string;
+  modelo: string;            // ejecutor (lo mecánico)
+  planificador?: string;     // el que decide (primer turno, fallos, cierre). Si no hay, = modelo.
+  escalar?: boolean;         // el próximo turno lo toma el planificador
+  cierreHecho?: boolean;
   temperatura: number;
   maxTurnos: number;
   maxToolCalls: number;
@@ -76,11 +92,13 @@ interface Estado {
   mensajesEnviados: string[];
   avisoLargoEnviado?: boolean;
   empujonDado?: boolean;
+  conversacion?: boolean;
   empujonPermiso?: boolean;
   enfoqueReanudacion?: string;
   flujoLanzado?: boolean;
   simulado?: boolean;
   modulosActivos?: Set<string>;
+  soloTexto?: boolean;
   firmasRecientes?: string[];
   repeticionesSeguidas?: number;
   empujonHonestidad?: boolean;
@@ -106,7 +124,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   const { invocables } = await herramientasDeAgente(agenteId);
   const modulosActivos = await elegirModulos(mensajeUsuario, invocables, conv?.resumen?.slice(0, 300));
   const tools = definicionesActivas(invocables, modulosActivos);
-  const sistema = await armarSistema(ag, invocables, conv, op.contextoCanal);
+  const sistema = await armarSistema(ag, invocables, conv, op.contextoCanal, mensajeUsuario);
 
   const [ej] = await query<{ id: string }>(
     `INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen) VALUES ($1,'en_curso',$2,$3) RETURNING id`,
@@ -118,8 +136,9 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
 
   const estado: Estado = {
     ejId: ej.id, agenteId, conversacionId: conv?.id ?? null, ag,
-    modelo: ag.cerebro?.modelo_rapido || MODELO_POR_DEFECTO,
-    temperatura: Number(ag.cerebro?.temperatura ?? 0.3),
+    modelo: cerebros(ag).ejecutor, planificador: cerebros(ag).planificador, escalar: true,   // el primer turno siempre lo decide el planificador
+    conversacion: !!op.conversacion,
+    temperatura: op.conversacion ? Math.max(0.7, Number(ag.cerebro?.temperatura ?? 0.3)) : Number(ag.cerebro?.temperatura ?? 0.3),
     maxTurnos: Number(ag.cerebro?.turnos) || 20,
     maxToolCalls: Number(ag.gobierno?.max_tool_calls) || 30,
     mensajes, pendientes: [], turnos: 0, toolCalls: 0, mensajesEnviados: [], simulado: !!op.simulado, modulosActivos,
@@ -129,7 +148,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   // Plan previo si está activo.
   if (ag.planeamiento?.activo) {
     try {
-      const rp = await llamarModelo([{ role: "system", content: `${sistema}\n\nArmá un plan breve (3-6 pasos). Solo el plan.` }, { role: "user", content: mensajeUsuario }], [], { modelo: estado.modelo, temperatura: estado.temperatura });
+      const rp = await llamarModelo([{ role: "system", content: `${sistema}\n\nArmá un plan breve (3-6 pasos). Solo el plan.` }, { role: "user", content: mensajeUsuario }], [], { modelo: estado.planificador || estado.modelo, temperatura: estado.temperatura });
       await query(`UPDATE ejecuciones SET plan=$1 WHERE id=$2`, [rp.texto, ej.id]);
       if (rp.razonamiento && ag.pensar_voz_alta?.visible) await ctx.traza("pensamiento", rp.razonamiento);
       mensajes.push({ role: "assistant", content: `Mi plan:\n${rp.texto}` });
@@ -171,7 +190,7 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
 
   const estado: Estado = {
     ejId: fila.id, agenteId: fila.agente_id, conversacionId: fila.conversacion_id, ag,
-    modelo: ag.cerebro?.modelo_rapido || MODELO_POR_DEFECTO,
+    modelo: cerebros(ag).ejecutor, planificador: cerebros(ag).planificador, escalar: !aprobada,   // tras un rechazo, que decida el planificador
     temperatura: Number(ag.cerebro?.temperatura ?? 0.3),
     maxTurnos: Number(ag.cerebro?.turnos) || 20,
     maxToolCalls: Number(ag.gobierno?.max_tool_calls) || 30,
@@ -218,8 +237,25 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       // 3. Siguiente turno con el modelo.
       e.turnos++;
       if (e.modulosActivos) tools = definicionesActivas(invocables, e.modulosActivos);
-      const r = await llamarModelo(e.mensajes, tools, { modelo: e.modelo, temperatura: e.temperatura });
-      if (r.uso) registrarConsumo({ agenteId: e.agenteId, ejecucionId: e.ejId, proveedor: "groq", modelo: r.uso.modelo, tokensIn: r.uso.entrada, tokensOut: r.uso.salida }).catch(() => {});
+      // ── Cerebro doble: ¿quién habla este turno? ──
+      // Planificador: primer turno, tras un fallo/bloqueo/rechazo, y cuando no hay más tools (cierre: lo que lee el jefe).
+      // Ejecutor: los turnos mecánicos entre tool y tool, siguiendo el plan que el planificador dejó escrito.
+      const dosCerebros = !!e.planificador && e.planificador !== e.modelo;
+      const usaPlanificador = !dosCerebros || !!e.escalar || e.soloTexto || !!e.conversacion;   // charlando, siempre el cerebro bueno
+      const modeloTurno = usaPlanificador ? (e.planificador || e.modelo) : e.modelo;
+      e.escalar = false;
+      if (dosCerebros && !usaPlanificador && e.turnos === 2) e.mensajes.push({ role: "system", content: "Seguí el plan que quedó escrito más arriba, paso a paso, sin cambiarlo. Si un paso falla o algo no cuadra con el plan, no improvises: escribí en una línea qué pasó y terminá el turno (otro cerebro decide)." });
+      const r = await llamarModelo(e.mensajes, e.soloTexto ? [] : tools, { modelo: modeloTurno, temperatura: e.temperatura });
+      if (e.soloTexto) e.soloTexto = false;
+      if (dosCerebros) await ctx.traza("pensamiento", `[cerebro: ${usaPlanificador ? "planificador" : "ejecutor"} · ${modeloTurno}]`);
+      if (r.uso) registrarConsumo({ agenteId: e.agenteId, ejecucionId: e.ejId, proveedor: proveedorDe(modeloTurno), modelo: r.uso.modelo, tokensIn: r.uso.entrada, tokensOut: r.uso.salida, cacheLectura: r.uso.cacheLectura, cacheEscritura: r.uso.cacheEscritura }).catch(() => {});
+      // Cierre: si el ejecutor cree que terminó (sin más tools) tras haber trabajado, la respuesta final la escribe el planificador.
+      if (dosCerebros && !usaPlanificador && !r.toolCalls.length && e.toolCalls > 0 && !e.cierreHecho) {
+        e.cierreHecho = true; e.escalar = true;
+        e.mensajes.push({ role: "system", content: `Borrador del ejecutor (no se mostró al jefe): "${(r.texto || "").slice(0, 800)}". Escribí vos la respuesta final para el jefe con lo que realmente pasó, o llamá la herramienta que falte.` });
+        await ctx.traza("pensamiento", "[cerebro: el ejecutor dio por terminado; el planificador redacta el cierre]");
+        continue;
+      }
       if (r.razonamiento && ag.pensar_voz_alta?.visible) await ctx.traza("pensamiento", r.razonamiento);
 
       const asistente: any = { role: "assistant", content: r.texto || null };
@@ -236,7 +272,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       }
       // Pidió permiso por texto sin llamar nada: no vale. Un empujón (una vez).
       const pidePermiso = /(necesito|requiero) (tu |su )?(ok|aprobaci[oó]n|permiso|autorizaci[oó]n)|¿\s*proced(o|emos)\s*\?|¿\s*(quer[eé]s|deseas|quieres) que (proceda|lo haga|ejecute|abra|integre|cree)|dame (tu )?(ok|aprobaci[oó]n)|respond[eé] \*?ok\*?|⏸/i;
-      if (!r.toolCalls.length && pidePermiso.test(r.texto) && e.toolCalls === 0 && !e.empujonPermiso && invocables.size) {
+      if (!e.conversacion && !r.toolCalls.length && pidePermiso.test(r.texto) && e.toolCalls === 0 && !e.empujonPermiso && invocables.size) {
         e.empujonPermiso = true;
         e.mensajes.push({ role: "user", content: "No pidas permiso por texto. Llamá la herramienta que corresponde ahora mismo: si requiere aprobación, el sistema se la pide al jefe automáticamente." });
         await ctx.traza("verificacion", "Pidió permiso por texto sin llamar la herramienta; se le exigió actuar.");
@@ -248,10 +284,11 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
         const usadas = (e.firmasRecientes || []).map((f) => f.split("|")[0]);
         const diceNavegador = /desde el navegador|en el navegador|abr[ií] el navegador/i.test(respuestaFinal) && !usadas.some((u) => u.startsWith("navegador_"));
         const sinTools = afirma && e.toolCalls === 0;
-        if ((sinTools || diceNavegador) && (ag.trazas?.verifica ?? true) && !e.empujonHonestidad) {
+        if ((sinTools || diceNavegador) && (ag.trazas?.verifica ?? true) && !e.empujonHonestidad && !e.conversacion) {   // charlando, "hice" puede ser de la vida, no una afirmación de acción
           // Una sola vez: exigir que la respuesta coincida con lo que realmente hizo.
           e.empujonHonestidad = true;
-          e.mensajes.push({ role: "user", content: `Tu respuesta afirma acciones que no coinciden con las herramientas que usaste en esta tarea (${usadas.length ? usadas.join(", ") : "ninguna"}). Reescribila diciendo EXACTAMENTE qué hiciste (con qué herramienta) y qué NO hiciste. Si en realidad falta hacer algo, llamá la herramienta ahora.` });
+          e.soloTexto = true; e.escalar = true;   // la corrección es SOLO de texto: nada de volver a ejecutar herramientas
+          e.mensajes.push({ role: "user", content: `Tu respuesta afirma acciones que no coinciden con las herramientas que usaste en esta tarea (${usadas.length ? usadas.join(", ") : "ninguna"}). Reescribila COMO MENSAJE PARA EL JEFE (no como informe técnico, sin hablar de 'herramientas' ni de 'mi último mensaje'): decile en 2-4 líneas qué hiciste de verdad y qué quedó sin hacer, y si falta algo, preguntale si lo hacés ahora. NO llames herramientas en esta corrección.` });
           await ctx.traza("verificacion", `Respuesta rechazada por no coincidir con las acciones reales (${sinTools ? "afirma sin herramientas" : "dice navegador sin usarlo"}); se le exigió corregir.`);
           continue;
         }
@@ -283,7 +320,12 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
     ].filter(Boolean).join(" · ") || String(err);
     await ctx.traza("error", detalle);
     await query(`UPDATE ejecuciones SET estado='fallida', turnos_usados=$1, tool_calls=$2, mensajes=NULL, fin=now() WHERE id=$3`, [e.turnos, e.toolCalls, e.ejId]);
-    return { ok: false, estado: "fallida", respuesta: `Hubo un error: ${detalle}`, ejecucionId: e.ejId, conversacionId: e.conversacionId, turnos: e.turnos, toolCalls: e.toolCalls, mensajesEnviados: e.mensajesEnviados };
+    const paraJefe = /tool_use_failed|Failed to parse tool call|output_parse_failed/i.test(detalle)
+      ? "Se me trabó en el medio: el modelo generó una llamada inválida (pasa con argumentos muy largos). Pedímelo de nuevo y lo hago en pasos más cortos."
+      : /rate_limit|429/i.test(detalle) ? "El proveedor del modelo me limitó por un momento (rate limit). Probá de nuevo en un minuto."
+      : /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(detalle) ? `No pude conectarme a un servicio (${detalle.slice(0, 120)}).`
+      : `Hubo un error: ${detalle.slice(0, 300)}`;
+    return { ok: false, estado: "fallida", respuesta: paraJefe, ejecucionId: e.ejId, conversacionId: e.conversacionId, turnos: e.turnos, toolCalls: e.toolCalls, mensajesEnviados: e.mensajesEnviados };
   }
 }
 
@@ -321,6 +363,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
         continue;
       }
       const parecidas = masParecidas(tc.nombre, nombres, 3);
+      e.escalar = true;
       e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `La herramienta '${tc.nombre}' NO existe.${parecidas.length ? ` ¿Quisiste decir ${parecidas.map((x) => `'${x}'`).join(" o ")}? Usá el nombre exacto.` : ""} Herramientas disponibles: ${nombres.join(", ") || "(ninguna)"}.` });
       await ctx.traza("error", `Tool call a nombre inexistente: ${tc.nombre}${parecidas.length ? " (parecidas: " + parecidas.join(", ") + ")" : ""}`);
       e.pendientes.shift();
@@ -335,6 +378,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
     e.repeticionesSeguidas = vecesSeguidas;
     e.firmasRecientes.push(firmaTc); if (e.firmasRecientes.length > 20) e.firmasRecientes.shift();
     if (vecesSeguidas >= 2 && inv.riesgo !== "lectura" || vecesSeguidas >= 3) {
+      e.escalar = true;
       e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `NO EJECUTADO: es la ${vecesSeguidas}ª vez seguida que llamás ${tc.nombre} con exactamente los mismos argumentos. Repetirlo no cambia el resultado. Cambiá de estrategia o reportale al jefe el error exacto que te devolvió antes.` });
       await ctx.traza("verificacion", `Bloqueada llamada repetida (${vecesSeguidas}x): ${tc.nombre}`);
       e.pendientes.shift();
@@ -416,6 +460,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
     }
 
     await ctx.traza("tool", `${inv.nombre}(${JSON.stringify(tc.argumentos).slice(0, 200)}) → ${resultado.ok ? "ok" : "ERROR"} ${(resultado.resumen || resultado.error || JSON.stringify(resultado.datos ?? "")).slice(0, 300)}`);
+    if (!resultado.ok) e.escalar = true;   // un fallo lo decide el planificador
     if (resultado.ok) {
       const textoEnviado = String(tc.argumentos.mensaje ?? tc.argumentos.texto ?? "");
       if (textoEnviado && inv.nombre.startsWith("whatsapp_enviar")) e.mensajesEnviados.push(textoEnviado);
@@ -427,7 +472,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
 }
 
 // ─── System prompt ───────────────────────────────────────────────────────────
-async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: Conversacion | undefined, contextoCanal?: string): Promise<string> {
+export async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: Conversacion | undefined, contextoCanal?: string, mensajeUsuario = ""): Promise<string> {
   const id = ag.identidad || {};
   const nombres = [...invocables.keys()];
   const partes = [
@@ -450,10 +495,21 @@ async function armarSistema(ag: any, invocables: Map<string, Invocable>, conv: C
     "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que creés recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
   ].filter(Boolean).join("\n");
 
+  // Hechos recientes: qué herramientas se ejecutaron de verdad en esta conversación (para responder "¿lo hiciste?" con datos).
+  let accionesRecientes = "";
+  if (conv) {
+    const pasos = await query<{ detalle: string; creado_en: string }>(`SELECT p.detalle, p.creado_en FROM pasos p JOIN ejecuciones e ON e.id=p.ejecucion_id WHERE e.conversacion_id=$1 AND p.tipo IN ('tool','aprobacion') AND p.creado_en > now() - interval '6 hours' ORDER BY p.creado_en DESC LIMIT 12`, [conv.id]).catch(() => [] as any);
+    if (pasos.length) accionesRecientes = `=== ACCIONES REALES RECIENTES EN ESTA CONVERSACIÓN (hechos, no recuerdos; si el jefe pregunta "¿lo hiciste?" respondé con esto) ===\n${(pasos as any[]).reverse().map((p) => `${new Date(p.creado_en).toLocaleTimeString("es-CO")} ${String(p.detalle).slice(0, 220)}`).join("\n")}\n=== FIN ===`;
+  }
   const memoriaLp = (ag.memoria?.modo === "persistente") ? await memoriaParaPrompt(60) : "";
+  // Biblioteca compartida: lo que la red sabe sobre el pedido (por significado), con avisos de edad/duda.
+  let biblioteca = "";
+  try { const { contextoPara } = await import("./biblioteca.js"); if (mensajeUsuario.trim()) biblioteca = await contextoPara(mensajeUsuario.slice(0, 500), 4); } catch { /* sin biblioteca */ }
   const contexto = await contextoDeAgente(ag.id);
   return [
     partes,
+    accionesRecientes,
+    biblioteca,
     memoriaLp ? `=== LO QUE SABÉS DE LARGO PLAZO (memoria persistente; usalo con naturalidad, sin recitarlo) ===\n${memoriaLp}\n=== FIN MEMORIA ===` : "",
     contexto ? `=== CONTEXTO / DOCUMENTOS ===\n${contexto}\n=== FIN ===` : "",
   ].filter(Boolean).join("\n\n");

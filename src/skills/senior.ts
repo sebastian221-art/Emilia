@@ -11,6 +11,7 @@
 
 import type { DefSkill, ContextoEjecucion, ResultadoTool } from "../registro/tipos.js";
 import { avisarProgreso } from "../motor/actividad.js";
+import { obtenerSandbox, obtenerProyecto, sandboxesAbiertos } from "../dominio/proyectos.js";
 
 const MODULO = "senior";
 
@@ -33,11 +34,26 @@ async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
   revisionCruzada?: boolean;
   /** Guardar un resumen del resultado en el conocimiento del agente (hallazgos/). */
   guardarHallazgo?: boolean;
+  /** Reutilizar este sandbox (si el agente ya abrió uno) en vez de crear otro. */
+  sandboxId?: string;
 }): Promise<ResultadoTool> {
-  const ab = await ctx.ejecutarTool("codigo_abrir_sandbox", { proyecto: p.proyecto, proposito: p.proposito });
-  if (!ab.ok) return { ok: false, error: `No pude abrir el sandbox: ${ab.error}` };
-  const sandbox_id = (ab.datos as any).sandbox_id;
-  const rama = (ab.datos as any).rama;
+  // UN SOLO SANDBOX por tarea: el que pasaron, o el último abierto del proyecto en los últimos 30 min, o uno nuevo.
+  let sandbox_id: string | undefined = p.sandboxId, rama = "";
+  if (sandbox_id) {
+    const sb = await obtenerSandbox(sandbox_id);
+    if (!sb || sb.estado !== "abierto") sandbox_id = undefined; else rama = sb.rama;
+  }
+  if (!sandbox_id) {
+    const proy = await obtenerProyecto(p.proyecto);
+    const abiertos = proy ? await sandboxesAbiertos(proy.id) : [];
+    const reciente = abiertos.find((x) => Date.now() - new Date(x.creado_en).getTime() < 30 * 60000 && !x.proposito.startsWith("analisis") && !x.proposito.startsWith("explicar") && !x.proposito.startsWith("plan"));
+    if (reciente) { sandbox_id = reciente.id; rama = reciente.rama; await ctx.traza("skill", `reutilizo el sandbox abierto ${sandbox_id} (${rama})`); }
+  }
+  if (!sandbox_id) {
+    const ab = await ctx.ejecutarTool("codigo_abrir_sandbox", { proyecto: p.proyecto, proposito: p.proposito });
+    if (!ab.ok) return { ok: false, error: `No pude abrir el sandbox: ${ab.error}` };
+    sandbox_id = (ab.datos as any).sandbox_id; rama = (ab.datos as any).rama;
+  }
   await ctx.traza("skill", `sandbox ${sandbox_id} (${rama}) para: ${p.proposito}`);
   await avisarProgreso(ctx.conversacionId, `🧪 Sandbox listo (${rama.replace("senior/", "")}). Claude Code empieza a trabajar; te aviso cada paso.`);
 
@@ -98,7 +114,7 @@ Sos un REVISOR de código independiente y exigente (no escribiste estos cambios)
     (ultimo.datos as any)?.verificacion && `\nVerificación:\n${(ultimo.datos as any).verificacion}`,
     revision && `\nRevisión cruzada:\n${revision.slice(0, 1200)}`,
     ultimo.error && `\nProblema: ${ultimo.error}`,
-    `\n\nRevisá el diff en la página Flujos o pedime "mostrame el diff del sandbox ${sandbox_id}". Si te sirve, decime "commit y integrá" (te pido aprobación). Si no, "descartá el sandbox ${sandbox_id}".`,
+    `\n\nSANDBOX ÚNICO DE ESTA TAREA: ${sandbox_id} (rama ${rama}). Para llevarlo al repo real: flujo entregar_cambios(sandbox_id: "${sandbox_id}") — pide UN solo OK al jefe y hace commit, integración, limpieza y reinicio. Para descartarlo: codigo_cerrar_sandbox(borrar_rama true).`,
   ].filter(Boolean).join("\n");
 
   if (p.guardarHallazgo !== false) {
@@ -187,6 +203,7 @@ export const seniorImplementar: DefSkill = {
       con_tests: { type: "boolean", description: "Pedir que escriba/actualice tests.", default: true },
       max_iteraciones: { type: "integer", description: "Cuántas veces reintenta si la verificación falla.", default: 3, minimum: 1, maximum: 6 },
       revision_cruzada: { type: "boolean", description: "Un segundo Claude revisa el resultado como par exigente antes de entregarlo.", default: true },
+      sandbox_id: { type: "string", description: "Si ya hay un sandbox abierto para esta tarea, trabajar ahí (no se crea otro)." },
     },
     required: ["proyecto", "tarea"],
   },
@@ -196,7 +213,7 @@ export const seniorImplementar: DefSkill = {
     return ejecutarEncargo(ctx, {
       proyecto: a.proyecto, proposito: a.tarea.slice(0, 40), sistema: REGLAS,
       encargo: `Implementá: "${a.tarea}".${a.con_tests !== false ? " Escribí o actualizá los tests que correspondan." : ""} Dejá el proyecto compilando y con los tests pasando. Cuando termines, corré vos mismo el build y los tests para confirmar, y en tu informe decí qué archivos tocaste y cómo lo verificaste.`,
-      verificar: true, maxIteraciones: a.max_iteraciones ?? 3, revisionCruzada: a.revision_cruzada !== false,
+      verificar: true, maxIteraciones: a.max_iteraciones ?? 3, revisionCruzada: a.revision_cruzada !== false, sandboxId: a.sandbox_id,
     });
   },
 };
@@ -205,14 +222,14 @@ export const seniorReparar: DefSkill = {
   nombre: "senior_reparar", modulo: MODULO,
   descripcion: "Diagnostica un bug o error a partir de un síntoma/log/traza, encuentra la causa raíz, lo arregla y agrega un test de regresión. Verifica que quede pasando. Deja el sandbox para revisión.",
   cuandoUsar: "Cuando el jefe reporta 'falla X', 'da este error', pega un log/stacktrace, o 'arreglá Y'.",
-  parametros: { type: "object", properties: { proyecto: PROYECTO, sintoma: { type: "string", description: "Qué falla, con el error/log/traza si lo hay.", minLength: 5 }, max_iteraciones: { type: "integer", default: 4, minimum: 1, maximum: 6 } }, required: ["proyecto", "sintoma"] },
+  parametros: { type: "object", properties: { proyecto: PROYECTO, sintoma: { type: "string", description: "Qué falla, con el error/log/traza si lo hay.", minLength: 5 }, max_iteraciones: { type: "integer", default: 4, minimum: 1, maximum: 6 }, sandbox_id: { type: "string", description: "Sandbox ya abierto para trabajar ahí (opcional)." } }, required: ["proyecto", "sintoma"] },
   riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 5400,
   tools: toolsBase,
   async ejecutar(a, ctx) {
     return ejecutarEncargo(ctx, {
       proyecto: a.proyecto, proposito: `fix ${a.sintoma.slice(0, 30)}`, sistema: REGLAS,
       encargo: `Hay un problema: "${a.sintoma}". Reproducilo si podés, encontrá la CAUSA RAÍZ (no un parche superficial), arreglalo, y agregá un test que falle sin el fix y pase con él. Dejá build y tests en verde. En tu informe: causa raíz, qué cambiaste y el test que agregaste.`,
-      verificar: true, maxIteraciones: a.max_iteraciones ?? 4, revisionCruzada: true,
+      verificar: true, maxIteraciones: a.max_iteraciones ?? 4, revisionCruzada: true, sandboxId: a.sandbox_id,
     });
   },
 };

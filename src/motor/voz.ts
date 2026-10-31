@@ -20,7 +20,7 @@ const groq = () => (cliente ||= new Groq({ apiKey: process.env.GROQ_API_KEY }));
 export async function transcribir(contenido: Buffer, mime: string, idioma = "es"): Promise<{ ok: boolean; texto?: string; error?: string }> {
   if (!process.env.GROQ_API_KEY) return { ok: false, error: "Falta GROQ_API_KEY." };
   try {
-    const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("wav") ? "wav" : "mp3";
+    const ext = mime.includes("webm") ? "webm" : mime.includes("ogg") ? "ogg" : mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("wav") ? "wav" : "mp3";
     const archivo = new File([new Uint8Array(contenido)], `audio.${ext}`, { type: mime });
     const r = await groq().audio.transcriptions.create({
       file: archivo as any,

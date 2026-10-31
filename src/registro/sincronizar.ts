@@ -35,14 +35,16 @@ export async function sincronizarRegistro(): Promise<{ tools: number; skills: nu
   for (const s of skills) {
     await query(
       `INSERT INTO skills (nombre, descripcion, nivel_riesgo, origen, modulo, esquema, cuando_usar, tools_permitidas, procedimiento, requiere_aprobacion, activo, secciones)
-       VALUES ($1,$2,$3,'codigo',$4,$5,$6,$7,$8,$9,true,'{}')
+       VALUES ($1,$2,$3,'codigo',$4,$5,$6,$7,$8,$9,true,$10::jsonb)
        ON CONFLICT (nombre) DO UPDATE SET
          descripcion=EXCLUDED.descripcion, nivel_riesgo=EXCLUDED.nivel_riesgo, origen='codigo', modulo=EXCLUDED.modulo,
          esquema=EXCLUDED.esquema, cuando_usar=EXCLUDED.cuando_usar, tools_permitidas=EXCLUDED.tools_permitidas,
          procedimiento=EXCLUDED.procedimiento, requiere_aprobacion=EXCLUDED.requiere_aprobacion,
+         secciones = CASE WHEN EXCLUDED.secciones ? 'complejidad' THEN COALESCE(skills.secciones, '{}'::jsonb) || EXCLUDED.secciones ELSE COALESCE(skills.secciones, '{}'::jsonb) END,
          activo=true, actualizado_en=now()`,
       [s.nombre, s.descripcion, s.riesgo, s.modulo, JSON.stringify(s.parametros), s.cuandoUsar,
-       JSON.stringify(s.tools), s.procedimiento, s.requiereAprobacion]
+       JSON.stringify(s.tools), s.procedimiento, s.requiereAprobacion,
+       JSON.stringify((s as any).maxPasos ? { complejidad: { presupuesto: (s as any).maxPasos } } : {})]
     );
   }
   await query(`UPDATE skills SET activo=false, actualizado_en=now() WHERE origen='codigo' AND activo=true AND NOT (nombre = ANY($1::text[]))`,

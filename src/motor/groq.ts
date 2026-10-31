@@ -9,12 +9,13 @@ function get() {
 }
 
 export const MODELO_POR_DEFECTO = "openai/gpt-oss-120b";
+let avisoClaudeDado = false;
 
 export interface RespuestaModelo {
   texto: string;
   razonamiento?: string;
   toolCalls: { id: string; nombre: string; argumentos: Record<string, unknown> }[];
-  uso?: { entrada: number; salida: number; modelo: string };
+  uso?: { entrada: number; salida: number; modelo: string; cacheLectura?: number; cacheEscritura?: number };
 }
 
 export interface OpcionesModelo {
@@ -37,6 +38,18 @@ export async function llamarModelo(
   const op: OpcionesModelo = typeof modeloUOpciones === "string" ? { modelo: modeloUOpciones, forzarTool: forzarToolLegado } : modeloUOpciones;
   const modelo = op.modelo || MODELO_POR_DEFECTO;
   const temperature = clamp(op.temperatura ?? 0.3, 0, 1);
+
+  // Proveedor por prefijo: "claude:sonnet" / "claude:haiku" / "anthropic:<id>" → API de Anthropic. Lo demás → Groq.
+  // Sin ANTHROPIC_API_KEY (o con CLAUDE_API_ACTIVA=false) los modelos Claude caen al modelo de Groq por defecto: nada se rompe.
+  if (/^(claude|anthropic):/i.test(modelo)) {
+    const activa = !!process.env.ANTHROPIC_API_KEY && (process.env.CLAUDE_API_ACTIVA || "true").toLowerCase() !== "false";
+    if (activa) {
+      const { llamarClaude } = await import("./anthropic.js");
+      return llamarClaude(mensajes, tools, { modelo, temperatura: temperature, forzarTool: op.forzarTool });
+    }
+    if (!avisoClaudeDado) { avisoClaudeDado = true; console.warn(`[modelos] ${modelo} pedido pero la API de Claude no está activa (falta ANTHROPIC_API_KEY o CLAUDE_API_ACTIVA=false): uso ${MODELO_POR_DEFECTO}.`); }
+    return llamarModelo(mensajes, tools, { ...op, modelo: MODELO_POR_DEFECTO });
+  }
 
   try {
     const resp = await get().chat.completions.create({
@@ -61,7 +74,7 @@ export async function llamarModelo(
     // gpt-oss de Groq a veces "escupe" una tool call mal formada y Groq la
     // rechaza con 400 — PERO el error incluye lo que el modelo quería hacer
     // (failed_generation). Lo rescatamos en vez de perderlo.
-    const msg = String(e?.error?.message || e?.message || "");
+    const msg = [e?.message, e?.error?.message, e?.error?.code, e?.code, e?.error?.error?.code].filter(Boolean).join(" | ");
     let failedGen = e?.error?.failed_generation || e?.error?.error?.failed_generation || e?.failed_generation || null;
     if (!failedGen) {
       try {
@@ -76,6 +89,22 @@ export async function llamarModelo(
           return { texto: "", razonamiento: undefined, toolCalls: [{ id: "rescatado_" + Date.now(), nombre: parsed.name, argumentos: parsed.arguments }] };
         }
       } catch { /* si no parsea, seguimos abajo */ }
+      // El JSON de la llamada salió roto (suele pasar con argumentos largos y anidados): un reintento con
+      // la instrucción de repetir la llamada con argumentos más cortos y JSON válido.
+      const nombreTool = String(failedGen).match(/"name"\s*:\s*"([^"]+)"/)?.[1];
+      try {
+        const resp = await get().chat.completions.create({
+          model: modelo, temperature,
+          messages: [...mensajes, { role: "system", content: `Tu última llamada${nombreTool ? ` a ${nombreTool}` : ""} salió con argumentos que NO eran JSON válido (quedaron cortados). Repetila ahora con JSON válido y argumentos MÁS CORTOS: textos de 1-2 líneas por campo, sin comillas dobles dentro de los textos (usá comillas simples), sin campos vacíos ni null. Si no entra en una llamada, hacé primero una versión breve y completá después.` }],
+          tools: tools.length ? tools : undefined,
+          tool_choice: tools.length ? "auto" : undefined,
+        });
+        const m = resp.choices[0]?.message;
+        return {
+          texto: (m?.content ?? "").trim(), razonamiento: (m as any)?.reasoning,
+          toolCalls: (m?.tool_calls ?? []).map((t) => { let args: Record<string, unknown> = {}; try { args = JSON.parse(t.function.arguments || "{}"); } catch {} return { id: t.id, nombre: t.function.name, argumentos: args }; }),
+        };
+      } catch { /* cae a los rescates de abajo */ }
     }
     // El modelo escribió texto suelto donde iba una tool call (output_parse_failed) → reintentar
     // una vez con un empujón; si vuelve a fallar, cae al reintento solo texto.

@@ -88,7 +88,7 @@ export const presupuestoEstado: DefTool = {
     let agenteId: string | null = null, tope = 0, nombre = "todo el sistema";
     if (a.agente) { const [ag] = await query<any>(`SELECT id, nombre, gobierno FROM agentes WHERE lower(nombre)=lower($1)`, [a.agente]); if (!ag) return { ok: false, error: "Agente no existe." }; agenteId = ag.id; nombre = ag.nombre; tope = Number(ag.gobierno?.presupuesto_diario_usd) || 0; }
     const g = await gasto(agenteId, a.periodo || "hoy");
-    return { ok: true, datos: { ...g, tope_diario_usd: tope }, resumen: `${nombre} · ${a.periodo || "hoy"}: $${g.total_usd} (Groq $${g.groq_usd} en ${g.llamadas_groq} llamadas / ${g.tokens_in + g.tokens_out} tokens · Claude Code $${g.claude_usd} en ${g.sesiones_claude} sesiones)${tope ? ` · tope diario $${tope}` : ""}` };
+    return { ok: true, datos: { ...g, tope_diario_usd: tope }, resumen: `${nombre} · ${a.periodo || "hoy"}: $${g.total_usd} (Groq $${g.groq_usd} · API Claude: $${g.api_claude_usd ?? 0} · Claude Code: $${g.claude_code_usd ?? g.claude_usd} en ${g.llamadas_groq} llamadas / ${g.tokens_in + g.tokens_out} tokens · Claude Code $${g.claude_usd} en ${g.sesiones_claude} sesiones)${tope ? ` · tope diario $${tope}` : ""}` };
   },
 };
 

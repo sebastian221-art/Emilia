@@ -14,13 +14,29 @@ import type { ResultadoTarea } from "./loop.js";
 import { query } from "../db/cliente.js";
 
 /** Nombre del agente dueño de una conversación (para firmar reportes en cadena). */
-const EMOJI_COLOR: [RegExp, string][] = [[/^#?(f|e)[0-9a-f]?[5-9a-f]/i, "🟠"], [/^#?[0-9a-f]{0,2}[89ab]/i, "🔵"], [/^#?[0-9a-f]{2}[c-f]/i, "🟢"]];
+/** Color hex → emoji de círculo por tono real (no por el primer dígito): dorado → 🟡, rosa → 🩷, violeta → 🟣… */
+export function emojiDeColor(color: string | null | undefined): string {
+  const h = (color || "").replace("#", "").trim();
+  if (!/^[0-9a-f]{6}$/i.test(h)) return "⚪";
+  const r = parseInt(h.slice(0, 2), 16) / 255, g = parseInt(h.slice(2, 4), 16) / 255, b = parseInt(h.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (l < 0.12) return "⚫";
+  if (sat < 0.15) return l > 0.75 ? "⚪" : "⚫";
+  let hue = 0;
+  if (d) { hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; hue = (hue * 60 + 360) % 360; }
+  if (hue < 15 || hue >= 335) return hue >= 335 && l > 0.55 ? "🩷" : "🔴";
+  if (hue < 42) return l < 0.35 ? "🟤" : "🟠";
+  if (hue < 68) return "🟡";
+  if (hue < 190) return "🟢";   // incluye el verde azulado de Sage
+  if (hue < 255) return "🔵";
+  if (hue < 300) return "🟣";
+  return "🩷";
+}
 async function firma(conv: Conversacion): Promise<string> {
   const [a] = await query<{ nombre: string; color: string | null }>(`SELECT nombre, identidad->>'color' AS color FROM agentes WHERE id=$1`, [conv.agente_id]);
   if (!a?.nombre) return "";
-  const c = (a.color || "").toLowerCase();
-  const emoji = c.startsWith("#f") || c.startsWith("#e") ? "🟠" : c.startsWith("#2") || c.startsWith("#1") || c.startsWith("#0") ? "🟢" : c.startsWith("#3") || c.startsWith("#6") || c.startsWith("#9") ? "🔵" : "👤";
-  return `${emoji} *${a.nombre}*: `;
+  return `${emojiDeColor(a.color)} *${a.nombre}*: `;
 }
 
 /** Un texto suelto a la conversación (lo usan los flujos para reportar). */

@@ -37,3 +37,8 @@ probar_*.mjs
 
 # ─── ngrok ───
 ngrok.yml
+node_modules/
+data/
+.env
+dist/
+*.log

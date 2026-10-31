@@ -135,6 +135,22 @@ export async function integrarEnBase(proyecto: Proyecto, rama: string): Promise<
     await git(proyecto.ruta, "merge --abort");
     return { ...m, stderr: `El merge tiene CONFLICTOS con ${base} (el sandbox nació de un commit más viejo y ambos tocan los mismos archivos). Deshice el merge; el repo quedó limpio. Opciones: descartar el sandbox y rehacer la tarea sobre el master actual, o resolverlo a mano.\n${(m.stdout + m.stderr).slice(-600)}` };
   }
+  if (m.codigo !== 0) return m;
+  // El merge local ya llevó el trabajo a la rama base del repo real. Ahora, si hay remoto, subir la rama base
+  // para que Railway (u otro CI) lo despliegue. Esto es lo que faltaba: sin este push, el cambio nunca salía del PC.
+  const remoto = await git(proyecto.ruta, "remote");
+  if (remoto.stdout.trim()) {
+    const token = process.env.GITHUB_TOKEN;
+    let push: SalidaComando;
+    if (token) {
+      const url = (await git(proyecto.ruta, "remote get-url origin")).stdout.trim().replace(/^https:\/\//, `https://x-access-token:${token}@`);
+      push = await git(proyecto.ruta, `push ${url} ${base}`, 120);
+    } else {
+      push = await git(proyecto.ruta, `push origin ${base}`, 120);
+    }
+    if (push.codigo !== 0) return { codigo: 0, stdout: `${m.stdout}\n⚠ Integrado localmente, pero el push a origin/${base} falló: ${(push.stderr || push.stdout).slice(-300)}. Subilo a mano con: git push origin ${base}`, stderr: "", duracion_ms: m.duracion_ms, timeout: false };
+    return { codigo: 0, stdout: `${m.stdout}\n✔ Push a origin/${base} hecho — ${(push.stderr || push.stdout).slice(-200)}`, stderr: "", duracion_ms: m.duracion_ms, timeout: false };
+  }
   return m;
 }
 

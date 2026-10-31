@@ -28,13 +28,16 @@ export const vigilarProyecto: DefFlujo = {
   riesgo: "ejecucion",
   inicio: "ciclo",
   pasos: [
-    { id: "ciclo", tipo: "repetir", hasta: () => false, maxVeces: 1000000, cuerpo: ["vigilar", "hay_arreglo", "aprobar", "commit", "integrar", "instalar", "reiniciar", "cerrar", "limpiar"], cadaSegundos: (c) => Number(c.cada_segundos) || 300 },
+    { id: "ciclo", tipo: "repetir", hasta: () => false, maxVeces: 1000000, cuerpo: ["vigilar", "hubo_cambio", "avisar_cambio", "hay_arreglo", "aprobar", "commit", "integrar", "instalar", "reiniciar", "cerrar", "limpiar"], cadaSegundos: (c) => Number(c.cada_segundos) || 300 },
     { id: "fin", tipo: "fin", resultado: (c) => ({ proyecto: c.proyecto, ciclos: c.__iteraciones?.ciclo }) },
     // ── cuerpo ──
     { id: "vigilar", tipo: "skill", skill: "vigilar_ciclo", args: (c) => ({
         proyecto: c.proyecto, numero_aviso: jefe(c), max_reinicios: c.max_reinicios ?? 3, auto_reparar: c.auto_reparar !== false,
         reinicios_previos: c.vig?.reinicios || 0, nivel_previo: c.vig?.nivel || "sano", huella_previa: c.vig?.huella || "", reparacion_pendiente: !!c.vig?.necesita_aprobacion,
       }), guardarEn: "vig", siFalla: "continuar" },
+    // Las skills dentro de un flujo no tienen conversación: el aviso al jefe lo manda el flujo.
+    { id: "hubo_cambio", tipo: "condicion", si: (c) => { const r = String(c.vig?.resumen || c.__resultados?.vigilar?.resumen || ""); const cambio = /♻|⚠|🔴|reinici|ca[ií]do|no levanta|error/i.test(r) && !/: sano\.?$/i.test(r.trim()); c.__aviso = cambio ? r.slice(0, 500) : ""; return cambio; }, entonces: "avisar_cambio", sino: "hay_arreglo" },
+    { id: "avisar_cambio", tipo: "tool", tool: "whatsapp_enviar_texto", args: (c) => ({ numero: jefe(c), texto: `👁 ${c.proyecto}: ${c.__aviso}` }), siFalla: "continuar" },
     { id: "hay_arreglo", tipo: "condicion", si: (c) => !!c.vig?.necesita_aprobacion && !!c.vig?.sandbox_id, entonces: "aprobar", sino: "ciclo" },
     { id: "aprobar", tipo: "aprobacion", mensaje: (c) => c.vig.mensaje || `¿Integro el arreglo de ${c.proyecto} (sandbox ${c.vig.sandbox_id}) y reinicio?` },
     { id: "commit", tipo: "tool", tool: "codigo_commit", args: (c) => ({ sandbox_id: c.vig.sandbox_id, mensaje: `Reparación automática (vigilancia): ${String(c.vig.informe || "").slice(0, 60)}` }), preaprobado: true, siFalla: "continuar" },

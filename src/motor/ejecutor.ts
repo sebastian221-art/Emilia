@@ -114,7 +114,7 @@ export async function ejecutarSkill(
     }
     return ejecutarSkillGuiada({
       nombre: def.nombre, descripcion: def.descripcion, procedimiento: def.procedimiento || "",
-      tools: def.tools, riesgo: def.riesgo,
+      tools: def.tools, riesgo: def.riesgo, maxPasos: def.maxPasos,
     }, val.valor, ctxBase);
   }
 

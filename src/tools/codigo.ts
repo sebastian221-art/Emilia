@@ -39,7 +39,8 @@ function dentro(base: string, rel: string): string {
 function comandoPeligroso(cmd: string, sandbox: string): string | null {
   const c = cmd.toLowerCase();
   if (/\b(rm\s+-rf?\s+[\/~]|rmdir\s+\/s|del\s+\/[sq]|format\s+[a-z]:|shutdown|reg\s+(add|delete)|diskpart)\b/.test(c)) return "Comando destructivo bloqueado. Si de verdad hace falta, pedíselo al jefe.";
-  const abs = cmd.match(/[a-zA-Z]:\\[^\s"']+|[a-zA-Z]:\/[^\s"']+|(?<![\w.])\/(?:home|users|etc|var|mnt)\/[^\s"']+/g) || [];
+  const sinUrls = cmd.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"']+/gi, " ");   // las URLs no son rutas
+  const abs = sinUrls.match(/(?<![\w])[a-zA-Z]:\\[^\s"']+|(?<![\w])[a-zA-Z]:\/[^\s"']+|(?<![\w.])\/(?:home|users|etc|var|mnt)\/[^\s"']+/g) || [];
   const base = path.resolve(sandbox).toLowerCase().replace(/\\/g, "/");
   for (const r of abs) {
     const n = path.resolve(r.replace(/["']/g, "")).toLowerCase().replace(/\\/g, "/");
@@ -205,7 +206,7 @@ export const codigoListarSesiones: DefTool = {
 // ─── Trabajo en el sandbox ───────────────────────────────────────────────────
 export const codigoEjecutarComando: DefTool = {
   nombre: "codigo_ejecutar_comando", modulo: MODULO,
-  descripcion: "Ejecuta un comando de shell DENTRO del sandbox (tests, build, scripts, git de lectura). Devuelve salida y código de salida.",
+  descripcion: `Ejecuta un comando DENTRO del sandbox (tests, build, scripts, git de lectura). Devuelve salida y código de salida. El shell es el del sistema${process.platform === "win32" ? " (Windows cmd: dir, type, mkdir sin -p, del; NO hay ls, cat, printf ni heredocs)" : " (bash)"}. Para crear o cambiar archivos NO uses echo/redirecciones: usá codigo_escribir_archivo.`,
   parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID, comando: { type: "string", minLength: 1 }, timeout_seg: { type: "integer", default: 120, minimum: 5, maximum: 1800 } }, required: ["sandbox_id", "comando"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 1900,
   async ejecutar(a) {
@@ -266,6 +267,21 @@ export const codigoLeerArchivo: DefTool = {
   },
 };
 
+export const codigoEscribirArchivo: DefTool = {
+  nombre: "codigo_escribir_archivo", modulo: MODULO,
+  descripcion: "Escribe (crea o reemplaza) un archivo dentro del sandbox con el contenido exacto que le pasás. Crea las carpetas que falten. Es LA forma de crear archivos: nada de echo ni heredocs.",
+  parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID, ruta: { type: "string", description: "Ruta relativa al sandbox, ej. scripts/mcts.js", minLength: 1 }, contenido: { type: "string" } }, required: ["sandbox_id", "ruta", "contenido"] },
+  riesgo: "escritura", requiereAprobacion: false,
+  async ejecutar(a) {
+    const s = await sandboxAbierto(a.sandbox_id);
+    const abs = dentro(s.ruta, a.ruta);
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+    await fs.writeFile(abs, String(a.contenido ?? ""), "utf-8");
+    const lineas = String(a.contenido ?? "").split("\n").length;
+    return { ok: true, datos: { ruta: a.ruta, bytes: Buffer.byteLength(String(a.contenido ?? "")), lineas }, resumen: `Escrito ${a.ruta} (${lineas} líneas).` };
+  },
+};
+
 export const codigoBuscar: DefTool = {
   nombre: "codigo_buscar", modulo: MODULO,
   descripcion: "Busca texto (regex) en los archivos del sandbox. Devuelve archivo:línea y la línea.",
@@ -306,7 +322,7 @@ export const codigoPush: DefTool = {
 
 export const codigoIntegrar: DefTool = {
   nombre: "codigo_integrar", modulo: MODULO,
-  descripcion: "Integra (merge) la rama del sandbox en la rama base del REPO REAL. Es el paso que lleva el trabajo a tu código de verdad. Requiere aprobación; el repo real debe estar sin cambios pendientes y los commits del sandbox hechos.",
+  descripcion: "Integra la rama del sandbox en la rama base del REPO REAL (merge) Y la sube a GitHub (push de la rama base), en un solo paso. Es lo que lleva el trabajo a producción (Railway despliega al ver el push). No necesitás llamar codigo_push después. Requiere aprobación; los commits del sandbox deben estar hechos.",
   parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID }, required: ["sandbox_id"] },
   riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 240,
   async ejecutar(a) {
@@ -314,7 +330,7 @@ export const codigoIntegrar: DefTool = {
     const e = await estadoGit(s.ruta);
     if (e.estado !== "(limpio)") return { ok: false, error: "El sandbox tiene cambios sin commit. Hacé commit primero (codigo_commit)." };
     const r = await integrarEnBase(s.proyecto, s.rama);
-    return r.codigo === 0 ? { ok: true, resumen: `Rama ${s.rama} integrada en ${s.proyecto.rama_base} del repo real.\n${r.stdout.slice(-500)}` } : { ok: false, error: (r.stderr || r.stdout).slice(-800) };
+    return r.codigo === 0 ? { ok: true, resumen: `Rama ${s.rama} integrada en ${s.proyecto.rama_base} del repo real y subida a GitHub.\n${r.stdout.slice(-600)}` } : { ok: false, error: (r.stderr || r.stdout).slice(-800) };
   },
 };
 
@@ -323,5 +339,4 @@ export const toolsCodigo: DefTool[] = [
   codigoAbrirSandbox, codigoListarSandboxes, codigoCerrarSandbox,
   codigoEjecutarClaude, codigoEstadoSesion, codigoCancelarSesion, codigoListarSesiones,
   codigoEjecutarComando, codigoVerificar, codigoDiff, codigoLeerArchivo, codigoBuscar,
-  codigoGitEstado, codigoCommit, codigoPush, codigoIntegrar,
-];
+  codigoGitEstado, codigoCommit, codigoPush, codigoIntegrar, codigoEscribirArchivo];

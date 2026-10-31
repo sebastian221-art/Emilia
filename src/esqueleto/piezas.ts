@@ -61,7 +61,9 @@ export const PIEZAS: Pieza[] = [
     g: "Fundación", k: "cerebro", ico: "cpu", nom: "Cerebro (modelo)",
     desc: "Modelo · presupuesto · temperatura",
     campos: [
-      { t: "text", key: "modelo_rapido", label: "Modelo (Groq)", ph: "openai/gpt-oss-120b", usa: "loop → groq.llamarModelo" },
+      { t: "text", key: "planificador", label: "Planificador (decide: primer turno, fallos, cierre)", ph: "claude:sonnet", usa: "loop → cerebro doble. Ej: claude:sonnet, claude:haiku, openai/gpt-oss-120b. Vacío = usa el ejecutor." },
+      { t: "text", key: "ejecutor", label: "Ejecutor (hace lo mecánico entre herramientas)", ph: "openai/gpt-oss-120b", usa: "loop → cerebro doble. Barato. Vacío = modelo_rapido." },
+      { t: "text", key: "modelo_rapido", label: "Modelo único (compatibilidad)", ph: "openai/gpt-oss-120b", usa: "se usa si no hay planificador/ejecutor" },
       { t: "number", key: "turnos", label: "Presupuesto de turnos por tarea", ph: "20",
         ayuda: "Máximo de idas y vueltas con el modelo antes de cortar.", usa: "loop: maxTurnos" },
       { t: "number", key: "temperatura", label: "Temperatura (0 = preciso, 1 = creativo)", ph: "0.3", avanzado: true, usa: "groq.llamarModelo" },
