@@ -10,7 +10,7 @@ const MODULO = "registro";
 export const registroRecargar: DefTool = {
   nombre: "registro_recargar", modulo: MODULO,
   descripcion: "Recarga el registro de capacidades desde el código sin reiniciar Emilia (tras integrar una tool/skill/flujo nueva). Si algo está mal, no toca el registro vigente y devuelve el error.",
-  parametros: { type: "object", properties: {}, required: [] }, riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 120,
+  parametros: { type: "object", properties: {}, required: [] }, riesgo: "escritura", requiereAprobacion: true, timeoutSeg: 120,
   async ejecutar() {
     const r = await recargarRegistro();
     return r.ok ? { ok: true, datos: r, resumen: `Registro recargado: ${r.tools} tools, ${r.skills} skills, ${r.flujos} flujos.${r.nuevos.length ? " Nuevos: " + r.nuevos.join(", ") : " Sin capacidades nuevas."}` } : { ok: false, error: `La recarga falló (el registro anterior sigue activo): ${r.error}` };
@@ -33,9 +33,9 @@ export const registroVerificar: DefTool = {
 
 export const registroAsignar: DefTool = {
   nombre: "registro_asignar", modulo: MODULO,
-  descripcion: "Le asigna a un agente una capacidad ya registrada (tool, skill o flujo) por nombre, sumándola a las que tiene.",
+  descripcion: "Le asigna a un agente una capacidad ya registrada (tool, skill o flujo) por nombre, sumándola a las que tiene. Siempre pide aprobación del jefe: cambia lo que un agente puede hacer.",
   parametros: { type: "object", properties: { agente: { type: "string", minLength: 2 }, nombre: { type: "string", minLength: 2 } }, required: ["agente", "nombre"] },
-  riesgo: "escritura", requiereAprobacion: false,
+  riesgo: "escritura", requiereAprobacion: true,
   async ejecutar(a) {
     const [ag] = await query<any>(`SELECT id, nombre FROM agentes WHERE lower(nombre)=lower($1) OR id::text=$1 LIMIT 1`, [a.agente]);
     if (!ag) return { ok: false, error: `Agente ${a.agente} no existe.` };

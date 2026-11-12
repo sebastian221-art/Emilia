@@ -51,6 +51,8 @@ export async function llamarModelo(
     return llamarModelo(mensajes, tools, { ...op, modelo: MODELO_POR_DEFECTO });
   }
 
+  // La marca que separa system estable/dinámico es solo para el caché de Claude.
+  mensajes = mensajes.map((m: any) => (m.role === "system" && typeof m.content === "string" && m.content.includes("<<<CONTEXTO_DINAMICO>>>") ? { ...m, content: m.content.replace(/\s*<<<CONTEXTO_DINAMICO>>>\s*/g, "\n\n") } : m));
   try {
     const resp = await get().chat.completions.create({
       model: modelo,

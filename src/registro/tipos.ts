@@ -141,7 +141,7 @@ export type PasoFlujo =
   | { id: string; tipo: "tool"; tool: string; args: Args; guardarEn?: string; siFalla?: "fallar" | "continuar"; /** true = un paso `aprobacion` anterior ya cubrió esta acción; no vuelve a pedir OK. */ preaprobado?: boolean }
   | { id: string; tipo: "skill"; skill: string; args: Args; guardarEn?: string; siFalla?: "fallar" | "continuar" }
   | { id: string; tipo: "condicion"; si: (ctx: Record<string, any>) => boolean; entonces: string; sino: string }
-  | { id: string; tipo: "aprobacion"; mensaje: string | ((ctx: Record<string, any>) => string) }
+  | { id: string; tipo: "aprobacion"; mensaje: string | ((ctx: Record<string, any>) => string); /** true = el mensaje ya trae la pregunta y el "respondé ok/no": se manda tal cual, sin envoltorio técnico. */ textoFinal?: boolean }
   | { id: string; tipo: "esperar"; segundos: number | ((ctx: Record<string, any>) => number) }
   | { id: string; tipo: "repetir"; hasta: (ctx: Record<string, any>) => boolean; maxVeces: number; cuerpo: string[]; cadaSegundos?: number | ((ctx: Record<string, any>) => number) }
   | { id: string; tipo: "subflujo"; flujo: string; args: Args; guardarEn?: string }

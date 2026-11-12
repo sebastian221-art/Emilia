@@ -7,20 +7,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { DefTool } from "../registro/tipos.js";
-import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, enviarDocumentoWhatsapp } from "../whatsapp/enviar.js";
+import { enviarTextoWhatsapp, enviarPlantillaWhatsapp, enviarDocumentoWhatsapp, destinoPermitido } from "../whatsapp/enviar.js";
+
+/** Los agentes solo le escriben por su cuenta al jefe (y a WHATSAPP_NUMEROS_PERMITIDOS). */
+const bloqueado = (numero: string) => destinoPermitido(numero) ? null : { ok: false as const, error: `No le escribo a ${numero}: por ahora los agentes solo le escriben por su cuenta al jefe. Si hace falta, el jefe lo agrega a WHATSAPP_NUMEROS_PERMITIDOS en el .env.` };
 import { leerArchivo, archivosDeConversacion, archivosRecientes } from "../dominio/archivos.js";
 
 const MODULO = "whatsapp";
-const NUMERO = { type: "string" as const, description: "Número con código de país, solo dígitos (ej. 573001234567). Si el pedido dice 'a mí' o 'al jefe', usá el número del jefe que aparece en tu contexto.", minLength: 8 };
+const NUMERO = { type: "string" as const, description: "Número con código de país, solo dígitos (ej. 573001234567). Si el pedido dice 'a mí' o 'al jefe', usa el número del jefe que aparece en tu contexto.", minLength: 8 };
 
 export const whatsappEnviarTexto: DefTool = {
   nombre: "whatsapp_enviar_texto",
   modulo: MODULO,
-  descripcion: "Envía un mensaje de texto por WhatsApp a un número. Solo funciona si ese número escribió en las últimas 24 h; si no, usá whatsapp_enviar_plantilla.",
+  descripcion: "Envía un mensaje de texto por WhatsApp (al jefe o a un número autorizado). Si la persona no escribió en las últimas 24 h, sale solo como plantilla.",
   parametros: { type: "object", properties: { numero: NUMERO, texto: { type: "string", description: "Texto del mensaje.", minLength: 1 } }, required: ["numero", "texto"] },
   riesgo: "ejecucion",
   requiereAprobacion: false,
   async ejecutar(a) {
+    const b = bloqueado(a.numero); if (b) return b;
     const r = await enviarTextoWhatsapp(a.numero, a.texto);
     return r.ok ? { ok: true, datos: { id: r.id }, resumen: `Mensaje enviado a ${a.numero}.` } : { ok: false, error: r.error };
   },
@@ -43,6 +47,7 @@ export const whatsappEnviarPlantilla: DefTool = {
   riesgo: "ejecucion",
   requiereAprobacion: false,
   async ejecutar(a) {
+    const b = bloqueado(a.numero); if (b) return b;
     const r = await enviarPlantillaWhatsapp(a.numero, a.plantilla || "recordatorio_emilia", a.variable, a.idioma || "es");
     return r.ok ? { ok: true, datos: { id: r.id }, resumen: `Plantilla ${a.plantilla || "recordatorio_emilia"} enviada a ${a.numero}.` } : { ok: false, error: r.error };
   },
@@ -65,6 +70,7 @@ export const whatsappEnviarDocumento: DefTool = {
   requiereAprobacion: false,
   timeoutSeg: 120,
   async ejecutar(a) {
+    const b = bloqueado(a.numero); if (b) return b;
     const { meta, contenido } = await leerArchivo(a.archivo_id);
     const r = await enviarDocumentoWhatsapp(a.numero, contenido, meta.nombre, meta.mime, a.caption);
     return r.ok ? { ok: true, datos: { id: r.id, nombre: meta.nombre }, resumen: `Archivo "${meta.nombre}" enviado a ${a.numero}.` } : { ok: false, error: r.error };

@@ -13,18 +13,26 @@ export function costoGroq(tokensIn: number, tokensOut: number): number {
   return (tokensIn * PRECIO_IN() + tokensOut * PRECIO_OUT()) / 1_000_000;
 }
 
-// Precios de la API de Claude (USD por millón de tokens; platform.claude.com/docs/en/about-claude/pricing).
-// Caché: lectura 0.1x del precio de entrada, escritura 1.25x. Se pueden pisar por .env.
-const PRECIOS_CLAUDE: Record<string, { in: number; out: number }> = {
-  sonnet: { in: Number(process.env.CLAUDE_SONNET_USD_IN || 2), out: Number(process.env.CLAUDE_SONNET_USD_OUT || 10) },
-  haiku: { in: Number(process.env.CLAUDE_HAIKU_USD_IN || 1), out: Number(process.env.CLAUDE_HAIKU_USD_OUT || 5) },
-  opus: { in: Number(process.env.CLAUDE_OPUS_USD_IN || 4), out: Number(process.env.CLAUDE_OPUS_USD_OUT || 20) },
-};
+// Precios de la API de Claude, USD por millón de tokens (tabla oficial, revisada 2026-10-31:
+// platform.claude.com/docs/about-claude/pricing). in / out / escritura de caché 5 min / lectura de caché.
+// OJO: el `input_tokens` de la API YA excluye los tokens de caché; se suman aparte.
+type Precio = { in: number; out: number; w: number; r: number };
+const PRECIOS_CLAUDE: { patron: RegExp; precio: (promptTotal: number) => Precio }[] = [
+  { patron: /haiku-5-5/i, precio: (t) => (t > 100_000 ? { in: 0.5, out: 2.5, w: 0.625, r: 0.05 } : { in: 0.1, out: 0.5, w: 0.125, r: 0.01 }) },
+  { patron: /haiku-4-5/i, precio: () => ({ in: 1, out: 5, w: 1.25, r: 0.1 }) },
+  { patron: /haiku/i, precio: () => ({ in: 0.8, out: 4, w: 1, r: 0.08 }) },
+  { patron: /sonnet-5-5/i, precio: () => ({ in: 2, out: 10, w: 2.5, r: 0.1 }) },
+  { patron: /sonnet-5/i, precio: () => ({ in: 2, out: 10, w: 2.5, r: 0.2 }) },
+  { patron: /sonnet/i, precio: () => ({ in: 3, out: 15, w: 3.75, r: 0.3 }) },
+  { patron: /opus-5-5/i, precio: () => ({ in: 4, out: 20, w: 5, r: 0.2 }) },
+  { patron: /opus-4-[01]\b|opus-4$|opus-4-2025/i, precio: () => ({ in: 15, out: 75, w: 18.75, r: 1.5 }) },
+  { patron: /opus/i, precio: () => ({ in: 5, out: 25, w: 6.25, r: 0.5 }) },
+  { patron: /fable|mythos/i, precio: () => ({ in: 10, out: 50, w: 12.5, r: 0.25 }) },
+];
 export function costoClaude(modelo: string, tokensIn: number, tokensOut: number, cacheLectura = 0, cacheEscritura = 0): number {
-  const fam = /haiku/i.test(modelo) ? "haiku" : /opus/i.test(modelo) ? "opus" : "sonnet";
-  const p = PRECIOS_CLAUDE[fam];
-  const entradaNormal = Math.max(0, tokensIn - cacheLectura - cacheEscritura);
-  return (entradaNormal * p.in + cacheLectura * p.in * 0.1 + cacheEscritura * p.in * 1.25 + tokensOut * p.out) / 1_000_000;
+  const promptTotal = tokensIn + cacheLectura + cacheEscritura;
+  const p = (PRECIOS_CLAUDE.find((x) => x.patron.test(modelo)) ?? PRECIOS_CLAUDE[3]).precio(promptTotal);
+  return (tokensIn * p.in + cacheLectura * p.r + cacheEscritura * p.w + tokensOut * p.out) / 1_000_000;
 }
 
 export async function registrarConsumo(p: { agenteId: string | null; ejecucionId?: string | null; proveedor: string; modelo?: string; tokensIn?: number; tokensOut?: number; cacheLectura?: number; cacheEscritura?: number; costoUsd?: number }) {

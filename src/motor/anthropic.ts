@@ -20,9 +20,17 @@ function get() {
   return cliente;
 }
 
+/**
+ * Separa el system en dos partes: lo ESTABLE (identidad, reglas, documentos: igual en
+ * todas las tareas → caché que dura entre tareas) y lo DINÁMICO (memoria, acciones
+ * recientes, biblioteca del pedido). armarSistema la pone; Groq la borra.
+ */
+export const MARCA_DINAMICO = "\n\n<<<CONTEXTO_DINAMICO>>>\n\n";
+
 export const ALIAS_CLAUDE: Record<string, () => string> = {
   sonnet: () => process.env.CLAUDE_SONNET_ID || "claude-sonnet-5-5",
-  haiku: () => process.env.CLAUDE_HAIKU_ID || "claude-haiku-4-5-20251001",
+  // Haiku 5.5: $0.10 / $0.50 por millón (≤100k de prompt), 10x más barato que Haiku 4.5.
+  haiku: () => process.env.CLAUDE_HAIKU_ID || "claude-haiku-5-5",
   opus: () => process.env.CLAUDE_OPUS_ID || "claude-opus-5-5",
 };
 
@@ -46,20 +54,54 @@ function aBloquesAsistente(m: any): any[] {
 /** Convierte el historial OpenAI a Messages API (system aparte, roles alternados, tool_result en user). */
 export function convertir(mensajes: ChatCompletionMessageParam[]): { system: string; messages: any[] } {
   const systemPartes: string[] = []; const out: any[] = [];
+  let vistoNoSystem = false;
   const push = (role: "user" | "assistant", content: any[]) => {
     const prev = out[out.length - 1];
     if (prev && prev.role === role) prev.content.push(...content); else out.push({ role, content });
   };
   for (const m of mensajes as any[]) {
-    if (m.role === "system") { systemPartes.push(String(m.content || "")); continue; }
+    // Solo el PRIMER system va al system de Claude. Los que el motor mete después
+    // (empujones, resúmenes, correcciones) van como texto de usuario en su lugar:
+    // si se sumaran al system, el prefijo cambiaría y el caché se rompería cada turno.
+    if (m.role === "system") {
+      if (!systemPartes.length && !vistoNoSystem) { systemPartes.push(String(m.content || "")); continue; }
+      push("user", [{ type: "text", text: `[Indicación del sistema] ${String(m.content || "")}` }]);
+      continue;
+    }
+    vistoNoSystem = true;
     if (m.role === "user") { push("user", [{ type: "text", text: String(m.content || "") || "(vacío)" }]); continue; }
     if (m.role === "assistant") { push("assistant", aBloquesAsistente(m)); continue; }
     if (m.role === "tool") { push("user", [{ type: "tool_result", tool_use_id: m.tool_call_id, content: String(m.content || "") }]); continue; }
   }
   // La API exige que el primer mensaje sea user y que no termine en assistant sin motivo; si el último es assistant (empujón), está bien.
   if (!out.length || out[0].role !== "user") out.unshift({ role: "user", content: [{ type: "text", text: "(inicio)" }] });
-  // Los system "intermedios" que el motor mete como empujones van al final del system (son instrucciones).
   return { system: systemPartes.join("\n\n"), messages: out };
+}
+
+/** System en bloques: el estable con caché propio (sobrevive entre tareas) y el dinámico detrás. */
+function bloquesSystem(system: string): any[] | undefined {
+  if (!system) return undefined;
+  const i = system.indexOf(MARCA_DINAMICO);
+  if (i < 0) return [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
+  const estable = system.slice(0, i).trim(), dinamico = system.slice(i + MARCA_DINAMICO.length).trim();
+  return [
+    { type: "text", text: estable || "(sin identidad)", cache_control: { type: "ephemeral" } },
+    ...(dinamico ? [{ type: "text", text: dinamico }] : []),
+  ];
+}
+
+/**
+ * Punto de caché en el último bloque del historial: en el loop cada turno re-manda
+ * todo lo anterior; así el siguiente turno lee ese prefijo al 10% del precio.
+ * (Máximo 4 puntos por llamada: tools + system estable + este = 3.)
+ */
+function conCacheEnHistorial(messages: any[]): any[] {
+  const ult = messages[messages.length - 1];
+  if (!ult || !Array.isArray(ult.content) || !ult.content.length) return messages;
+  const copia = messages.slice(0, -1);
+  const contenido = ult.content.map((b: any, i: number) => (i === ult.content.length - 1 ? { ...b, cache_control: { type: "ephemeral" } } : b));
+  copia.push({ ...ult, content: contenido });
+  return copia;
 }
 
 const SIN_TEMPERATURA = new Set<string>();   // modelos que no aceptan temperature (se aprende en la primera llamada)
@@ -81,8 +123,8 @@ export async function llamarClaude(
     model: modelo,
     max_tokens: op.maxTokens ?? 4096,
     ...(conTemp ? { temperature: Math.min(1, Math.max(0, op.temperatura ?? 0.3)) } : {}),
-    system: system ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : undefined,
-    messages,
+    system: bloquesSystem(system),
+    messages: conCacheEnHistorial(messages),
     tools: toolsA.length ? toolsA : undefined,
     tool_choice: toolsA.length ? (op.forzarTool ? { type: "any" } : { type: "auto" }) : undefined,
   });
@@ -107,8 +149,8 @@ export async function streamClaude(mensajes: ChatCompletionMessageParam[], op: {
   const { system, messages } = convertir(mensajes);
   const stream = get().messages.stream({
     model: modelo, max_tokens: op.maxTokens ?? 600,
-    system: system ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : undefined,
-    messages,
+    system: bloquesSystem(system),
+    messages: conCacheEnHistorial(messages),
   } as any);
   let texto = "";
   stream.on("text", (t: string) => { texto += t; op.onDelta(t); });

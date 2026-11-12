@@ -39,6 +39,12 @@ export function crearContexto(
       if (toolsPermitidas && !toolsPermitidas.includes(nombre)) {
         return { ok: false, error: `Esta skill no tiene permiso para usar la tool "${nombre}". Permitidas: ${toolsPermitidas.join(", ")}.` };
       }
+      // Una skill (o una tool que llama a otra) NO puede saltarse la aprobación del jefe:
+      // la aprobación solo existe en el loop del agente y en los flujos. Si la acción la
+      // necesita, la skill termina y el agente la pide con su propia llamada.
+      if (registro.tool(nombre)?.requiereAprobacion) {
+        return { ok: false, error: `"${nombre}" requiere aprobación del jefe y no puede ejecutarse dentro de una skill. Terminá la skill y llamá ${nombre} directamente para que se pida el OK.` };
+      }
       return ejecutarTool(nombre, args, ctx);
     },
     modelo(mensajes, tools = []) { return llamarModelo(mensajes, tools); },

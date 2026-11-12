@@ -23,7 +23,7 @@ import { reanudarFlujo } from "../motor/flujo.js";
 import { encolar, pendientesEnCola } from "../motor/cola.js";
 import { solicitarCancelacion, RE_PARAR, limpiarCancelacion } from "../motor/cancelacion.js";
 import { cancelarSesion } from "../motor/claude-code.js";
-import { entregarRespuesta } from "../motor/entrega.js";
+import { entregarRespuesta, entregarTexto } from "../motor/entrega.js";
 import { obtenerOCrearConversacion, guardarMensajeEn } from "../dominio/conversaciones.js";
 import { aprobacionPendienteDelJefe, resolverAprobacion } from "../dominio/aprobaciones.js";
 import { enviarTextoWhatsapp, descargarMedia } from "./enviar.js";
@@ -45,10 +45,20 @@ export function verificarWebhook(req: Request, res: Response) {
   }
 }
 
-/** Firma HMAC de Meta. Si no hay APP_SECRET configurado, deja pasar (modo prueba). */
-function firmaValida(rawBody: Buffer, header: string | undefined): boolean {
+/**
+ * Firma HMAC de Meta. Sin WHATSAPP_APP_SECRET se RECHAZA todo: cualquiera que
+ * conozca la URL podría hacerse pasar por el jefe. Solo para pruebas locales se
+ * puede desactivar explícitamente con WHATSAPP_SIN_FIRMA=true.
+ */
+let avisoSinFirma = false;
+function firmaValida(rawBody: Buffer | undefined, header: string | undefined): boolean {
   const secret = process.env.WHATSAPP_APP_SECRET;
-  if (!secret) return true;
+  if (!secret) {
+    if (process.env.WHATSAPP_SIN_FIRMA === "true") return true;
+    if (!avisoSinFirma) { avisoSinFirma = true; console.error("[whatsapp] Falta WHATSAPP_APP_SECRET en el .env: rechazo todos los mensajes. Copiá el 'App Secret' de Meta (Configuración de la app → Básica)."); }
+    return false;
+  }
+  if (!rawBody) return false;
   if (!header?.startsWith("sha256=")) return false;
   const esperado = header.slice(7);
   const calculado = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
@@ -82,7 +92,7 @@ const RE_RECHAZA_TOL = /^\s*(no|nop|rechazo|cancel[aá](lo)?|par[aá](lo)?|deten
 
 export async function recibirMensaje(req: Request, res: Response) {
   const rawBody: Buffer | undefined = (req as any).rawBody;
-  if (rawBody && !firmaValida(rawBody, req.header("X-Hub-Signature-256"))) {
+  if (!firmaValida(rawBody, req.header("X-Hub-Signature-256"))) {
     console.warn("[whatsapp] Firma HMAC inválida — rechazado.");
     return res.sendStatus(401);
   }
@@ -211,14 +221,16 @@ async function procesarEntrante(m: any) {
       const ap = apPend;
       if (ap?.tipo === "tool" && ap.agente_ejecucion_id) {
         const aprobada = apruebaTxt;
-        await resolverAprobacion(ap.id, aprobada);
+        // Si otro canal (panel) ya la resolvió, NO aplicar este "ok" a otra cosa.
+        if (!(await resolverAprobacion(ap.id, aprobada))) { await entregarTexto(conv, "Esa aprobación ya estaba resuelta; no hice nada nuevo."); return; }
         const r = await reanudarEjecucion(ap.agente_ejecucion_id, aprobada);
         await entregarRespuesta(conv, r);
         return;
       }
       if (ap?.tipo === "flujo" && ap.ejecucion_id) {
         const aprobada = apruebaTxt;
-        await resolverAprobacion(ap.id, aprobada);
+        // Si otro canal (panel) ya la resolvió, NO aplicar este "ok" a otra cosa.
+        if (!(await resolverAprobacion(ap.id, aprobada))) { await entregarTexto(conv, "Esa aprobación ya estaba resuelta; no hice nada nuevo."); return; }
         await reanudarFlujo(ap.ejecucion_id, aprobada);   // el flujo reporta solo a esta conversación
         return;
       }

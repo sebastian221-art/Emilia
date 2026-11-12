@@ -27,6 +27,7 @@ import { recuperarSesionesHuerfanas } from "./motor/claude-code.js";
 import { rutasCodigo } from "./rutas/codigo.js";
 import { rutasEmpresa } from "./rutas/empresa.js";
 import { rutasEventos } from "./rutas/eventos.js";
+import { recibirWebhook } from "./motor/eventos.js";
 import { rutasBiblioteca } from "./rutas/biblioteca.js";
 import { programarReflexionNocturna } from "./motor/pedir.js";
 import { rutasVoz } from "./rutas/voz.js";
@@ -142,18 +143,48 @@ process.on("unhandledRejection", (e) => console.error("Promesa sin atrapar:", e)
 process.on("uncaughtException", (e) => console.error("Excepción sin atrapar:", e));
 
 const PORT = Number(process.env.PORT ?? 3000);
+// El panel solo escucha en esta máquina. Para abrirlo desde otro equipo de tu red,
+// PANEL_HOST=0.0.0.0 (nunca lo expongas a internet: no tiene contraseña).
+const PANEL_HOST = process.env.PANEL_HOST || "127.0.0.1";
+
+// ── Puerta pública (lo ÚNICO que ngrok publica) ───────────────────────────
+// Solo el webhook de WhatsApp y los disparadores webhook (con token/firma).
+// Todo lo demás (panel, /api/*) queda fuera de internet.
+const PORT_PUBLICO = Number(process.env.PORT_PUBLICO ?? PORT + 1);
+const publico = express();
+publico.disable("x-powered-by");
+publico.use(express.json({ limit: "2mb", verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
+publico.get("/webhook/whatsapp", verificarWebhook);
+publico.post("/webhook/whatsapp", recibirMensaje);
+publico.post("/api/eventos/:nombre", async (req, res) => {
+  try {
+    const r = await recibirWebhook(req.params.nombre, req.body, { token: String(req.query.token || req.header("x-emilia-token") || ""), firma: req.header("x-hub-signature-256") || undefined, rawBody: (req as any).rawBody });
+    res.status(r.ok ? 200 : 403).json(r);
+  } catch (e: any) { console.error("[eventos] webhook:", e?.message || e); res.status(500).json({ ok: false, error: "Error interno" }); }
+});
+publico.use((_req, res) => res.sendStatus(404));
+publico.use((err: any, _req: Request, res: Response, _next: NextFunction) => { console.error("[publico]", err?.message || err); res.sendStatus(400); });
 
 // El registro se carga ANTES de escuchar: si una capacidad está mal definida
 // o una referencia está rota, el servidor no arranca y el error dice qué es.
 iniciarRegistro()
   .then(() => {
-    app.listen(PORT, async () => {
-      console.log(`Emilia en http://localhost:${PORT}`);
+    publico.listen(PORT_PUBLICO, "127.0.0.1", () => console.log(`Puerta pública (solo webhooks) en 127.0.0.1:${PORT_PUBLICO}`));
+    app.listen(PORT, PANEL_HOST, async () => {
+      console.log(`Emilia en http://localhost:${PORT}${PANEL_HOST === "127.0.0.1" ? " (solo esta máquina)" : ` (escuchando en ${PANEL_HOST})`}`);
       await recuperarSesionesHuerfanas();
       await retomarFlujos();
       await retomarProcesos();
       iniciarReloj();
-      const podarAprobaciones = () => query(`UPDATE aprobaciones SET estado='rechazada', resuelto_en=now() WHERE estado='pendiente' AND creado_en < now() - interval '24 hours'`).then((r: any) => { if (r?.length) console.log(`[aprobaciones] ${r.length} aprobaciones viejas rechazadas.`); }).catch(() => {});
+      // Aprobaciones de más de 24 h: se rechazan y la tarea que esperaba se cierra (antes quedaba colgada para siempre).
+      const podarAprobaciones = async () => {
+        try {
+          const r = await query<{ agente_ejecucion_id: string | null }>(`UPDATE aprobaciones SET estado='rechazada', resuelto_en=now() WHERE estado='pendiente' AND creado_en < now() - interval '24 hours' RETURNING agente_ejecucion_id`);
+          const ids = r.map((x) => x.agente_ejecucion_id).filter(Boolean);
+          if (ids.length) await query(`UPDATE ejecuciones SET estado='fallida' WHERE id = ANY($1::uuid[]) AND estado='esperando_aprobacion'`, [ids]);
+          if (r.length) console.log(`[aprobaciones] ${r.length} aprobaciones de más de 24 h rechazadas; ${ids.length} tareas cerradas.`);
+        } catch (e: any) { console.warn("[aprobaciones] poda:", e?.message || e); }
+      };
       podarAprobaciones(); setInterval(podarAprobaciones, 3600 * 1000);
       // Biblioteca: envejecimiento diario (debilita lo que nadie usa, propone refrescar lo muy viejo).
       programarReflexionNocturna(Number(process.env.SYSTEM_NOCTURNO_HORA) || 3);   // System reflexiona a las 3:00 sobre el día
@@ -161,7 +192,7 @@ iniciarRegistro()
       setInterval(envejecerBiblioteca, 24 * 3600 * 1000);
       limpiarArchivosViejos().catch((e) => console.warn("[archivos] limpieza:", e?.message || e));
       setInterval(() => limpiarArchivosViejos().catch(() => {}), 24 * 3600 * 1000);
-      await iniciarTunel(PORT);
+      await iniciarTunel(PORT_PUBLICO);   // ngrok publica SOLO la puerta pública, nunca el panel
     });
   })
   .catch((e) => {

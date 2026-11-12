@@ -94,7 +94,15 @@ export async function recibirWebhook(nombre: string, body: unknown, op: { token?
       const esperado = "sha256=" + createHmac("sha256", cfg.secreto).update(op.rawBody || Buffer.from(JSON.stringify(body))).digest("hex");
       const a = Buffer.from(esperado), b = Buffer.from(op.firma || "");
       if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, error: "Firma inválida.", disparados: 0 };
-    } else if (cfg.token && cfg.token !== op.token) return { ok: false, error: "Token inválido.", disparados: 0 };
+    } else if (cfg.token) {
+      const { timingSafeEqual } = await import("node:crypto");
+      const a = Buffer.from(String(cfg.token)), b = Buffer.from(op.token || "");
+      if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, error: "Token inválido.", disparados: 0 };
+    } else {
+      // Sin token ni secreto cualquiera podría disparar al agente desde internet con instrucciones propias.
+      console.warn(`[eventos] Webhook '${nombre}' rechazado: el disparador no tiene token ni secreto. Agregale uno en su config.`);
+      return { ok: false, error: "Este disparador no tiene token ni secreto configurado; por seguridad no acepta llamadas.", disparados: 0 };
+    }
     await registrarEvento(`webhook.${nombre}`, body, "webhook");
     ejecutarDisparador(d, { nombre: `webhook.${nombre}`, datos: body, origen: "webhook" }).catch(() => {});
     n++;

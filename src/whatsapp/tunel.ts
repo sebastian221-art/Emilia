@@ -1,3 +1,4 @@
+// ARCHIVO: src/whatsapp/tunel.ts
 import ngrok from "@ngrok/ngrok";
 
 /**
@@ -12,7 +13,8 @@ export async function iniciarTunel(puerto: number): Promise<string | null> {
     return null;
   }
   try {
-    const opciones: any = { addr: puerto, authtoken };
+    // `puerto` es la puerta pública (solo webhooks); el panel nunca pasa por acá.
+    const opciones: any = { addr: `127.0.0.1:${puerto}`, authtoken };
     // Si tenés un dominio fijo, ponelo en NGROK_DOMAIN del .env.
     if (process.env.NGROK_DOMAIN) opciones.domain = process.env.NGROK_DOMAIN;
 
@@ -22,6 +24,7 @@ export async function iniciarTunel(puerto: number): Promise<string | null> {
     console.log(" Túnel ngrok activo");
     console.log(`   URL pública:   ${url}`);
     console.log(`   Webhook Meta:  ${url}/webhook/whatsapp`);
+    console.log(`   Publica solo:  /webhook/whatsapp y /api/eventos/* (el panel NO es accesible desde internet)`);
     console.log(`   Verify token:  ${process.env.WHATSAPP_VERIFY_TOKEN ?? "(falta WHATSAPP_VERIFY_TOKEN)"}`);
     console.log("════════════════════════════════════════\n");
     return url ?? null;

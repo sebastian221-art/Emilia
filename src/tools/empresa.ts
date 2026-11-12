@@ -110,7 +110,7 @@ export const empresaCrearPuesto: DefTool = {
 
 export const empresaProgramar: DefTool = {
   nombre: "empresa_programar", modulo: MODULO,
-  descripcion: "Le asigna a un puesto un flujo PERMANENTE (vigilar_proyecto, senior_auditoria_periodica, jelcom_campana_por_whatsapp, etc.) que corre bajo su agente. Lo que el flujo reporte llega al jefe por WhatsApp con el nombre del puesto.",
+  descripcion: "Le asigna a un puesto un flujo PERMANENTE (vigilar_proyecto, senior_auditoria_periodica, jelcom_envio_completo, etc.) que corre bajo su agente. Lo que el flujo reporte llega al jefe por WhatsApp con el nombre del puesto.",
   parametros: { type: "object", properties: { puesto: { type: "string", minLength: 2 }, flujo: { type: "string", description: "Nombre del flujo registrado.", minLength: 3 }, args: { type: "object", description: "Argumentos del flujo." } }, required: ["puesto", "flujo"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 120,
   async ejecutar(a) {

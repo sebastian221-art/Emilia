@@ -165,7 +165,7 @@ async function avanzar(ejecucionId: string): Promise<EstadoFlujo> {
         case "aprobacion": {
           if (ctx.__aprobados[paso.id]) { actual = siguienteLineal(def, paso.id); break; }
           const msg = typeof paso.mensaje === "function" ? seguro(() => (paso.mensaje as any)(ctx), "¿Aprobás continuar?") : paso.mensaje;
-          return pausarPorAprobacion(fila, paso.id, msg);
+          return pausarPorAprobacion(fila, paso.id, msg, paso.textoFinal ? msg : undefined);
         }
         case "esperar": {
           const seg = Math.max(0, Number(typeof paso.segundos === "function" ? seguro(() => (paso.segundos as any)(ctx), 0) : paso.segundos) || 0);

@@ -171,8 +171,14 @@ async function probar(nombre) {
   const out = document.getElementById("resultado");
   out.innerHTML = `<p style="font-size:12px;color:var(--e-text-muted);margin-top:10px">Ejecutando (puede tardar: usa el modelo)…</p>`;
   try {
-    const r = await fetch(`/api/registro/skills/${nombre}/probar`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ args }) });
-    out.innerHTML = renderResultado(await r.json());
+    const pedir = (confirmado) => fetch(`/api/registro/skills/${nombre}/probar`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ args, confirmado }) });
+    let r = await pedir(false);
+    let j = await r.json();
+    if (j.requiereConfirmacion) {
+      if (!confirm(j.error + "\n\nArgumentos:\n" + JSON.stringify(args, null, 2))) { out.innerHTML = renderResultado({ ok: false, error: "Cancelado: no se ejecutó." }); return; }
+      j = await (await pedir(true)).json();
+    }
+    out.innerHTML = renderResultado(j);
   } catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
 }
 cargar();

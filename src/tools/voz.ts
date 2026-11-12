@@ -1,7 +1,7 @@
 // ARCHIVO: src/tools/voz.ts
 import type { DefTool } from "../registro/tipos.js";
 import { sintetizar, transcribir } from "../motor/voz.js";
-import { enviarAudioWhatsapp } from "../whatsapp/enviar.js";
+import { enviarAudioWhatsapp, destinoPermitido } from "../whatsapp/enviar.js";
 import { leerArchivo, guardarArchivo } from "../dominio/archivos.js";
 
 const MODULO = "voz";
@@ -12,6 +12,7 @@ export const vozHablar: DefTool = {
   parametros: { type: "object", properties: { numero: { type: "string", description: "Número con código de país, solo dígitos.", minLength: 8 }, texto: { type: "string", description: "Lo que va a decir (natural, sin markdown).", minLength: 1, maxLength: 1500 } }, required: ["numero", "texto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 90,
   async ejecutar(a) {
+    if (!destinoPermitido(a.numero)) return { ok: false, error: `No le mando audios a ${a.numero}: solo al jefe o a WHATSAPP_NUMEROS_PERMITIDOS.` };
     const v = await sintetizar(a.texto);
     if (!v.ok || !v.audio) return { ok: false, error: v.error };
     const r = await enviarAudioWhatsapp(a.numero, v.audio.contenido, v.audio.mime);

@@ -34,9 +34,9 @@ export const capacidadNueva: DefFlujo = {
     { id: "cerrar",    tipo: "tool", tool: "codigo_cerrar_sandbox", args: (c) => ({ sandbox_id: c.impl.sandbox_id, borrar_rama: true }), siFalla: "continuar" },
     // Si Emilia corre con tsx watch, aquí se reinicia sola; la espera persistida hace que el flujo continúe tras el reinicio.
     { id: "esperar",   tipo: "esperar", segundos: 25 },
-    { id: "recargar",  tipo: "tool", tool: "registro_recargar", args: {}, guardarEn: "recarga", siFalla: "continuar" },
+    { id: "recargar",  tipo: "tool", tool: "registro_recargar", args: {}, guardarEn: "recarga", siFalla: "continuar", preaprobado: true },
     { id: "verificar", tipo: "tool", tool: "registro_verificar", args: (c) => ({ nombre: c.nombre }), guardarEn: "def" },
-    { id: "asignar",   tipo: "tool", tool: "registro_asignar", args: (c) => ({ agente: c.asignar_a || "Emilia", nombre: c.nombre }), siFalla: "continuar" },
+    { id: "asignar",   tipo: "tool", tool: "registro_asignar", args: (c) => ({ agente: c.asignar_a || "Emilia", nombre: c.nombre }), siFalla: "continuar", preaprobado: true },
     { id: "fin",       tipo: "fin", resultado: (c) => ({ nombre: c.nombre, tipo: c.tipo, definicion: c.def, informe: c.impl?.informe }) },
     { id: "fin_fallo", tipo: "fin", fallo: true, resultado: (c) => ({ nombre: c.nombre, error: "No quedó verificada.", sandbox_id: c.impl?.sandbox_id, informe: c.impl?.informe }) },
   ],

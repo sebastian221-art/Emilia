@@ -16,6 +16,7 @@ import { contextoDeAgente } from "../dominio/documentos.js";
 import { obtenerConversacion, type Conversacion } from "../dominio/conversaciones.js";
 import { crearAprobacionTool } from "../dominio/aprobaciones.js";
 import { llamarModelo, MODELO_POR_DEFECTO } from "./groq.js";
+import { MARCA_DINAMICO } from "./anthropic.js";
 import { ejecutarTool, ejecutarSkill, crearContexto } from "./ejecutor.js";
 import { herramientasDeAgente, type Invocable } from "./herramientas.js";
 import { iniciarFlujo } from "./flujo.js";
@@ -172,9 +173,23 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
  * seguido de corrido (puede volver a pausar si hay otra aprobación después).
  */
 export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean): Promise<ResultadoTarea> {
-  const [fila] = await query<any>(`SELECT * FROM ejecuciones WHERE id = $1`, [ejecucionId]);
-  if (!fila) throw new Error("Ejecución no encontrada");
-  if (fila.estado !== "esperando_aprobacion") throw new Error(`La ejecución está '${fila.estado}', no esperando aprobación.`);
+  // Reclamo ATÓMICO: si llegan dos "ok" a la vez (panel + WhatsApp), solo uno la retoma.
+  const [fila] = await query<any>(`UPDATE ejecuciones SET estado='en_curso' WHERE id = $1 AND estado = 'esperando_aprobacion' RETURNING *`, [ejecucionId]);
+  if (!fila) {
+    const [actual] = await query<any>(`SELECT estado FROM ejecuciones WHERE id = $1`, [ejecucionId]);
+    if (!actual) throw new Error("Ejecución no encontrada");
+    throw new Error(`La ejecución está '${actual.estado}', no esperando aprobación (¿ya la retomó otro canal?).`);
+  }
+  try {
+    return await reanudarReclamada(fila, aprobada);
+  } catch (e) {
+    // Si falla antes de entrar al bucle, que no quede "en_curso" para siempre.
+    await query(`UPDATE ejecuciones SET estado='fallida' WHERE id=$1 AND estado='en_curso'`, [ejecucionId]).catch(() => {});
+    throw e;
+  }
+}
+
+async function reanudarReclamada(fila: any, aprobada: boolean): Promise<ResultadoTarea> {
 
   const ag = await obtenerAgente(fila.agente_id);
   if (!ag) throw new Error("Agente no encontrado");
@@ -200,7 +215,6 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
   };
   const ctx = crearContexto(estado.agenteId, estado.ejId, null, estado.conversacionId);
   await ctx.traza("aprobacion", aprobada ? `Aprobado: ${pendientes[0].nombre}. Continúa.` : `Rechazado: ${pendientes[0].nombre}. Continúa sin ejecutarla.`);
-  await query(`UPDATE ejecuciones SET estado='en_curso' WHERE id=$1`, [estado.ejId]);
   estado.enfoqueReanudacion = pendientes[0].nombre;
 
   const r = await bucle(estado, tools, invocables, ctx);
@@ -506,13 +520,18 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
   let biblioteca = "";
   try { const { contextoPara } = await import("./biblioteca.js"); if (mensajeUsuario.trim()) biblioteca = await contextoPara(mensajeUsuario.slice(0, 500), 4); } catch { /* sin biblioteca */ }
   const contexto = await contextoDeAgente(ag.id);
-  return [
+  // Primero lo ESTABLE (identidad, reglas, documentos) y después de la marca lo que cambia
+  // en cada pedido: así Claude reutiliza el caché de la parte grande entre tareas.
+  const estable = [
     partes,
-    accionesRecientes,
-    biblioteca,
-    memoriaLp ? `=== LO QUE SABÉS DE LARGO PLAZO (memoria persistente; usalo con naturalidad, sin recitarlo) ===\n${memoriaLp}\n=== FIN MEMORIA ===` : "",
     contexto ? `=== CONTEXTO / DOCUMENTOS ===\n${contexto}\n=== FIN ===` : "",
   ].filter(Boolean).join("\n\n");
+  const dinamico = [
+    memoriaLp ? `=== LO QUE SABÉS DE LARGO PLAZO (memoria persistente; usalo con naturalidad, sin recitarlo) ===\n${memoriaLp}\n=== FIN MEMORIA ===` : "",
+    accionesRecientes,
+    biblioteca,
+  ].filter(Boolean).join("\n\n");
+  return dinamico ? `${estable}${MARCA_DINAMICO}${dinamico}` : estable;
 }
 
 

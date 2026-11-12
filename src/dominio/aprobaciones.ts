@@ -64,14 +64,14 @@ export async function resolverAprobacion(id: string, aprobada: boolean): Promise
 
 
 /**
- * Aprobación pendiente más antigua cuyo ORIGEN es el jefe con este número, sin
+ * Aprobación pendiente MÁS RECIENTE (la última que el jefe vio) cuyo ORIGEN es el jefe con este número, sin
  * importar en qué conversación se creó (directa, delegación de cualquier
  * profundidad, o flujo). Sube por la cadena de delegaciones hasta la
  * conversación de WhatsApp raíz y compara el contacto.
  */
 export async function aprobacionPendienteDelJefe(numero: string): Promise<Aprobacion | undefined> {
   const limpio = numero.replace(/\D/g, "");
-  const pendientes = await query<Aprobacion>(`SELECT * FROM aprobaciones WHERE estado='pendiente' AND conversacion_id IS NOT NULL ORDER BY creado_en ASC LIMIT 30`);
+  const pendientes = await query<Aprobacion>(`SELECT * FROM aprobaciones WHERE estado='pendiente' AND conversacion_id IS NOT NULL ORDER BY creado_en DESC LIMIT 30`);
   for (const a of pendientes) {
     let convId: string | null = a.conversacion_id;
     for (let i = 0; i < 6 && convId; i++) {
