@@ -259,6 +259,8 @@ export async function asegurarMonitoresSistema() {
     { nombre: "Copias de seguridad", tipo: "copias", cada_seg: 1800, fallos: 1, config: { hora: process.env.COPIAS_HORA || "03:00" } },
     { nombre: "Credenciales", tipo: "credenciales", cada_seg: 6 * 3600, fallos: 1 },
   ];
+  // Any (chatbot del mall): si está configurado, se vigila que esté arriba; la calidad la mide calidad-any.
+  if (process.env.ANY_URL) base.push({ nombre: "Any (chatbot)", tipo: "url", cada_seg: 300, fallos: 2, critico: true, config: { url: `${process.env.ANY_URL.replace(/\/+$/, "")}/health` } } as any);
   for (const b of base) {
     await query(`INSERT INTO monitores (nombre, tipo, cada_seg, fallos_para_alertar, critico, sistema, config) VALUES ($1,$2,$3,$4,$5,true,$6) ON CONFLICT (nombre) DO NOTHING`,
       [b.nombre, b.tipo, b.cada_seg, b.fallos, !!(b as any).critico, JSON.stringify((b as any).config || {})]);

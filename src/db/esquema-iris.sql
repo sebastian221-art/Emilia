@@ -154,3 +154,32 @@ CREATE TABLE IF NOT EXISTS copias (
   detalle  TEXT,
   t        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── Iris 4: calidad de Any (chatbot del centro comercial) ─────────────────────
+CREATE TABLE IF NOT EXISTS any_evaluaciones (
+  traza_id           integer PRIMARY KEY,
+  fecha              timestamptz NOT NULL,
+  cliente            text,                 -- enmascarado (•••4567); nunca el número completo
+  pregunta           text,
+  respuesta          text,
+  herramienta        text,
+  metodo             text,
+  ms                 integer,
+  veredicto          text NOT NULL,        -- bien | dudosa | mal | omitida
+  categoria          text,
+  gravedad           smallint NOT NULL DEFAULT 0,
+  problema           text,
+  respuesta_correcta text,
+  arreglo            text,                 -- ninguno | conocimiento | codigo
+  sugerencia         text,
+  revision           text,                 -- null | confirmada | falso_positivo | arreglada
+  nota_jefe          text,
+  avisado            boolean NOT NULL DEFAULT false,
+  evaluado_en        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS any_evaluaciones_fecha ON any_evaluaciones (fecha DESC);
+CREATE TABLE IF NOT EXISTS any_aprendizajes (
+  id        serial PRIMARY KEY,
+  texto     text NOT NULL,
+  creado_en timestamptz NOT NULL DEFAULT now()
+);
