@@ -5,7 +5,10 @@
 //    experimentos/   pruebas libres, prototipos, scripts, documentos generados
 //    sandboxes/      copias aisladas (git worktree) de tus proyectos por tarea
 //    config/         ajustes de Claude Code: hook de permisos y herramientas de Emilia
-//    CLAUDE.md       lo que Claude Code sabe del laboratorio (lo lee solo en cada sesión)
+//    herramientas/   docx, exceljs, pptxgenjs, playwright + captura.mjs y comparar.mjs
+//                    (se instala una vez: npm run lab:preparar)
+//    CLAUDE.md       lo que Claude Code sabe del laboratorio (se regenera en cada arranque;
+//                    tus notas van en NOTAS.md, que CLAUDE.md importa)
 //    .env.lab        variables de PRUEBA para el laboratorio (nunca las reales)
 //  Todo lo que corre aquí pasa por el hook de permisos (motor/permisos-codigo.ts)
 //  y tiene las herramientas de Emilia por MCP (scripts/mcp-emilia.mjs).
@@ -18,6 +21,7 @@ import crypto from "node:crypto";
 export const LAB_DIR = path.resolve(process.env.LAB_DIR || path.join(os.homedir(), "EmiliaLab"));
 export const DIR_EXPERIMENTOS = path.join(LAB_DIR, "experimentos");
 export const DIR_CONFIG = path.join(LAB_DIR, "config");
+export const DIR_HERRAMIENTAS = path.join(LAB_DIR, "herramientas");
 const REPO_EMILIA = process.cwd();
 
 /** Token que solo conocen Emilia y los procesos que ella lanza (hook y MCP). Cambia en cada arranque. */
@@ -29,30 +33,54 @@ export const urlInterna = () => `http://127.0.0.1:${Number(process.env.PORT ?? 3
 
 export const rutasConfig = () => ({ settings: path.join(DIR_CONFIG, "claude-settings.json"), mcp: path.join(DIR_CONFIG, "mcp.json") });
 
-const GUIA = `# Laboratorio de Sage (Emilia)
+const H = DIR_HERRAMIENTAS.replace(/\\/g, "/");
+const GUIA = () => `# Laboratorio de Sage (Emilia)
 
-Estás trabajando para Sebastián desde Emilia, su sistema de agentes. Este es tu laboratorio: puedes crear, probar, romper y repetir.
+Trabajas para Sebastián desde Emilia, su sistema de agentes. Este es tu laboratorio: puedes crear, probar, romper y repetir.
+Él te habla por WhatsApp; tú le respondes con tu informe final y con las herramientas de Emilia.
 
 ## Reglas
 - Trabajas SIEMPRE dentro de tu carpeta (un experimento o un sandbox). Fuera de ella, escribir pide permiso al jefe por WhatsApp.
-- Nunca uses credenciales reales. El \`.env\` de los sandboxes viene de \`.env.sandbox\` del proyecto o de \`${path.join(LAB_DIR, ".env.lab")}\`. Si te falta una credencial, dilo en tu informe; no la busques.
-- Push, despliegues (Railway), ssh, publicar paquetes o tocar producción: se le pregunta al jefe solo (el sistema te frena y espera su "ok"). No intentes rodearlo.
-- Verifica con evidencia (build, tests, ejecutar el programa). Nunca digas que algo funciona sin haberlo corrido.
+- No tienes las credenciales de Emilia y no debes buscarlas. El \`.env\` de los sandboxes es de PRUEBA (\`.env.sandbox\` del proyecto o \`${path.join(LAB_DIR, ".env.lab")}\`). Si falta una credencial, dilo en el informe.
+- Push, despliegues, ssh, publicar paquetes o tocar producción: el sistema le pregunta al jefe y espera su "ok". No intentes rodearlo.
+- Verifica con evidencia (build, tests, ejecutar, capturas). Nunca digas que algo funciona sin haberlo corrido.
 - El PC es Windows: la terminal puede ser cmd o PowerShell. Para crear archivos usa tus herramientas de edición, no echo ni heredocs.
 
 ## Herramientas de Emilia (MCP "emilia")
-- \`emilia_enviar_archivo\` → le manda al jefe por WhatsApp un archivo que creaste (Word, Excel, PowerPoint, PDF, imagen, zip, código).
-- \`emilia_avisar\` → un aviso corto al jefe (solo para hitos importantes o si necesitas una decisión).
-- \`biblioteca_consultar\` / \`biblioteca_aportar\` → la memoria de conocimiento compartida del equipo. Consulta antes de investigar; aporta lo que aprendas que sirva después.
-- Además, las herramientas de lectura del resto de Emilia (estado de proyectos, logs, Jelcom, etc.).
+- \`emilia_enviar_archivo\` → le manda al jefe por WhatsApp un archivo tuyo (Word, Excel, PowerPoint, PDF, imagen, zip…).
+- \`emilia_avisar\` → aviso corto al jefe (hitos o decisiones).
+- \`publicar_proyecto\` → sube una carpeta del laboratorio a GitHub (repo privado) y la despliega en Railway con link público; espera y comprueba la URL. Pide el OK del jefe. Si ya estaba publicada, sube la nueva versión.
+- \`publicar_estado\` / \`publicar_listar\` → estado y logs de lo publicado.
+- \`biblioteca_consultar\` / \`biblioteca_aportar\` → conocimiento compartido del equipo. Consulta antes de investigar; aporta lo que sirva después.
+- Además, las herramientas de lectura del resto de Emilia (proyectos, logs, Jelcom…).
 
-## Documentos
-- Word: python-docx o la librería docx de npm. Excel: openpyxl o exceljs. PowerPoint: python-pptx o pptxgenjs. PDF: reportlab o generar HTML y exportar.
-- Si falta una librería, instálala en el experimento (\`pip install --user ...\` o \`npm i ...\`).
-- Los documentos deben verse profesionales: títulos, tablas con formato, sin texto de relleno.
+## Kit del laboratorio (${H})
+Librerías ya instaladas ahí. Desde un script en tu carpeta, cárgalas así (ESM):
+\`\`\`js
+import { createRequire } from "node:module";
+const requireLab = createRequire("${H}/");
+const ExcelJS = requireLab("exceljs");     // Excel con formato, fórmulas, gráficos simples
+const docx = requireLab("docx");           // Word
+const PptxGenJS = requireLab("pptxgenjs"); // PowerPoint
+const { PDFDocument } = requireLab("pdf-lib");
+const { chromium } = requireLab("playwright"); // navegador: capturas, PDF desde HTML, probar páginas
+\`\`\`
+- PDF bonito: arma HTML+CSS y expórtalo con playwright (\`page.pdf()\`).
+- Documentos profesionales: títulos, tablas con formato, colores sobrios, sin relleno. Ábrelos o renderízalos para revisarlos antes de mandarlos.
+- Si algo del kit falta, instálalo en tu experimento con \`npm i\`. Para proyectos que se van a publicar, las dependencias van en SU package.json (no uses el kit dentro del proyecto).
+
+## Ver y replicar una página
+1. \`node "${H}/captura.mjs" <url> ./referencia\` → capturas de escritorio y móvil, pantallazos al bajar (animaciones), hovers, \`pagina.html\` y \`analisis.json\` (colores, tipografías, animaciones, keyframes, librerías, secciones, textos).
+2. MIRA las capturas con Read (son imágenes) y lee \`analisis.json\`. Describe el diseño antes de codificar.
+3. Construye la réplica con los cambios que pidió el jefe. Animaciones: copia el efecto (CSS/keyframes, IntersectionObserver, o la misma librería si es libre). Textos e imágenes propios o del jefe; no copies logos ni marcas de otros.
+4. Levántala local, captúrala igual (\`captura.mjs http://localhost:PUERTO ./replica\`) y compara: \`node "${H}/comparar.mjs" referencia/escritorio-completa.png replica/escritorio-completa.png\`. Mira también las capturas lado a lado. Itera hasta que se vea igual (salvo los cambios pedidos).
+5. Para publicarla: proyecto que Railway sepa correr (package.json con "start" que escuche en process.env.PORT, o un sitio estático servido con un server mínimo). Luego \`publicar_proyecto\`.
 
 ## Informe final (siempre)
-Termina con: qué hiciste, archivos que creaste o cambiaste, cómo lo verificaste (comandos y resultado), qué queda pendiente y qué recomiendas. Corto y concreto.
+Qué hiciste, archivos creados o cambiados, cómo lo verificaste (comandos y resultado), qué queda pendiente y qué recomiendas. Corto y concreto.
+
+## Notas del jefe
+@NOTAS.md
 `;
 
 /** Crea las carpetas y escribe la configuración de Claude Code. Idempotente; se llama al arrancar. */
@@ -68,8 +96,14 @@ export async function prepararLaboratorio(): Promise<void> {
   await fs.writeFile(r.settings, JSON.stringify(settings, null, 2));
   const mcp = { mcpServers: { emilia: { command: process.execPath, args: [path.join(REPO_EMILIA, "scripts", "mcp-emilia.mjs")], env: { EMILIA_URL: urlInterna(), EMILIA_TOKEN: tokenInterno() } } } };
   await fs.writeFile(r.mcp, JSON.stringify(mcp, null, 2));
-  const guia = path.join(LAB_DIR, "CLAUDE.md");
-  try { await fs.access(guia); } catch { await fs.writeFile(guia, GUIA); }
+  await fs.writeFile(path.join(LAB_DIR, "CLAUDE.md"), GUIA());
+  const notas = path.join(LAB_DIR, "NOTAS.md");
+  try { await fs.access(notas); } catch { await fs.writeFile(notas, "# Notas para Sage\n\n(Escribe aquí lo que quieras que Sage tenga siempre en cuenta en el laboratorio.)\n"); }
+  // Kit: copia los scripts del repo (siempre la última versión). Las librerías se instalan con npm run lab:preparar.
+  await fs.mkdir(DIR_HERRAMIENTAS, { recursive: true });
+  for (const f of ["captura.mjs", "comparar.mjs", "package.json"]) await fs.copyFile(path.join(REPO_EMILIA, "scripts", "lab", f), path.join(DIR_HERRAMIENTAS, f)).catch(() => {});
+  try { await fs.access(path.join(DIR_HERRAMIENTAS, "node_modules", "playwright")); }
+  catch { console.warn(`[laboratorio] Falta instalar el kit (Office, capturas): corre "npm run lab:preparar" una vez.`); }
   const envLab = path.join(LAB_DIR, ".env.lab");
   try { await fs.access(envLab); } catch { await fs.writeFile(envLab, "# Variables de PRUEBA para el laboratorio y los sandboxes (nunca las reales).\n# Ej.: DATABASE_URL=postgresql://localhost:5432/emilia_pruebas\n"); }
 }

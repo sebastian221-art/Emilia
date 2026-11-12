@@ -41,7 +41,7 @@ export function matar(pid?: number) {
   } catch { try { process.kill(pid, "SIGKILL"); } catch { /* ya murió */ } }
 }
 
-async function git(cwd: string, args: string, timeoutSeg = 60): Promise<SalidaComando> {
+export async function git(cwd: string, args: string, timeoutSeg = 60): Promise<SalidaComando> {
   return ejecutarComando(cwd, `git ${args}`, timeoutSeg);
 }
 
@@ -109,7 +109,7 @@ export async function estadoGit(ruta: string): Promise<{ rama: string; estado: s
 }
 
 /** Archivos que nunca se suben aunque el proyecto no los ignore (.env, llaves…). Las plantillas (.env.example) sí. */
-const SECRETO = /(^|\/)(\.env(\.(?!example$|sample$|template$|lab$)[^/]+)?|[^/]+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa)[^/]*|credentials\.json)$/i;
+export const SECRETO = /(^|\/)(\.env(\.(?!example$|sample$|template$|lab$)[^/]+)?|[^/]+\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa)[^/]*|credentials\.json)$/i;
 
 /** Cambios pendientes de commit en el sandbox, sin contar archivos de secretos que nunca se suben. */
 export async function pendientesSandbox(ruta: string): Promise<string[]> {
@@ -126,7 +126,7 @@ export async function commitSandbox(ruta: string, mensaje: string): Promise<Sali
   return r;
 }
 /** Opciones de git para autenticar con GITHUB_TOKEN por cabecera (el token nunca queda en la URL ni en los logs de git). */
-async function authGit(ruta: string): Promise<string> {
+export async function authGit(ruta: string): Promise<string> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) return "";
   const url = (await git(ruta, "remote get-url origin")).stdout.trim();

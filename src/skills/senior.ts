@@ -13,7 +13,7 @@ import type { DefSkill, ContextoEjecucion, ResultadoTool } from "../registro/tip
 import { avisarProgreso } from "../motor/actividad.js";
 import { obtenerSandbox, obtenerProyecto, sandboxesAbiertos } from "../dominio/proyectos.js";
 import { iniciarSesionClaude, esperarSesion } from "../motor/claude-code.js";
-import { nuevoExperimento } from "../motor/laboratorio.js";
+import { nuevoExperimento, DIR_HERRAMIENTAS } from "../motor/laboratorio.js";
 import { ramaBaseReal } from "../motor/sandbox.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -386,6 +386,7 @@ export const seniorLaboratorio: DefSkill = {
     type: "object",
     properties: {
       objetivo: { type: "string", description: "Qué hay que lograr, con todo el detalle que dio el jefe.", minLength: 5 },
+      carpeta: { type: "string", description: "Seguir trabajando en una carpeta existente del laboratorio (p. ej. un proyecto ya publicado) en vez de abrir una nueva." },
       enviar_archivos: { type: "boolean", description: "Mandarle al jefe por WhatsApp los archivos finales.", default: true },
       archivos_entrada: { type: "array", items: { type: "string" }, description: "archivo_id de adjuntos del jefe que hay que usar (se copian al experimento)." },
       presupuesto_usd: { type: "number", minimum: 0.5, maximum: 50 },
@@ -395,7 +396,12 @@ export const seniorLaboratorio: DefSkill = {
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 5400,
   tools: ["conocimiento_guardar"],
   async ejecutar(a, ctx) {
-    const dir = await nuevoExperimento(a.objetivo.slice(0, 40));
+    let dir: string;
+    if (a.carpeta) {
+      const { enLaboratorio } = await import("../motor/laboratorio.js");
+      if (!enLaboratorio(a.carpeta)) return { ok: false, error: "Esa carpeta no está en el laboratorio." };
+      dir = path.resolve(a.carpeta);
+    } else dir = await nuevoExperimento(a.objetivo.slice(0, 40));
     const entradas: string[] = [];
     if (Array.isArray(a.archivos_entrada) && a.archivos_entrada.length) {
       const { leerArchivo } = await import("../dominio/archivos.js");
@@ -421,6 +427,73 @@ Carpeta: ${dir}
 ${informe.slice(0, 2500)}` }).catch(() => {});
     return { ok: r.ok, datos: { carpeta: dir, archivos, informe, costo_estimado_usd: r.costo, duracion_s: r.duracion_s }, error: r.ok ? undefined : r.error, resumen: `${r.ok ? "✅" : "⚠"} Laboratorio (${path.basename(dir)}, ${r.duracion_s}s):
 ${informe.slice(0, 3500) || r.error}` };
+  },
+};
+
+// ─── Crear un proyecto (o replicar una página) y publicarlo con link ─────────
+export const seniorCrearProyecto: DefSkill = {
+  nombre: "senior_crear_proyecto", modulo: MODULO,
+  descripcion: "Crea un proyecto nuevo de punta a punta: página, app o API, o una RÉPLICA de una página que el jefe muestra (mismo diseño y animaciones, con los cambios que pida). Claude Code captura y estudia la referencia, construye, prueba en local, compara visualmente, lo sube a GitHub, lo despliega en Railway (con el OK del jefe) y le manda el link, una captura y su opinión.",
+  cuandoUsar: "'Hazme una página como esta <url> pero…', 'crea una landing para…', 'móntame una API que…', 'haz un proyecto y súbelo', cualquier cosa nueva que deba quedar con repo y link. NO para cambiar un proyecto registrado (eso es senior_trabajar).",
+  parametros: {
+    type: "object",
+    properties: {
+      objetivo: { type: "string", description: "Qué hay que construir y los cambios que pidió el jefe, con todo el detalle.", minLength: 5 },
+      referencia_url: { type: "string", description: "Página a replicar o a usar de inspiración (opcional)." },
+      nombre: { type: "string", description: "Nombre corto del proyecto/repo (opcional)." },
+      publicar: { type: "boolean", default: true, description: "Subir a GitHub y desplegar en Railway al final." },
+      privado: { type: "boolean", default: true, description: "Repo privado." },
+      archivos_entrada: { type: "array", items: { type: "string" }, description: "archivo_id de adjuntos del jefe (logos, textos, imágenes) para usar." },
+      presupuesto_usd: { type: "number", minimum: 0.5, maximum: 50 },
+    },
+    required: ["objetivo"],
+  },
+  riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 7200,
+  tools: ["conocimiento_guardar"],
+  async ejecutar(a, ctx) {
+    const dir = await nuevoExperimento(a.nombre || a.objetivo.slice(0, 40));
+    const proyecto = path.join(dir, "proyecto");
+    await fs.mkdir(proyecto, { recursive: true });
+    const entradas: string[] = [];
+    if (Array.isArray(a.archivos_entrada) && a.archivos_entrada.length) {
+      const { leerArchivo } = await import("../dominio/archivos.js");
+      await fs.mkdir(path.join(dir, "entrada"), { recursive: true });
+      for (const id of a.archivos_entrada) {
+        try { const { meta, contenido } = await leerArchivo(id); const dest = path.join(dir, "entrada", meta.nombre); await fs.writeFile(dest, contenido); entradas.push(dest); } catch { /* adjunto no encontrado */ }
+      }
+    }
+    const H = DIR_HERRAMIENTAS;
+    const pasos = [
+      a.referencia_url ? `1. Captura la referencia: node "${path.join(H, "captura.mjs")}" ${a.referencia_url} ./referencia — MIRA las capturas (Read) y lee analisis.json. Escribe en ./DISENO.md cómo es: estructura, colores, tipografías, animaciones y efectos al hacer scroll/hover, y qué cambia según el pedido del jefe.` : `1. Diseña antes de codificar: escribe en ./DISENO.md la estructura, el estilo y las decisiones (algo con personalidad, no una plantilla genérica).`,
+      `2. Construye TODO dentro de ./proyecto (es lo único que se publica). Proyecto que Railway sepa correr: package.json con "start" que escuche en process.env.PORT (para un sitio estático, un server mínimo con express o similar). Dependencias en su propio package.json.`,
+      `3. Pruébalo en local: instálalo, levántalo, comprueba que responde${a.referencia_url ? `, captúralo igual (captura.mjs http://localhost:PUERTO ./replica) y compáralo con node "${path.join(H, "comparar.mjs")}" referencia/escritorio-completa.png replica/escritorio-completa.png. Mira las capturas lado a lado (escritorio y móvil) e itera hasta que se vea igual salvo los cambios pedidos, animaciones incluidas` : " y revisa con capturas que se vea bien en escritorio y móvil"}. Apaga el servidor local al terminar.`,
+      a.publicar !== false ? `4. Publica con la herramienta publicar_proyecto (carpeta: ${proyecto}${a.nombre ? `, nombre: ${a.nombre}` : ""}, privado: ${a.privado !== false}). El jefe tiene que aprobarlo por WhatsApp. Si el despliegue falla, lee los logs, corrige y vuelve a publicar (máximo 3 intentos).
+5. Cuando esté arriba, captura la URL pública, mándale al jefe escritorio-completa.png con emilia_enviar_archivo y un mensaje con el link.` : `4. No publiques. Comprime ./proyecto en un zip y mándaselo al jefe con emilia_enviar_archivo junto con una captura.`,
+      `${a.publicar !== false ? 6 : 5}. Informe final: link (si se publicó) y repo, qué construiste, cómo lo verificaste, qué tan parecido quedó a la referencia (si hubo) y TU OPINIÓN sincera: qué quedó bien, qué está flojo y las 2-3 mejoras que harías después.`,
+    ];
+    await avisarProgreso(ctx.conversacionId, `🏗 Arranco el proyecto${a.referencia_url ? ` (referencia: ${a.referencia_url})` : ""}. Te aviso cuando necesite tu OK para publicarlo.`);
+    const r = await correrClaude(ctx, {
+      cwd: dir, modo: "experimento", maxTurnos: 250, timeoutSeg: 5400, presupuestoUsd: a.presupuesto_usd ?? 10,
+      sistema: `${REGLAS}
+Estás en tu laboratorio, en una carpeta nueva para este proyecto (${dir}). Sigue la guía "Ver y replicar una página" de tu CLAUDE.md.${entradas.length ? `
+Archivos del jefe para usar (en ./entrada): ${entradas.map((e) => path.basename(e)).join(", ")}.` : ""}
+Pasos:
+${pasos.join("\n")}`,
+      encargo: a.objetivo,
+    });
+    const { obtenerDespliegue } = await import("../motor/publicar.js");
+    const pub = await obtenerDespliegue(proyecto).catch(() => undefined);
+    const informe = r.resultado || "";
+    if (informe) await ctx.ejecutarTool("conocimiento_guardar", { nombre: `proyectos/${path.basename(dir)}.md`, contenido: `# ${a.objetivo.slice(0, 120)}
+Carpeta: ${proyecto}${pub?.url ? `\nURL: ${pub.url}\nRepo: ${pub.repo}` : ""}
+
+${informe.slice(0, 3000)}` }).catch(() => {});
+    return {
+      ok: r.ok, error: r.ok ? undefined : r.error,
+      datos: { carpeta: proyecto, url: pub?.url, repo: pub?.repo, estado: pub?.estado, informe, costo_estimado_usd: r.costo, duracion_s: r.duracion_s },
+      resumen: `${r.ok ? "✅" : "⚠"} Proyecto ${path.basename(dir)}${pub?.url ? ` — ${pub.url}` : ""} (${Math.round((r.duracion_s || 0) / 60)} min):
+${informe.slice(0, 3500) || r.error}`,
+    };
   },
 };
 
@@ -451,7 +524,7 @@ Ahora se puede entregar otra vez: flujo entregar_cambios(sandbox_id: "${sb.id}")
 };
 
 export const skillsSenior: DefSkill[] = [
-  seniorLaboratorio, seniorResolverConflictos,
+  seniorLaboratorio, seniorCrearProyecto, seniorResolverConflictos,
   seniorAnalizar, seniorExplicar, seniorPlanificar, seniorImplementar, seniorReparar,
   seniorAuditarSeguridad, seniorAtacar, seniorProbarLimites, seniorPredecirFallas, seniorReplicar, seniorCrearCapacidad,
 ];

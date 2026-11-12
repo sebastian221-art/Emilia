@@ -66,7 +66,7 @@ const PROPIAS = [
   },
 ];
 // De Emilia: lo de solo lectura, más lo de conocimiento y el runtime de proyectos.
-const EXTRA = new Set(["biblioteca_aportar", "biblioteca_usar", "conocimiento_guardar", "runtime_reiniciar", "runtime_detener", "runtime_iniciar"]);
+const EXTRA = new Set(["biblioteca_aportar", "biblioteca_usar", "conocimiento_guardar", "runtime_reiniciar", "runtime_detener", "runtime_iniciar", "publicar_proyecto"]);
 const FUERA = /^(codigo_|pc_|grabacion_|navegador_|registro_|empresa_|sistema_(fallar|esperar|eco|accion_sensible)|flujo_|disparador_|aprender_laboratorio)/;
 function expuestas() {
   return registro.tools().filter((t) => !FUERA.test(t.nombre) && (t.riesgo === "lectura" || EXTRA.has(t.nombre)));
@@ -75,6 +75,14 @@ function expuestas() {
 rutasInterno.get("/api/interno/tools", (_req, res) => {
   res.json({ tools: [...PROPIAS, ...expuestas().map((t) => ({ name: t.nombre, description: `${t.descripcion}${t.requiereAprobacion ? " (pide aprobación al jefe)" : ""}`.slice(0, 1000), inputSchema: t.parametros }))] });
 });
+
+function textoAprobacion(nombre: string, a: any): { titulo: string; detalle: string } {
+  if (nombre === "publicar_proyecto") return {
+    titulo: "Sage quiere publicar un proyecto",
+    detalle: [`📁 ${a.carpeta}`, `📦 GitHub: ${a.nombre || path.basename(String(a.carpeta || ""))} (${a.privado === false ? "PÚBLICO" : "privado"})`, a.desplegar === false ? "Solo GitHub, sin desplegar." : "🚂 Y desplegarlo en Railway con link público.", a.variables && Object.keys(a.variables).length ? `🔧 Variables: ${Object.keys(a.variables).join(", ")}` : ""].filter(Boolean).join("\n"),
+  };
+  return { titulo: `Sage quiere usar ${nombre}`, detalle: JSON.stringify(a).slice(0, 1200) };
+}
 
 const MIMES: Record<string, string> = { ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".zip": "application/zip", ".csv": "text/csv", ".txt": "text/plain", ".md": "text/markdown", ".html": "text/html", ".json": "application/json" };
 
@@ -104,7 +112,7 @@ rutasInterno.post("/api/interno/tool", async (req, res) => {
     const t = expuestas().find((x) => x.nombre === nombre);
     if (!t) return res.json({ ok: false, error: `La herramienta ${nombre} no está disponible para Claude Code.` });
     if (t.requiereAprobacion) {
-      const ap = await pedirAprobacionYEsperar({ titulo: `Sage quiere usar ${t.nombre}`, detalle: JSON.stringify(args).slice(0, 1200), agenteId: s.agenteId, conversacionId: s.conversacionId });
+      const ap = await pedirAprobacionYEsperar({ ...textoAprobacion(t.nombre, args), agenteId: s.agenteId, conversacionId: s.conversacionId });
       if (!ap.aprobada) return res.json({ ok: false, error: `No aprobado: ${ap.motivo}.` });
     }
     const ctx = crearContexto(s.agenteId, null, null, s.conversacionId);

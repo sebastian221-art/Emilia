@@ -57,12 +57,19 @@ function repartir() {
 }
 
 /** El entorno del proceso: sin la API key (usa tu plan) y con lo que necesitan el hook y el MCP. */
+/** Variables del sistema operativo y de herramientas que Claude Code sí necesita para funcionar. */
+const ENTORNO_PERMITIDO = /^(PATH|PATHEXT|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|USERNAME|USER|LOGNAME|SHELL|COMSPEC|SYSTEMROOT|SYSTEMDRIVE|WINDIR|OS|TEMP|TMP|TMPDIR|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|PROGRAMW6432|COMMONPROGRAMFILES.*|ALLUSERSPROFILE|PUBLIC|PROCESSOR_.*|NUMBER_OF_PROCESSORS|LANG|LC_.*|TZ|TERM|COLORTERM|XDG_.*|NVM_.*|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|HTTPS?_PROXY|NO_PROXY|https?_proxy|no_proxy|PYTHON.*|PLAYWRIGHT_BROWSERS_PATH|CLAUDE_CONFIG_DIR|CLAUDE_CODE_GIT_BASH_PATH|PSModulePath)$/i;
+
 function entornoClaude(sesionId: string, op: OpcionesSesion): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: "0" };
-  if (process.env.CLAUDE_CODE_USAR_API !== "true") { delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; }
+  // Solo lo que el sistema necesita: Claude Code NO hereda los secretos de Emilia
+  // (base de datos, WhatsApp, GitHub, Railway…). Si necesita algo, lo pide por MCP.
+  const env: NodeJS.ProcessEnv = { FORCE_COLOR: "0" };
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && ENTORNO_PERMITIDO.test(k)) env[k] = v;
+  for (const k of (process.env.CLAUDE_CODE_ENTORNO_EXTRA || "").split(",").map((x) => x.trim()).filter(Boolean)) if (process.env[k] !== undefined) env[k] = process.env[k];
+  if (process.env.CLAUDE_CODE_USAR_API === "true") { for (const k of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]) if (process.env[k]) env[k] = process.env[k]; }
   Object.assign(env, {
     EMILIA_URL: urlInterna(), EMILIA_TOKEN: tokenInterno(), EMILIA_SESION: sesionId, EMILIA_MODO: op.modo || "escritura",
-    EMILIA_RAICES: (op.raices || []).join("|"), MCP_TOOL_TIMEOUT: String(((Number(process.env.PERMISO_ESPERA_SEG) || 900) + 300) * 1000),
+    EMILIA_RAICES: (op.raices || []).join("|"), MCP_TOOL_TIMEOUT: String(((Number(process.env.PERMISO_ESPERA_SEG) || 900) + 1500) * 1000),
   });
   return env;
 }

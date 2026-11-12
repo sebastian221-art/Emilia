@@ -14,7 +14,7 @@ async function emilia(ruta, cuerpo) {
     method: cuerpo ? "POST" : "GET",
     headers: { "Content-Type": "application/json", "x-emilia-token": TOKEN || "" },
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-    signal: AbortSignal.timeout(((Number(process.env.PERMISO_ESPERA_SEG) || 900) + 300) * 1000),
+    signal: AbortSignal.timeout(((Number(process.env.PERMISO_ESPERA_SEG) || 900) + 1500) * 1000),
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);

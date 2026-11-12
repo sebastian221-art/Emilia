@@ -7,7 +7,8 @@
         "dev": "tsx watch src/server.ts",
         "crear-base": "tsx src/db/crear-base.ts",
         "migrate": "tsx src/db/migrar.ts",
-        "setup": "tsx src/db/crear-base.ts && tsx src/db/migrar.ts"
+        "setup": "tsx src/db/crear-base.ts && tsx src/db/migrar.ts",
+        "lab:preparar": "tsx src/scripts/preparar-laboratorio.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.131.0",
