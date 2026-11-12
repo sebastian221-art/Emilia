@@ -339,7 +339,7 @@ export async function usarComputador(op: OpcionesUsoPc): Promise<ResultadoUsoPc>
           if (!ok) return { contenido: "El jefe NO aprobó escribir la credencial.", error: true };
         }
         await ctl.credencial(nombreCred, input?.campo === "usuario" ? "usuario" : "clave", !!input?.enter);
-        return { contenido: `Escribí el ${input?.campo === "usuario" ? "usuario" : "contraseña"} de "${nombreCred}"${input?.enter ? " y di Enter" : ""}.` };
+        return { contenido: `Escribí ${input?.campo === "usuario" ? "el usuario" : "la contraseña"} de "${nombreCred}"${input?.enter ? " y di Enter" : ""}.` };
       }
     }
     throw new Error(`Herramienta desconocida: ${nombre}`);

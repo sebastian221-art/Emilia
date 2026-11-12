@@ -111,3 +111,13 @@ select option { background: var(--e-surface); color: var(--e-text); }
 ::-webkit-scrollbar-thumb:hover { background: var(--e-accent); }
 /* Firefox */
 * { scrollbar-width: thin; scrollbar-color: var(--e-accent2) var(--e-bg2); }
+/* ── Celular: menú deslizable, márgenes cómodos, botones fáciles de tocar ── */
+@media (max-width: 820px) {
+  nav { overflow-x: auto; padding: 10px 12px; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav .marca { margin-right: 10px; white-space: nowrap; }
+  nav a { white-space: nowrap; padding: 8px 11px; }
+  main { padding: 14px 12px; }
+  h1 { font-size: 18px; }
+  button { padding: 10px 14px; }
+}

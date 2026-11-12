@@ -1,5 +1,8 @@
 <!DOCTYPE html>
 <!-- ARCHIVO: public/codigo/index.html -->
+<!-- Todo lo de Sage en una página: qué está pasando, entregar cambios con diff legible,
+     sesiones de Claude Code en vivo, laboratorio y publicados, guardia y uso del PC.
+     Hecha para escritorio y celular. Lee solo de /api/codigo/* y /api/aprobaciones. -->
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
@@ -7,23 +10,101 @@
 <title>Código · Emilia</title>
 <link rel="stylesheet" href="/comun/estilos.css" />
 <style>
-.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.layout { display: grid; grid-template-columns: 300px 1fr; gap: 14px; height: calc(100vh - 170px); }
-.izq { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
-.izq h4 { font-size: 10px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 4px; }
-.card { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 10px; padding: 9px 11px; font-size: 12px; cursor: pointer; }
+main { max-width: 1280px; }
+.cab { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.pestanas { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--e-border); margin-bottom: 14px; }
+.pestanas::-webkit-scrollbar { display: none; }
+.pestanas a { padding: 9px 13px; font-size: 13px; color: var(--e-text-sec); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+.pestanas a.activa { color: #e4d8ff; border-color: var(--e-accent); }
+.pestanas .num { font-size: 10px; background: var(--e-accent-bg); color: var(--e-accent); border-radius: 8px; padding: 1px 6px; margin-left: 4px; }
+.pestanas .num.alerta { background: rgba(214,69,80,.2); color: #ff9090; }
+
+.dos { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 14px; align-items: start; }
+.lista { display: flex; flex-direction: column; gap: 6px; max-height: calc(100vh - 210px); overflow-y: auto; position: sticky; top: 70px; }
+.detalle { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; min-height: 300px; min-width: 0; }
+.volver { display: none; margin-bottom: 10px; font-size: 13px; color: var(--e-accent); text-decoration: none; padding: 4px 0; }
+@media (max-width: 820px) {
+  .dos { grid-template-columns: 1fr; }
+  .lista { max-height: none; position: static; }
+  .dos.con-detalle .lista { display: none; }
+  .dos:not(.con-detalle) .detalle { display: none; }
+  .volver { display: inline-block; }
+  .cab .sub { display: none; }
+  .detalle { padding: 12px; border-radius: 12px; }
+}
+.card { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 10px; padding: 10px 12px; font-size: 12px; cursor: pointer; }
 .card:hover { border-color: var(--e-accent); }
 .card.activo { background: var(--e-accent-bg); border-color: var(--e-accent); }
-.card .n { font-family: monospace; font-weight: 500; }
-.card .s { color: var(--e-text-sec); font-size: 11px; margin-top: 3px; }
-.panel { background: var(--e-surface-1); border: 1px solid var(--e-border); border-radius: 14px; padding: 16px; overflow-y: auto; }
-.panel h3 { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 8px; }
-.log { font-family: monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.55; max-height: 45vh; overflow-y: auto; background: var(--e-bg2); border-radius: 10px; padding: 10px; }
-.log .claude { color: #d8c9ff; } .log .tool { color: #6ee7b7; } .log .error { color: #ff9090; } .log .resultado { color: #fdba74; } .log .t { color: var(--e-text-muted); }
-pre.diff { font-size: 11px; white-space: pre-wrap; background: var(--e-bg2); border-radius: 10px; padding: 10px; max-height: 50vh; overflow: auto; margin: 0; }
-pre.diff .add { color: #6ee7b7; } pre.diff .del { color: #ff9090; } pre.diff .hdr { color: #b388ff; }
-.vacio { text-align: center; padding: 60px 20px; color: var(--e-text-muted); }
+.card .t1 { font-weight: 500; font-size: 13px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.card .t2 { color: var(--e-text-sec); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.seccion { font-size: 11px; color: var(--e-text-muted); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; font-family: var(--syne); }
+.acciones { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.acciones button { font-size: 12px; padding: 7px 12px; }
+button.peligro { color: #ff9090; border-color: rgba(214,69,80,.4); }
+button.peligro:hover { background: rgba(214,69,80,.15); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.vacio { text-align: center; padding: 50px 16px; color: var(--e-text-muted); font-size: 13px; }
+.nota { font-size: 12px; color: var(--e-text-muted); }
+.salida { margin-top: 8px; }
+
+/* Tablero "Ahora" */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--e-surface); border: 1px solid var(--e-border); border-radius: 12px; padding: 12px; }
+.tile .v { font-family: var(--syne); font-size: 22px; color: #efe8ff; }
+.tile .l { font-size: 11px; color: var(--e-text-muted); }
+.tile .d { font-size: 11px; color: var(--e-text-sec); margin-top: 2px; }
+.aprob { background: rgba(249,115,22,.07); border: 1px solid rgba(249,115,22,.35); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+.aprob .tit { font-weight: 600; font-size: 13px; }
+.aprob pre { white-space: pre-wrap; font-size: 12px; margin: 6px 0; color: var(--e-text-sec); max-height: 220px; overflow: auto; }
+.aprob .acciones button.si { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.5); color: #6ee7b7; }
+.vivo { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6ee7b7; box-shadow: 0 0 8px #6ee7b7; animation: latir 1.4s infinite; margin-right: 6px; }
+@keyframes latir { 50% { opacity: .3; } }
+
+/* Log de sesiones */
+.log { font-size: 12px; white-space: pre-wrap; line-height: 1.55; max-height: 52vh; overflow-y: auto; background: var(--e-bg2); border-radius: 10px; padding: 10px; overflow-wrap: anywhere; }
+.log .claude { color: #d8c9ff; } .log .tool { color: #6ee7b7; } .log .error { color: #ff9090; } .log .resultado { color: #fdba74; } .log .permiso { color: #e8b24a; } .log .archivo { color: #93c5fd; } .log .t { color: var(--e-text-muted); }
+
+/* Diff legible */
+.diff-res { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--e-text-sec); margin: 6px 0 10px; }
+.mas { color: #6ee7b7; } .menos { color: #ff9090; }
+.archivo-diff { border: 1px solid var(--e-border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; background: var(--e-bg2); }
+.archivo-diff > summary { list-style: none; cursor: pointer; padding: 8px 10px; display: flex; gap: 8px; align-items: center; font-size: 12px; background: var(--e-surface); }
+.archivo-diff > summary::-webkit-details-marker { display: none; }
+.archivo-diff > summary .ruta { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.archivo-diff > summary .barra { display: inline-flex; gap: 1px; }
+.archivo-diff > summary .barra i { width: 7px; height: 7px; border-radius: 1px; background: rgba(180,140,255,.15); }
+.archivo-diff > summary .barra i.a { background: #22c55e; } .archivo-diff > summary .barra i.b { background: #d64550; }
+.tabla-diff { width: 100%; border-collapse: collapse; font-size: 12px; }
+.envoltura-diff { overflow-x: auto; }
+.tabla-diff td { padding: 0 8px; white-space: pre; vertical-align: top; line-height: 1.5; }
+.tabla-diff td.n { color: var(--e-text-muted); text-align: right; user-select: none; width: 1%; font-size: 11px; }
+.tabla-diff tr.a td { background: rgba(34,197,94,.10); } .tabla-diff tr.a td.c::before { content: "+"; color: #6ee7b7; margin-right: 4px; }
+.tabla-diff tr.b td { background: rgba(214,69,80,.12); } .tabla-diff tr.b td.c::before { content: "−"; color: #ff9090; margin-right: 4px; }
+.tabla-diff tr.h td { background: var(--e-accent-bg); color: var(--e-accent); padding: 3px 8px; }
+.tabla-diff tr.ctx td.c::before { content: " "; margin-right: 4px; }
+@media (max-width: 820px) { .tabla-diff td { white-space: pre-wrap; overflow-wrap: anywhere; } .tabla-diff td.n { display: none; } }
+
+/* Guardia */
+.hallazgo { border-left: 3px solid var(--e-warn-tx); background: var(--e-surface); border-radius: 8px; padding: 9px 12px; margin-bottom: 6px; font-size: 12px; }
+.hallazgo.grave { border-left-color: #ff6b6b; }
+.hallazgo pre { white-space: pre-wrap; font-size: 11px; color: var(--e-text-sec); max-height: 240px; overflow: auto; margin: 6px 0 0; }
+.interruptor { display: flex; gap: 8px; align-items: center; font-size: 12px; margin: 6px 0; }
+.interruptor input { width: auto; margin: 0; }
+
+/* PC */
+.pasos { display: flex; flex-direction: column; gap: 3px; font-size: 12px; max-height: 50vh; overflow-y: auto; }
+.paso { display: grid; grid-template-columns: 32px 1fr; gap: 6px; padding: 4px 6px; border-radius: 6px; }
+.paso.mal { background: rgba(214,69,80,.08); }
+.paso .num { color: var(--e-text-muted); text-align: right; }
+.galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.galeria a img { width: 100%; border-radius: 8px; border: 1px solid var(--e-border); display: block; }
+.galeria a span { font-size: 10px; color: var(--e-text-muted); }
+.archivos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.archivos a { font-size: 11px; color: var(--e-text-sec); background: var(--e-bg2); border: 1px solid var(--e-border); border-radius: 6px; padding: 3px 8px; text-decoration: none; }
+.archivos a:hover { color: #d8c9ff; border-color: var(--e-accent); }
 .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 820px) { .fila { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -40,125 +121,354 @@ pre.diff .add { color: #6ee7b7; } pre.diff .del { color: #ff9090; } pre.diff .hd
   <a href="/aprobaciones">Aprobaciones</a>
 </nav>
 <main>
-  <div class="top">
-    <div><h1>Código · Senior Developer</h1><p class="sub">Proyectos registrados, sandboxes abiertos y sesiones de Claude Code con su log en vivo y el diff. Integrar al repo real pasa por Aprobaciones.</p></div>
-    <button onclick="mostrarRegistro()">+ Proyecto</button>
+  <div class="cab">
+    <div><h1>Código · Sage</h1><p class="sub">Lo que hace Sage: sesiones de Claude Code, cambios listos para subir, laboratorio, publicados, guardia y uso del PC.</p></div>
   </div>
-  <div class="layout">
-    <div class="izq" id="izq"></div>
-    <div class="panel" id="panel"><div class="vacio">Elegí un sandbox o una sesión.</div></div>
-  </div>
+  <div class="pestanas" id="pestanas"></div>
+  <div id="vista"></div>
 </main>
 <script src="/comun/espejo.js"></script>
 <script>
-let proyectos = [], sandboxes = [], sesiones = [], sel = null, timer = null;
-
-async function cargar() {
-  [proyectos, sandboxes, sesiones] = await Promise.all([api("/api/codigo/proyectos"), api("/api/codigo/sandboxes"), api("/api/codigo/sesiones?limite=25")]);
-  const izq = document.getElementById("izq");
-  let runtime = []; try { runtime = await api("/api/codigo/runtime"); } catch {}
-  const rt = (id) => runtime.find((r) => r.proyecto_id === id);
-  let html = `<h4>Proyectos</h4>` + (proyectos.length ? proyectos.map((p) => { const r = rt(p.id); return `<div class="card" onclick="verProyecto('${p.id}')"><div class="n">${esc(p.nombre)}${r ? badgeEstado(r.estado === "corriendo" ? "en_curso" : r.estado === "caido" ? "fallida" : "pendiente").replace(/>[^<]+</, `>${r.estado}<`) : ""}</div><div class="s">${esc(p.ruta)} · ${esc(p.rama_base)}</div></div>`; }).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno. Registrá uno arriba o pedíselo al Senior.</p>`);
-  html += `<h4>Sandboxes abiertos</h4>` + (sandboxes.length ? sandboxes.map((s) => `<div class="card ${sel === "sb:" + s.id ? "activo" : ""}" onclick="verSandbox('${s.id}')"><div class="n">${esc(s.proyecto_nombre)}/${esc(s.rama)}</div><div class="s">${esc(s.proposito)} · ${fechaHora(s.creado_en)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno.</p>`);
-  html += `<h4>Sesiones de Claude Code</h4>` + (sesiones.length ? sesiones.map((s) => `<div class="card ${sel === "se:" + s.id ? "activo" : ""}" onclick="verSesion('${s.id}')"><div class="n">${esc(s.proyecto)}/${esc((s.rama || "").replace("senior/", ""))}${badgeEstado(s.estado)}</div><div class="s">${esc(s.encargo).slice(0, 70)}<br>${fechaHora(s.inicio)}${s.costo_usd ? ` · $${Number(s.costo_usd).toFixed(3)}` : ""}${s.turnos ? ` · ${s.turnos} turnos` : ""}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguna todavía.</p>`);
-  izq.innerHTML = html;
+// ── Estado y navegación por #pestaña/id (funciona con atrás del celular) ──────
+const PESTANAS = [["ahora", "Ahora"], ["sandboxes", "Cambios"], ["sesiones", "Claude Code"], ["laboratorio", "Laboratorio"], ["guardia", "Guardia"], ["pc", "PC"], ["proyectos", "Proyectos"]];
+let ahora = null, timers = [];
+const parar = () => { timers.forEach(clearInterval); timers = []; };
+const cada = (fn, ms) => { timers.push(setInterval(fn, ms)); };
+const ruta = () => { const [p, id] = location.hash.replace(/^#/, "").split("/"); return { p: p || "ahora", id: id ? decodeURIComponent(id) : null }; };
+const ir = (p, id) => { location.hash = id ? `${p}/${encodeURIComponent(id)}` : p; };
+const usd = (n) => `$${Number(n || 0).toFixed(Number(n || 0) < 1 ? 3 : 2)}`;
+const kb = (b) => b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b > 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
+const corta = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; };
+const hace = (iso) => { if (!iso) return ""; const s = (Date.now() - new Date(iso).getTime()) / 1000; return s < 60 ? "hace un momento" : s < 3600 ? `hace ${Math.round(s / 60)} min` : s < 86400 ? `hace ${Math.round(s / 3600)} h` : fechaHora(iso); };
+function salida(el, r) { el.innerHTML = renderResultado(r); }
+async function accion(boton, fn) {
+  const t = boton?.textContent; if (boton) { boton.disabled = true; boton.textContent = "…"; }
+  try { return await fn(); } catch (e) { alert(e.message); } finally { if (boton) { boton.disabled = false; boton.textContent = t; } }
 }
 
-async function verProyecto(id) {
-  const p = proyectos.find((x) => x.id === id); sel = "py:" + id; clearInterval(timer);
-  let r = null; try { r = (await api("/api/codigo/runtime")).find((x) => x.proyecto_id === id); } catch {}
-  const corriendo = r?.estado === "corriendo";
-  document.getElementById("panel").innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:monospace;margin:0">${esc(p.nombre)}</h2>${r ? badge(r.estado + (r.pid ? " · pid " + r.pid : ""), corriendo ? "ok" : r.estado === "caido" ? "error" : "neutro") : ""}</div>
-    <p class="sub" style="font-size:12px">${esc(p.ruta)} · rama base <b>${esc(p.rama_base)}</b></p>
-    <h3>Proceso</h3>
-    <div style="font-size:12px;font-family:monospace;margin-bottom:8px">start: ${esc(p.cmd_start || "— (sin cmd_start)")}${p.puerto ? ` · puerto ${p.puerto}` : ""}${p.url_salud ? ` · salud ${esc(p.url_salud)}` : ""}${r?.codigo_salida != null ? ` · última salida: ${r.codigo_salida}` : ""}</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      ${corriendo ? `<button onclick="rtAccion('${esc(p.nombre)}','detener')">■ Detener</button><button onclick="rtAccion('${esc(p.nombre)}','reiniciar')">↻ Reiniciar</button>` : `<button class="primario" onclick="rtAccion('${esc(p.nombre)}','iniciar')" ${p.cmd_start ? "" : "disabled"}>▶ Arrancar</button>`}
-      <button onclick="rtAccion('${esc(p.nombre)}','salud')">♥ Salud</button>
-      <button onclick="verLogs('${esc(p.nombre)}')">Logs</button>
+function pintarPestanas() {
+  const { p } = ruta();
+  const n = ahora ? { ahora: ahora.aprobaciones.length + ahora.claude_code.length + ahora.pc.length, sandboxes: ahora.sandboxes, sesiones: ahora.claude_code.length, guardia: ahora.guardia.graves.length, pc: ahora.pc.length } : {};
+  document.getElementById("pestanas").innerHTML = PESTANAS.map(([k, t]) => `<a href="#${k}" class="${p === k ? "activa" : ""}">${t}${n[k] ? `<span class="num ${k === "guardia" || (k === "ahora" && ahora?.aprobaciones.length) ? "alerta" : ""}">${n[k]}</span>` : ""}</a>`).join("");
+}
+async function refrescarAhora() { try { ahora = await api("/api/codigo/ahora"); pintarPestanas(); } catch { /* sin conexión */ } }
+
+async function enrutar() {
+  parar(); pintarPestanas();
+  const { p, id } = ruta();
+  const vista = document.getElementById("vista");
+  vista.innerHTML = `<div class="vacio">Cargando…</div>`;
+  try { await (VISTAS[p] || VISTAS.ahora)(vista, id); } catch (e) { vista.innerHTML = `<div class="vacio">Error: ${esc(e.message)}</div>`; }
+}
+window.addEventListener("hashchange", enrutar);
+
+/** Lista a la izquierda + detalle a la derecha (en celular: uno u otro, con "volver"). */
+function marco(vista, listaHtml, conDetalle) {
+  vista.innerHTML = `<div class="dos ${conDetalle ? "con-detalle" : ""}"><div class="lista" id="lista">${listaHtml}</div><div class="detalle" id="detalle"><div class="vacio">Elige algo de la lista.</div></div></div>`;
+  return document.getElementById("detalle");
+}
+const volver = (p) => `<a class="volver" href="#${p}">← Volver</a>`;
+
+// ── Aprobaciones (se resuelven aquí mismo; también llegan por WhatsApp) ──────
+function tarjetaAprobacion(a) {
+  return `<div class="aprob" id="ap-${a.id}"><div class="tit">🔐 ${esc(a.titulo || a.detalle?.split("\n")[0] || "Aprobación")}</div>
+    <pre>${esc(a.detalle || "")}</pre><div class="nota">${esc(a.tipo)} · ${hace(a.creado_en)}</div>
+    <div class="acciones"><button class="si" onclick="resolver('${a.id}', true, this)">✅ Aprobar</button><button class="peligro" onclick="resolver('${a.id}', false, this)">✖ Rechazar</button></div></div>`;
+}
+async function resolver(id, si, b) {
+  await accion(b, async () => { await post(`/api/aprobaciones/${id}/resolver`, { aprobada: si }); const el = document.getElementById(`ap-${id}`); if (el) el.outerHTML = `<div class="nota" style="margin:6px 0 10px">${si ? "✅ Aprobado" : "✖ Rechazado"}.</div>`; refrescarAhora(); });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+const VISTAS = {};
+
+// ── AHORA ────────────────────────────────────────────────────────────────────
+VISTAS.ahora = async (vista) => {
+  const pintar = async () => {
+    await refrescarAhora();
+    const a = ahora, c = a.costos;
+    const cc = (n) => c.claude_code_plan_max ? `${usd(n)} <span class="nota">equivalente (plan Max)</span>` : usd(n);
+    vista.innerHTML = `
+      ${a.aprobaciones.length ? `<div class="seccion">Esperan tu OK</div>${a.aprobaciones.map(tarjetaAprobacion).join("")}` : ""}
+      <div class="seccion">Ahora mismo</div>
+      ${a.claude_code.length || a.pc.length ? [
+        ...a.claude_code.map((s) => `<div class="card" onclick="ir('sesiones','${s.id}')"><div class="t1"><span class="vivo"></span>Claude Code · ${esc(s.proyecto)}${badge(s.modo || "escritura", "neutro")}</div><div class="t2">${esc(corta(s.encargo, 160))} · ${hace(s.inicio)}</div></div>`),
+        ...a.pc.map((s) => `<div class="card" onclick="ir('pc','${s.id}')"><div class="t1"><span class="vivo"></span>Usando el PC · ${esc(s.perfil)}</div><div class="t2">${esc(corta(s.objetivo, 160))} · ${hace(new Date(s.inicio).toISOString())}</div></div>`),
+      ].join("") : `<p class="nota">Sage no está trabajando en nada en este momento.</p>`}
+      ${a.guardia.graves.length ? `<div class="seccion">Guardia: grave</div>${a.guardia.graves.map((h) => `<div class="hallazgo grave" onclick="ir('guardia')" style="cursor:pointer"><b>${esc(h.objetivo)}</b>: ${esc(h.titulo)} ${badge(h.estado.replace("_", " "), h.estado === "arreglo_listo" ? "aprobacion" : "error")}</div>`).join("")}` : ""}
+      <div class="seccion">Resumen</div>
+      <div class="tiles">
+        <div class="tile"><div class="l">Cambios listos (sandboxes)</div><div class="v">${a.sandboxes}</div><div class="d"><a href="#sandboxes" style="color:inherit">ver y entregar →</a></div></div>
+        <div class="tile"><div class="l">Guardia</div><div class="v">${a.guardia.graves.length ? `<span style="color:#ff9090">${a.guardia.graves.length} grave</span>` : "✓"}</div><div class="d">${a.guardia.leves} leve(s) anotada(s)</div></div>
+        <div class="tile"><div class="l">Publicados</div><div class="v">${a.publicados}</div><div class="d"><a href="#laboratorio" style="color:inherit">laboratorio →</a></div></div>
+        <div class="tile"><div class="l">Claude Code hoy / 7 días</div><div class="v" style="font-size:16px">${cc(c.claude_code_hoy)}</div><div class="d">${cc(c.claude_code_semana)}</div></div>
+        <div class="tile"><div class="l">Uso del PC hoy / 7 días</div><div class="v" style="font-size:16px">${usd(c.pc_hoy)}</div><div class="d">${usd(c.pc_semana)}</div></div>
+        <div class="tile"><div class="l">API de modelos hoy / 7 días</div><div class="v" style="font-size:16px">${usd(c.api_hoy)}</div><div class="d">${usd(c.api_semana)} (todos los agentes)</div></div>
+      </div>`;
+  };
+  await pintar(); cada(pintar, 5000);
+};
+
+// ── CAMBIOS (sandboxes) ──────────────────────────────────────────────────────
+VISTAS.sandboxes = async (vista, id) => {
+  const sbs = await api("/api/codigo/sandboxes");
+  const det = marco(vista, sbs.length ? sbs.map((s) => `<div class="card ${s.id === id ? "activo" : ""}" onclick="ir('sandboxes','${s.id}')"><div class="t1 mono">${esc(s.proyecto_nombre)}</div><div class="t2">${esc(s.proposito)}<br><span class="mono">${esc(s.rama)}</span> · ${hace(s.creado_en)}</div></div>`).join("") : `<div class="vacio">No hay cambios abiertos. Cuando Sage arregla o implementa algo, aparece aquí para revisarlo y subirlo.</div>`, !!id);
+  if (!id) return;
+  const s = sbs.find((x) => x.id === id);
+  if (!s) { det.innerHTML = `${volver("sandboxes")}<div class="vacio">Ese sandbox ya se cerró.</div>`; return; }
+  det.innerHTML = `${volver("sandboxes")}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h2 class="mono" style="margin:0;font-size:16px">${esc(s.proyecto_nombre)}</h2>${badge("abierto", "ok")}</div>
+    <p class="sub">${esc(s.proposito)} · <span class="mono">${esc(s.rama)}</span></p>
+    <div class="acciones">
+      <button class="primario" onclick="entregar('${s.id}', this)">🚀 Entregar (subir a GitHub)</button>
+      <button onclick="sbAccion('${s.id}','actualizar', this)">⟳ Actualizar con GitHub</button>
+      <button onclick="sbAccion('${s.id}','verificar', this)">✓ Verificar</button>
+      <button class="peligro" onclick="descartar('${s.id}', this)">Descartar</button>
     </div>
-    <div id="rt-out"></div>
-    <h3>Comandos</h3><div style="font-size:12px;font-family:monospace">install: ${esc(p.cmd_install || "(auto)")}<br>build: ${esc(p.cmd_build || "—")}<br>lint: ${esc(p.cmd_lint || "—")}<br>test: ${esc(p.cmd_test || "—")}</div>
-    ${p.notas ? `<h3>Notas</h3><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec)">${esc(p.notas)}</div>` : ""}
-    <h3>Sandboxes de este proyecto</h3>${sandboxes.filter((s) => s.proyecto_id === p.id).map((s) => `<div class="card" onclick="verSandbox('${s.id}')"><div class="n">${esc(s.rama)}</div><div class="s">${esc(s.proposito)}</div></div>`).join("") || `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno abierto.</p>`}`;
+    <div id="sb-salida"></div>
+    <div class="seccion">Commits</div><div id="sb-commits" class="nota">Cargando…</div>
+    <div class="seccion">Cambios</div><div id="sb-diff" class="nota">Cargando…</div>
+    <div class="seccion">Sesiones de Claude Code en este sandbox</div><div id="sb-ses" class="nota">Cargando…</div>`;
+  const [d, ses] = await Promise.all([api(`/api/codigo/sandboxes/${id}/diff2`), api(`/api/codigo/sesiones?sandboxId=${id}`)]);
+  document.getElementById("sb-commits").innerHTML = (d.commits.length ? d.commits.map((c) => `<div style="font-size:12px;margin:3px 0"><span class="mono" style="color:var(--e-accent)">${esc(c.hash)}</span> ${esc(c.mensaje)} <span class="nota">· ${esc(c.autor)} · ${esc(c.hace)}</span></div>`).join("") : `<span class="nota">Sin commits todavía (los cambios están sin commit; Entregar los commitea).</span>`)
+    + (d.atras ? `<div class="nota" style="color:var(--e-warn-tx);margin-top:6px">⚠ GitHub tiene ${d.atras} commit(s) nuevos en ${esc(d.base)}: Entregar los integra primero (o usa "Actualizar con GitHub").</div>` : "");
+  document.getElementById("sb-diff").innerHTML = renderDiff(d);
+  document.getElementById("sb-ses").innerHTML = ses.length ? ses.map((x) => `<div class="card" onclick="ir('sesiones','${x.id}')"><div class="t1">${badgeEstado(x.estado)} ${esc(corta(x.encargo, 90))}</div><div class="t2">${fechaHora(x.inicio)}</div></div>`).join("") : `<span class="nota">Ninguna.</span>`;
+};
+async function sbAccion(id, que, b) {
+  await accion(b, async () => { const r = await post(`/api/codigo/sandboxes/${id}/${que}`).catch((e) => ({ ok: false, error: e.message })); salida(document.getElementById("sb-salida"), r); if (que === "actualizar" && r.ok) enrutar(); });
+}
+async function entregar(id, b) {
+  if (!confirm("Se commitea, se pone al día con GitHub, se verifica y te pide UN OK antes de subir (aquí y por WhatsApp). ¿Seguimos?")) return;
+  await accion(b, async () => {
+    const r = await post(`/api/codigo/sandboxes/${id}/entregar`);
+    const el = document.getElementById("sb-salida");
+    if (r.estado === "esperando_aprobacion") {
+      const aps = (await api("/api/aprobaciones")).filter((a) => a.ejecucion_id === r.ejecucionId);
+      el.innerHTML = `<p class="nota">Todo listo y verificado. Falta tu OK:</p>${aps.map(tarjetaAprobacion).join("")}`;
+    } else if (r.estado === "fallido") el.innerHTML = renderResultado({ ok: false, error: r.mensaje || r.error || "La entrega se detuvo (mira Actividad → Flujos)." });
+    else el.innerHTML = renderResultado({ ok: true, resumen: r.mensaje || `Entrega: ${r.estado}` });
+    refrescarAhora();
+  });
+}
+async function descartar(id, b) {
+  if (!confirm("¿Descartar estos cambios y BORRAR la rama del sandbox? No se puede deshacer.")) return;
+  await accion(b, async () => { await post(`/api/codigo/sandboxes/${id}/cerrar`, { borrar_rama: true }); ir("sandboxes"); });
 }
 
-async function verSandbox(id) {
-  sel = "sb:" + id; clearInterval(timer); await cargar();
-  const s = sandboxes.find((x) => x.id === id);
-  const panel = document.getElementById("panel");
-  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="font-family:monospace;margin:0;font-size:16px">${esc(s.proyecto_nombre)}/${esc(s.rama)}</h2>${badge("abierto", "ok")}</div>
-    <p class="sub" style="font-size:12px">${esc(s.proposito)} · ${esc(s.ruta)}</p>
-    <div style="display:flex;gap:8px;margin-top:10px"><button onclick="cerrarSandbox('${s.id}', false)">Cerrar (conservar rama)</button><button onclick="cerrarSandbox('${s.id}', true)" style="color:#ff8080">Descartar (borrar rama)</button></div>
-    <h3>Sesiones</h3><div id="sb-ses"></div>
-    <h3>Diff contra ${esc(s.rama)} base</h3><div id="sb-diff"><p style="font-size:12px;color:var(--e-text-muted)">Cargando…</p></div>`;
-  const ses = await api(`/api/codigo/sesiones?sandboxId=${id}`);
-  document.getElementById("sb-ses").innerHTML = ses.length ? ses.map((x) => `<div class="card" onclick="verSesion('${x.id}')"><div class="n">${badgeEstado(x.estado)} ${esc(x.encargo).slice(0, 80)}</div><div class="s">${fechaHora(x.inicio)}</div></div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Sin sesiones.</p>`;
-  const d = await api(`/api/codigo/sandboxes/${id}/diff`);
-  document.getElementById("sb-diff").innerHTML = `<div style="font-size:12px;color:var(--e-text-sec);white-space:pre-wrap;margin-bottom:8px">${esc(d.resumen)}</div><pre class="diff">${colorDiff(d.diff)}${d.truncado ? "\n[...recortado]" : ""}</pre>`;
-}
-async function rtAccion(nombre, accion) {
-  const out = document.getElementById("rt-out");
-  out.innerHTML = `<p style="font-size:12px;color:var(--e-text-muted);margin-top:8px">${accion}…</p>`;
-  try { const r = await post(`/api/codigo/runtime/${nombre}/${accion}`); out.innerHTML = renderResultado({ ok: r.ok !== false, resumen: r.pid ? `pid ${r.pid}` : r.status ? `HTTP ${r.status} · ${r.latencia_ms} ms` : "ok", error: r.error }); }
-  catch (e) { out.innerHTML = renderResultado({ ok: false, error: e.message }); }
-  await cargar(); const p = proyectos.find((x) => x.nombre === nombre); if (p && accion !== "salud") setTimeout(() => verProyecto(p.id), 1500);
-}
-async function verLogs(nombre) {
-  const out = document.getElementById("rt-out");
-  const l = await api(`/api/codigo/runtime/${nombre}/logs?ultimas=150`);
-  out.innerHTML = `<div class="log" style="margin-top:8px">${l.length ? l.map((x) => `<div class="${/error|exception|fatal/i.test(x) ? "error" : ""}">${esc(x)}</div>`).join("") : "(sin log)"}</div>`;
-  const lg = out.querySelector(".log"); if (lg) lg.scrollTop = lg.scrollHeight;
-}
-function colorDiff(t) {
-  return String(t || "").split("\n").map((l) => { const e = esc(l); if (l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("@@")) return `<span class="hdr">${e}</span>`; if (l.startsWith("+")) return `<span class="add">${e}</span>`; if (l.startsWith("-")) return `<span class="del">${e}</span>`; return e; }).join("\n");
-}
-async function cerrarSandbox(id, borrar) {
-  if (!confirm(borrar ? "¿Descartar el sandbox y BORRAR su rama? No se puede deshacer." : "¿Cerrar el sandbox? La rama se conserva.")) return;
-  try { await post(`/api/codigo/sandboxes/${id}/cerrar`, { borrar_rama: borrar }); sel = null; await cargar(); document.getElementById("panel").innerHTML = `<div class="vacio">Sandbox cerrado.</div>`; } catch (e) { alert(e.message); }
+/** Diff unificado → un bloque por archivo, con números de línea y +/−. */
+function renderDiff(d) {
+  const archivos = [];
+  let cur = null, a = 0, b = 0;
+  for (const l of String(d.diff || "").split("\n")) {
+    if (l.startsWith("diff --git ")) { const m = l.match(/ b\/(.+)$/); cur = { ruta: m ? m[1] : l, estado: "modificado", lineas: [], mas: 0, menos: 0, binario: false }; archivos.push(cur); continue; }
+    if (!cur) continue;
+    if (l.startsWith("new file")) { cur.estado = "nuevo"; continue; }
+    if (l.startsWith("deleted file")) { cur.estado = "borrado"; continue; }
+    if (l.startsWith("rename from")) { cur.estado = "renombrado"; cur.de = l.slice(12); continue; }
+    if (l.startsWith("Binary files")) { cur.binario = true; continue; }
+    if (l.startsWith("index ") || l.startsWith("--- ") || l.startsWith("+++ ") || l.startsWith("similarity") || l.startsWith("rename to") || l.startsWith("old mode") || l.startsWith("new mode")) continue;
+    const h = l.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
+    if (h) { a = +h[1]; b = +h[2]; cur.lineas.push({ t: "h", txt: `@@ línea ${b}${h[3] ? " ·" + h[3] : ""}` }); continue; }
+    if (l.startsWith("+")) { cur.lineas.push({ t: "a", nb: b++, txt: l.slice(1) }); cur.mas++; }
+    else if (l.startsWith("-")) { cur.lineas.push({ t: "b", na: a++, txt: l.slice(1) }); cur.menos++; }
+    else if (l.startsWith("\\")) continue;
+    else { cur.lineas.push({ t: "ctx", na: a++, nb: b++, txt: l.slice(1) }); }
+  }
+  for (const f of d.sin_seguimiento || []) {
+    const ls = f.binario ? [] : f.contenido.split("\n");
+    archivos.push({ ruta: f.archivo, estado: "nuevo", binario: f.binario, mas: ls.length, menos: 0, lineas: ls.map((txt, i) => ({ t: "a", nb: i + 1, txt })), truncado: f.truncado });
+  }
+  if (!archivos.length) return `<div class="vacio" style="padding:20px">Sin cambios respecto a ${esc(d.base)}.</div>`;
+  const tm = archivos.reduce((s, f) => s + f.mas, 0), tn = archivos.reduce((s, f) => s + f.menos, 0);
+  const barra = (f) => { const t = f.mas + f.menos || 1, va = Math.round((f.mas / t) * 5); return `<span class="barra">${Array.from({ length: 5 }, (_, i) => `<i class="${i < va ? "a" : f.menos ? "b" : ""}"></i>`).join("")}</span>`; };
+  const ESTADO = { nuevo: "ok", borrado: "error", renombrado: "pend", modificado: "neutro" };
+  return `<div class="diff-res"><b>${archivos.length} archivo(s)</b><span class="mas">+${tm}</span><span class="menos">−${tn}</span><span class="nota">contra ${esc(d.base)}</span>
+      <button style="font-size:11px;padding:4px 9px" onclick="document.querySelectorAll('.archivo-diff').forEach((x)=>x.open=true)">Abrir todos</button>
+      <button style="font-size:11px;padding:4px 9px" onclick="document.querySelectorAll('.archivo-diff').forEach((x)=>x.open=false)">Cerrar todos</button></div>`
+    + archivos.map((f, i) => `<details class="archivo-diff" ${i < 4 && f.lineas.length < 400 ? "open" : ""}>
+      <summary><span class="ruta mono">${esc(f.ruta)}${f.de ? ` <span class="nota">(antes ${esc(f.de)})</span>` : ""}</span>${badge(f.estado, ESTADO[f.estado])}<span class="mas">+${f.mas}</span><span class="menos">−${f.menos}</span>${barra(f)}</summary>
+      ${f.binario ? `<div class="nota" style="padding:10px">Archivo binario.</div>` : `<div class="envoltura-diff"><table class="tabla-diff mono">${f.lineas.slice(0, 3000).map((x) => x.t === "h" ? `<tr class="h"><td colspan="3">${esc(x.txt)}</td></tr>` : `<tr class="${x.t}"><td class="n">${x.na ?? ""}</td><td class="n">${x.nb ?? ""}</td><td class="c">${esc(x.txt)}</td></tr>`).join("")}</table>${f.lineas.length > 3000 || f.truncado ? `<div class="nota" style="padding:8px">… recortado</div>` : ""}</div>`}
+    </details>`).join("") + (d.truncado ? `<div class="nota">El diff es muy grande y se recortó.</div>` : "");
 }
 
-async function verSesion(id) {
-  sel = "se:" + id; clearInterval(timer);
-  await refrescarSesion(id);
-  timer = setInterval(() => refrescarSesion(id), 2500);
-}
-async function refrescarSesion(id) {
-  const s = await api(`/api/codigo/sesiones/${id}`);
-  const fin = s.estado !== "en_curso"; if (fin) clearInterval(timer);
-  const panel = document.getElementById("panel");
-  const scroll = panel.querySelector(".log")?.scrollTop;
-  panel.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Sesión de Claude Code</b>${badgeEstado(s.estado)}${s.turnos ? badge(`${s.turnos} turnos`, "neutro") : ""}${s.costo_usd ? badge(`$${Number(s.costo_usd).toFixed(3)}`, "neutro") : ""}${s.duracion_ms ? badge(`${Math.round(s.duracion_ms / 1000)}s`, "neutro") : ""}
-      ${!fin ? `<button style="margin-left:auto;font-size:11px" onclick="cancelar('${s.id}')">Cancelar</button>` : `<button style="margin-left:auto;font-size:11px" onclick="verSandbox('${s.sandbox_id}')">Ver sandbox y diff</button>`}</div>
-    <h3>Encargo</h3><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec);max-height:120px;overflow:auto">${esc(s.encargo)}</div>
-    ${s.error ? `<h3>Error</h3><div style="font-size:12px;color:#ff9090;white-space:pre-wrap">${esc(s.error)}</div>` : ""}
-    ${s.resultado ? `<h3>Informe final</h3><div style="font-size:13px;white-space:pre-wrap">${esc(s.resultado)}</div>` : ""}
-    <h3>Log en vivo${!fin ? " ●" : ""}</h3><div class="log">${(s.log || []).map((l) => `<div><span class="t">${hora(l.t)}</span> <span class="${esc(l.tipo)}">[${esc(l.tipo)}]</span> ${esc(l.texto)}</div>`).join("") || "(sin eventos todavía)"}</div>
-    ${s.session_id_claude ? `<p style="font-size:11px;color:var(--e-text-muted);margin-top:8px">session_id de Claude: <code>${esc(s.session_id_claude)}</code> (se puede continuar)</p>` : ""}`;
-  const lg = panel.querySelector(".log"); if (lg) lg.scrollTop = fin && scroll != null ? scroll : lg.scrollHeight;
-}
-async function cancelar(id) { if (!confirm("¿Cancelar la sesión?")) return; await post(`/api/codigo/sesiones/${id}/cancelar`); await refrescarSesion(id); }
+// ── CLAUDE CODE (sesiones) ───────────────────────────────────────────────────
+VISTAS.sesiones = async (vista, id) => {
+  const pintarLista = async () => {
+    const ses = await api("/api/codigo/sesiones?limite=40");
+    const l = document.getElementById("lista");
+    if (l) l.innerHTML = ses.map((s) => `<div class="card ${s.id === id ? "activo" : ""}" onclick="ir('sesiones','${s.id}')"><div class="t1">${s.estado === "en_curso" ? `<span class="vivo"></span>` : ""}<span class="mono">${esc(s.proyecto)}</span>${badgeEstado(s.estado)}${s.modo ? badge(s.modo, "neutro") : ""}</div><div class="t2">${esc(corta(s.encargo, 110))}<br>${fechaHora(s.inicio)}${s.turnos ? ` · ${s.turnos} turnos` : ""}${s.costo_usd ? ` · ${usd(s.costo_usd)}` : ""}</div></div>`).join("") || `<div class="vacio">Sin sesiones todavía.</div>`;
+  };
+  marco(vista, "", !!id); await pintarLista(); cada(pintarLista, 8000);
+  if (!id) return;
+  let pegado = true;
+  const pintar = async () => {
+    const s = await api(`/api/codigo/sesiones/${id}`);
+    const det = document.getElementById("detalle"); if (!det) return;
+    const vivo = s.estado === "en_curso";
+    const prev = det.querySelector(".log");
+    if (prev) pegado = prev.scrollHeight - prev.scrollTop - prev.clientHeight < 40;
+    det.innerHTML = `${volver("sesiones")}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${vivo ? `<span class="vivo"></span>` : ""}Claude Code</b>${badgeEstado(s.estado)}${s.modo ? badge(s.modo, "neutro") : ""}${s.turnos ? badge(`${s.turnos} turnos`, "neutro") : ""}${s.costo_usd ? badge(usd(s.costo_usd), "neutro") : ""}${s.duracion_ms ? badge(`${Math.round(s.duracion_ms / 60000)} min`, "neutro") : ""}</div>
+      <div class="acciones">${vivo ? `<button class="peligro" onclick="cancelarSesion('${s.id}', this)">■ Cancelar</button>` : ""}${s.sandbox_id ? `<button onclick="ir('sandboxes','${s.sandbox_id}')">Ver cambios y entregar →</button>` : ""}</div>
+      ${s.cwd ? `<div class="nota mono">📁 ${esc(s.cwd)}</div>` : ""}
+      <div class="seccion">Encargo</div><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec);max-height:140px;overflow:auto">${esc(s.encargo)}</div>
+      ${s.error ? `<div class="seccion">Error</div><div style="font-size:12px;color:#ff9090;white-space:pre-wrap">${esc(s.error)}</div>` : ""}
+      ${s.resultado ? `<div class="seccion">Informe</div><div style="font-size:13px;white-space:pre-wrap">${esc(s.resultado)}</div>` : ""}
+      <div class="seccion">Log ${vivo ? "en vivo" : ""}</div>
+      <div class="log mono">${(s.log || []).map((l) => `<div><span class="t">${hora(l.t)}</span> <span class="${esc(l.tipo)}">${esc(l.texto)}</span></div>`).join("") || "(sin eventos todavía)"}</div>`;
+    const lg = det.querySelector(".log"); if (lg && pegado) lg.scrollTop = lg.scrollHeight;
+    if (!vivo) parar();
+  };
+  await pintar(); cada(pintar, 2500);
+};
+async function cancelarSesion(id, b) { if (!confirm("¿Cancelar esta sesión de Claude Code?")) return; await accion(b, () => post(`/api/codigo/sesiones/${id}/cancelar`)); enrutar(); }
 
-function mostrarRegistro() {
-  sel = null; clearInterval(timer);
-  document.getElementById("panel").innerHTML = `<h2 style="font-family:var(--syne);margin:0">Registrar proyecto</h2>
+// ── LABORATORIO ──────────────────────────────────────────────────────────────
+VISTAS.laboratorio = async (vista, id) => {
+  const [lab, pubs] = await Promise.all([api("/api/codigo/laboratorio"), api("/api/codigo/publicados")]);
+  const det = marco(vista, `
+    ${pubs.length ? `<div class="seccion" style="margin-top:0">Publicados</div>${pubs.map((p) => `<div class="card ${id === "pub:" + p.nombre ? "activo" : ""}" onclick="ir('laboratorio','pub:${esc(p.nombre)}')"><div class="t1">🌐 ${esc(p.nombre)}${badgeEstado(p.estado === "SUCCESS" ? "completado" : p.estado === "FAILED" || p.estado === "CRASHED" ? "fallido" : "en_curso").replace(/>[^<]+</, `>${esc((p.estado || "?").toLowerCase())}<`)}</div><div class="t2">${esc(p.url || "(solo GitHub)")}</div></div>`).join("")}` : ""}
+    <div class="seccion" ${pubs.length ? "" : 'style="margin-top:0"'}>Experimentos</div>
+    ${lab.experimentos.map((e) => `<div class="card ${id === e.nombre ? "activo" : ""}" onclick="ir('laboratorio','${esc(e.nombre)}')"><div class="t1 mono" style="font-size:12px">${esc(e.nombre)}${e.publicado ? badge("publicado", "ok") : ""}</div><div class="t2">${e.archivos.length} elemento(s) · ${hace(e.modificado)}</div></div>`).join("") || `<div class="vacio">Vacío. Pídele a Sage "hazme un Excel de…" o "crea una página como esta…".</div>`}`, !!id);
+  if (!id) { det.innerHTML = `<div class="vacio">Aquí queda todo lo que Sage hace en su laboratorio (${esc(lab.lab)}): documentos, prototipos y proyectos publicados.</div>`; return; }
+  if (id.startsWith("pub:")) {
+    const p = pubs.find((x) => x.nombre === id.slice(4));
+    det.innerHTML = `${volver("laboratorio")}<h2 style="margin:0;font-size:16px">🌐 ${esc(p.nombre)}</h2>
+      <p class="sub">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:var(--e-accent)">${esc(p.url)}</a> · ` : ""}${p.repo ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener" style="color:var(--e-text-sec)">${esc(p.repo)}</a>` : ""}</p>
+      <div class="nota mono">📁 ${esc(p.carpeta)} · actualizado ${hace(p.actualizado_en)}</div>
+      <div class="acciones"><button onclick="estadoPub('${esc(p.nombre)}', this)">Revisar estado y logs</button></div><div id="pub-salida"></div>`;
+    return;
+  }
+  const e = lab.experimentos.find((x) => x.nombre === id);
+  if (!e) { det.innerHTML = `${volver("laboratorio")}<div class="vacio">No existe.</div>`; return; }
+  const sep = e.ruta.includes("\\") ? "\\" : "/";
+  det.innerHTML = `${volver("laboratorio")}<h2 class="mono" style="margin:0;font-size:15px">${esc(e.nombre)}</h2><p class="nota mono">📁 ${esc(e.ruta)}</p>
+    ${e.publicado ? `<p>🌐 Publicado: ${e.publicado.url ? `<a href="${esc(e.publicado.url)}" target="_blank" rel="noopener" style="color:var(--e-accent)">${esc(e.publicado.url)}</a>` : esc(e.publicado.repo)}</p>` : ""}
+    <div class="seccion">Archivos</div>
+    <div class="archivos">${e.archivos.map((f) => f.carpeta ? `<a>📁 ${esc(f.nombre)}</a>` : `<a href="/api/codigo/laboratorio/archivo?ruta=${encodeURIComponent(e.ruta + sep + f.nombre)}">📄 ${esc(f.nombre)} <span class="nota">${kb(f.bytes)}</span></a>`).join("") || `<span class="nota">Vacío.</span>`}</div>`;
+};
+async function estadoPub(nombre, b) {
+  await accion(b, async () => {
+    const e = await api(`/api/codigo/publicados/${encodeURIComponent(nombre)}/estado`).catch((x) => ({ error: x.message }));
+    document.getElementById("pub-salida").innerHTML = e.error ? renderResultado({ ok: false, error: e.error }) : `<div style="font-size:13px;margin:8px 0">Railway: <b>${esc(e.estado || "?")}</b>${e.responde ? ` · URL ${e.responde.ok ? "✅ responde" : "❌ no responde"} (${e.responde.status ?? "-"})` : ""}</div>${e.logs ? `<div class="log mono">${esc(e.logs)}</div>` : ""}`;
+  });
+}
+
+// ── GUARDIA ──────────────────────────────────────────────────────────────────
+VISTAS.guardia = async (vista) => {
+  const [g, proys] = await Promise.all([api("/api/codigo/guardia"), api("/api/codigo/proyectos")]);
+  const graves = g.abiertos.filter((h) => h.severidad === "grave"), leves = g.abiertos.filter((h) => h.severidad === "leve");
+  const ronda = g.disparadores.find((d) => d.nombre === "guardia_ronda");
+  const porProy = {}; leves.forEach((h) => (porProy[h.objetivo] = (porProy[h.objetivo] || 0) + 1));
+  const ESTADO = { abierto: ["pendiente", "pend"], reparando: ["reparando…", "pend"], arreglo_listo: ["arreglo esperando tu OK", "aprobacion"], sin_arreglo: ["sin arreglo: necesita tu ojo", "error"] };
+  const hallazgo = (h) => `<div class="hallazgo ${h.severidad}"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${esc(h.objetivo)}</b> ${esc(h.titulo)}${badge(...(ESTADO[h.estado] || [h.estado, "neutro"]))}${h.veces > 1 ? badge(`×${h.veces}`, "neutro") : ""}<span class="nota" style="margin-left:auto">${hace(h.ultimo_en)}</span></div>
+      <details><summary class="nota" style="cursor:pointer;margin-top:4px">detalle</summary><pre class="mono">${esc(h.detalle)}</pre>${h.informe ? `<div class="seccion" style="margin:8px 0 4px">Lo que hizo Sage</div><pre>${esc(h.informe.slice(-3000))}</pre>` : ""}</details>
+      <div class="acciones" style="margin:6px 0 0">${h.sandbox_id && h.estado === "arreglo_listo" ? `<button onclick="ir('sandboxes','${h.sandbox_id}')">Ver arreglo →</button>` : ""}<button onclick="ignorar('${h.id}', this)">Ignorar</button></div></div>`;
+  vista.innerHTML = `
+    <div class="acciones" style="margin-top:0"><button class="primario" onclick="rondaYa(this)">🛡 Pasar la guardia ahora</button>
+      <span class="nota" style="align-self:center">${ronda ? `Automática cada ${ronda.config?.cada_minutos || "?"} min · ${ronda.estado}${ronda.ultimo_disparo ? ` · última ${hace(ronda.ultimo_disparo)}` : ""}` : "Sin ronda automática (corre crear-sage.ts)."}</span></div>
+    <div id="g-salida"></div>
+    <div class="seccion">Grave (${graves.length})</div>${graves.map(hallazgo).join("") || `<p class="nota">Nada grave. 👌</p>`}
+    <div class="seccion">Leve, anotado (${leves.length})</div>${leves.map(hallazgo).join("") || `<p class="nota">Nada anotado.</p>`}
+    ${Object.keys(porProy).filter((p) => proys.some((x) => x.nombre === p)).map((p) => `<button style="font-size:12px;margin:4px 6px 0 0" onclick="arreglarLeves('${esc(p)}', this)">🔧 Arreglar las ${porProy[p]} leve(s) de ${esc(p)}</button>`).join("")}
+    <div class="seccion">Qué vigila</div>
+    ${proys.map((p) => { const v = g.vigilados.find((x) => x.proyecto_id === p.id); return `<div class="card" style="cursor:default;margin-bottom:6px"><div class="t1 mono">${esc(p.nombre)}${v?.activo ? badge("vigilado", "ok") : badge("sin guardia", "neutro")}</div>
+        <div class="t2">${v?.ultima_ronda ? `última ronda ${hace(v.ultima_ronda)}` : "nunca revisado"}${v?.ultimo_commit ? ` · verificado <span class="mono">${esc(v.ultimo_commit.slice(0, 7))}</span>` : ""}${!p.cmd_test && !p.cmd_build ? ` · <span style="color:var(--e-warn-tx)">sin cmd_test/cmd_build: solo proceso, logs y URL</span>` : ""}</div>
+        <div class="fila" style="margin-top:6px"><div><label>URL de producción</label><input id="gu-${p.id}" value="${esc(v?.url_produccion || "")}" placeholder="https://… (Railway)" /></div>
+          <div><label class="interruptor"><input type="checkbox" id="ga-${p.id}" ${v ? (v.activo ? "checked" : "") : ""} /> Vigilar</label><label class="interruptor"><input type="checkbox" id="gr-${p.id}" ${v ? (v.auto_reparar ? "checked" : "") : "checked"} /> Arreglar lo grave en sandbox y pedirme OK</label></div></div>
+        <button style="font-size:12px;margin-top:6px" onclick="guardarGuardia('${p.id}','${esc(p.nombre)}', this)">Guardar</button></div>`; }).join("") || `<p class="nota">No hay proyectos registrados (pestaña Proyectos).</p>`}
+    <p class="nota">Lo publicado en Railway por Sage se vigila solo.</p>
+    ${g.resueltos.length ? `<div class="seccion">Resuelto o ignorado recientemente</div>${g.resueltos.map((h) => `<div class="nota" style="margin:3px 0">${h.estado === "ignorado" ? "🙈" : "✅"} <b>${esc(h.objetivo)}</b> ${esc(h.titulo)} · ${hace(h.resuelto_en || h.ultimo_en)}</div>`).join("")}` : ""}`;
+};
+async function rondaYa(b) { await accion(b, async () => { salida(document.getElementById("g-salida"), await post("/api/codigo/guardia/ronda", { forzar: true })); setTimeout(enrutar, 15000); }); }
+async function ignorar(id, b) { if (!confirm("¿Ignorar este hallazgo? No se vuelve a avisar mientras sea el mismo.")) return; await accion(b, () => post(`/api/codigo/guardia/${id}/ignorar`)); enrutar(); }
+async function arreglarLeves(p, b) { if (!confirm(`Sage corrige las fallas leves de ${p} en un sandbox y te pide el OK para subir. ¿Seguimos?`)) return; await accion(b, async () => salida(document.getElementById("g-salida"), await post("/api/codigo/guardia/arreglar-leves", { proyecto: p }))); }
+async function guardarGuardia(id, nombre, b) {
+  await accion(b, async () => { const r = await post("/api/codigo/guardia/configurar", { proyecto: nombre, activo: document.getElementById(`ga-${id}`).checked, auto_reparar: document.getElementById(`gr-${id}`).checked, url_produccion: document.getElementById(`gu-${id}`).value.trim() }).catch((e) => ({ ok: false, error: e.message })); salida(document.getElementById("g-salida"), r); window.scrollTo({ top: 0, behavior: "smooth" }); });
+}
+
+// ── PC ───────────────────────────────────────────────────────────────────────
+VISTAS.pc = async (vista, id) => {
+  const pc = await api("/api/codigo/pc");
+  const det = marco(vista, `
+    ${pc.activas.length ? `<div class="seccion" style="margin-top:0">Ahora</div>${pc.activas.map((s) => `<div class="card ${s.id === id ? "activo" : ""}" onclick="ir('pc','${s.id}')"><div class="t1"><span class="vivo"></span>${esc(s.perfil)}</div><div class="t2">${esc(corta(s.objetivo, 120))}</div></div>`).join("")}<button class="peligro" style="font-size:12px" onclick="detenerPc(null, this)">■ Detener todo</button>` : ""}
+    <div class="seccion" ${pc.activas.length ? "" : 'style="margin-top:0"'}>Sesiones</div>
+    ${pc.recientes.filter((s) => !pc.activas.some((a) => a.id === s.id)).map((s) => `<div class="card ${s.id === id ? "activo" : ""}" onclick="ir('pc','${s.id}')"><div class="t1">${badgeEstado(s.estado === "cumplida" ? "completada" : s.estado === "fallida" ? "fallida" : s.estado === "necesita_jefe" ? "esperando" : s.estado)}${badge(s.perfil, s.perfil.includes("hospital") ? "aprobacion" : "neutro")}</div><div class="t2">${esc(corta(s.objetivo, 110))}<br>${fechaHora(s.inicio)} · ${s.pasos} pasos · ${usd(s.costo_usd)}${(s.comandos || []).length ? ` · ${(s.comandos || []).length} comando(s)` : ""}</div></div>`).join("") || `<div class="vacio">Sin sesiones todavía.</div>`}
+    <div class="seccion">Perfiles</div>
+    ${pc.perfiles.map((p) => `<div class="card" style="cursor:default"><div class="t1">${esc(p.nombre)}${p.datos_sensibles ? badge("datos sensibles", "aprobacion") : ""}</div><div class="t2">${esc(p.descripcion)}<br>apps: ${esc(p.apps.join(", "))} · comandos: ${esc(p.comandos)}${p.aprobar_comandos ? " (cada uno con OK)" : ""}${p.credenciales.length ? ` · credenciales: ${esc(p.credenciales.join(", "))}` : ""}</div></div>`).join("")}`, !!id);
+  if (!id) { det.innerHTML = `<div class="vacio">Sesiones en las que Claude vio tu pantalla y manejó mouse y teclado. Elige una para ver qué hizo paso a paso.</div>`; return; }
+  let mostrarCapturas = false;
+  const pintar = async () => {
+    const s = await api(`/api/codigo/pc/${id}`);
+    const d = document.getElementById("detalle"); if (!d) return;
+    const vivo = s.estado === "corriendo";
+    const caps = s.capturas || [];
+    d.innerHTML = `${volver("pc")}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${vivo ? `<span class="vivo"></span>` : ""}Uso del PC</b>${badge(s.estado, s.estado === "cumplida" ? "ok" : s.estado === "corriendo" ? "pend" : s.estado === "necesita_jefe" ? "aprobacion" : "error")}${badge(s.perfil, "neutro")}${badge(`${s.pasos} pasos`, "neutro")}${badge(usd(s.costo_usd), "neutro")}${s.modelo ? badge(s.modelo, "neutro") : ""}</div>
+      ${vivo ? `<div class="acciones"><button class="peligro" onclick="detenerPc('${s.id}', this)">■ Detener</button></div>` : ""}
+      <div class="seccion">Objetivo</div><div style="font-size:13px">${esc(s.objetivo)}</div>
+      ${s.resumen ? `<div class="seccion">Resultado</div><div style="font-size:13px;white-space:pre-wrap">${esc(s.resumen)}</div>` : ""}
+      ${s.pregunta ? `<div class="seccion">Pregunta para ti</div><div style="font-size:13px;color:var(--e-warn-tx)">${esc(s.pregunta)}</div>` : ""}
+      ${(s.comandos || []).length ? `<div class="seccion">Comandos ejecutados</div>${s.comandos.map((c) => `<div class="mono" style="font-size:12px;margin:2px 0">$ ${esc(c.comando)} <span class="nota">${hora(c.t)}${c.lectura ? " · lectura" : ""}</span></div>`).join("")}` : ""}
+      <div class="seccion">Paso a paso</div>
+      <div class="pasos">${renderPasos(s)}</div>
+      <div class="seccion">Capturas (${caps.length})</div>
+      ${!caps.length ? `<p class="nota">Sin capturas (se borran a los PC_SESIONES_DIAS días).</p>` : s.datos_sensibles && !mostrarCapturas ? `<p class="nota">Este perfil maneja datos sensibles (pacientes). Las capturas están solo en este PC.</p><button onclick="this.disabled=true;window.__mostrarCaps()">Mostrar capturas</button>`
+        : `<div class="galeria">${caps.slice(-60).map((f) => `<a href="/api/codigo/pc/${s.id}/captura/${f}" target="_blank" rel="noopener"><img loading="lazy" src="/api/codigo/pc/${s.id}/captura/${f}" alt="${esc(f)}" /><span>${esc(f)}</span></a>`).join("")}</div>`}`;
+    if (!vivo) parar();
+  };
+  window.__mostrarCaps = () => { mostrarCapturas = true; pintar(); };
+  await pintar(); cada(pintar, 3000);
+};
+function renderPasos(s) {
+  const lista = Array.isArray(s.bitacora) ? s.bitacora : [];
+  return lista.length ? lista.map((p) => `<div class="paso ${p.ok ? "" : "mal"}"><span class="num">${p.n}</span><span><b>${esc(p.accion)}</b> <span class="mono nota">${esc(corta(p.input, 140))}</span><br><span style="color:${p.ok ? "var(--e-text-sec)" : "#ff9090"}">${p.ok ? "✔" : "✘"} ${esc(corta(p.resultado, 240))}</span></span></div>`).join("") : `<p class="nota">Sin pasos registrados.</p>`;
+}
+async function detenerPc(id, b) { if (!confirm("¿Detener el uso del PC? Para antes de su siguiente acción.")) return; await accion(b, () => post("/api/codigo/pc/detener", id ? { id } : {})); setTimeout(enrutar, 1500); }
+
+// ── PROYECTOS ────────────────────────────────────────────────────────────────
+VISTAS.proyectos = async (vista, id) => {
+  const [proys, rt] = await Promise.all([api("/api/codigo/proyectos"), api("/api/codigo/runtime").catch(() => [])]);
+  const est = (pid) => rt.find((r) => r.proyecto_id === pid);
+  const det = marco(vista, `<button class="primario" style="font-size:12px" onclick="ir('proyectos','nuevo')">+ Registrar proyecto</button>` + proys.map((p) => { const r = est(p.id); return `<div class="card ${p.id === id ? "activo" : ""}" onclick="ir('proyectos','${p.id}')"><div class="t1 mono">${esc(p.nombre)}${r ? badge(r.estado, r.estado === "corriendo" ? "ok" : r.estado === "caido" ? "error" : "neutro") : ""}</div><div class="t2 mono">${esc(p.ruta)} · ${esc(p.rama_base)}</div></div>`; }).join(""), !!id);
+  if (!id) { det.innerHTML = `<div class="vacio">Proyectos registrados para que Sage los trabaje, vigile y despliegue.</div>`; return; }
+  if (id === "nuevo") { formRegistro(det); return; }
+  const p = proys.find((x) => x.id === id), r = est(id);
+  if (!p) { det.innerHTML = `${volver("proyectos")}<div class="vacio">No existe.</div>`; return; }
+  const corre = r?.estado === "corriendo";
+  det.innerHTML = `${volver("proyectos")}<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h2 class="mono" style="margin:0;font-size:16px">${esc(p.nombre)}</h2>${r ? badge(r.estado + (r.pid ? ` · pid ${r.pid}` : ""), corre ? "ok" : r.estado === "caido" ? "error" : "neutro") : ""}</div>
+    <p class="nota mono">${esc(p.ruta)} · rama ${esc(p.rama_base)}</p>
+    <div class="acciones">${corre ? `<button onclick="rt('${esc(p.nombre)}','detener', this)">■ Detener</button><button onclick="rt('${esc(p.nombre)}','reiniciar', this)">↻ Reiniciar</button>` : `<button class="primario" onclick="rt('${esc(p.nombre)}','iniciar', this)" ${p.cmd_start ? "" : "disabled"}>▶ Arrancar</button>`}
+      <button onclick="rt('${esc(p.nombre)}','salud', this)">♥ Salud</button><button onclick="logs('${esc(p.nombre)}', this)">Logs</button></div>
+    <div id="rt-salida"></div>
+    <div class="seccion">Comandos</div><div class="mono" style="font-size:12px;line-height:1.8">start: ${esc(p.cmd_start || "—")}${p.puerto ? ` · puerto ${p.puerto}` : ""}<br>install: ${esc(p.cmd_install || "(auto)")}<br>build: ${esc(p.cmd_build || "—")}<br>lint: ${esc(p.cmd_lint || "—")}<br>test: ${esc(p.cmd_test || "—")}${p.url_salud ? `<br>salud: ${esc(p.url_salud)}` : ""}</div>
+    ${p.notas ? `<div class="seccion">Notas para Sage</div><div style="font-size:12px;white-space:pre-wrap;color:var(--e-text-sec)">${esc(p.notas)}</div>` : ""}`;
+};
+async function rt(nombre, que, b) {
+  await accion(b, async () => { const r = await post(`/api/codigo/runtime/${nombre}/${que}`).catch((e) => ({ ok: false, error: e.message })); salida(document.getElementById("rt-salida"), { ok: r.ok !== false, resumen: r.pid ? `pid ${r.pid}` : r.status ? `HTTP ${r.status} · ${r.latencia_ms} ms` : "ok", error: r.error }); if (que !== "salud") setTimeout(enrutar, 1500); });
+}
+async function logs(nombre, b) {
+  await accion(b, async () => { const l = await api(`/api/codigo/runtime/${nombre}/logs?ultimas=200`); const el = document.getElementById("rt-salida"); el.innerHTML = `<div class="log mono" style="margin-top:8px">${l.length ? l.map((x) => `<div class="${/error|exception|fatal/i.test(x) ? "error" : ""}">${esc(x)}</div>`).join("") : "(sin log)"}</div>`; const lg = el.querySelector(".log"); lg.scrollTop = lg.scrollHeight; });
+}
+function formRegistro(det) {
+  det.innerHTML = `${volver("proyectos")}<h2 style="margin:0;font-size:16px">Registrar proyecto</h2><p class="nota">Pide tu aprobación antes de registrarlo.</p>
     <div class="fila"><div><label>Nombre (snake_case)</label><input id="r-nombre" placeholder="jelcom_envios" /></div><div><label>Rama base</label><input id="r-rama" value="main" /></div></div>
-    <label>Ruta absoluta del repo</label><input id="r-ruta" placeholder="C:\\Users\\Sebas\\Sebastian_proyects\\jelcom-envios" />
-    <div class="fila"><div><label>Comando build</label><input id="r-build" placeholder="npx tsc --noEmit -p ." /></div><div><label>Comando test</label><input id="r-test" placeholder="npm test" /></div></div>
-    <div class="fila"><div><label>Comando lint</label><input id="r-lint" /></div><div><label>Comando install</label><input id="r-install" placeholder="(auto: npm install)" /></div></div>
-    <div class="fila"><div><label>Comando start (para arrancarlo)</label><input id="r-start" placeholder="npm run dev" /></div><div><label>Puerto</label><input id="r-puerto" type="number" placeholder="4000" /></div></div>
+    <label>Ruta absoluta del repo</label><input id="r-ruta" placeholder="C:\\Users\\Sebas\\proyectos\\jelcom-envios" />
+    <div class="fila"><div><label>Build</label><input id="r-build" placeholder="npx tsc --noEmit -p ." /></div><div><label>Test</label><input id="r-test" placeholder="npm test" /></div></div>
+    <div class="fila"><div><label>Lint</label><input id="r-lint" /></div><div><label>Install</label><input id="r-install" placeholder="(auto: npm install)" /></div></div>
+    <div class="fila"><div><label>Start</label><input id="r-start" placeholder="npm run dev" /></div><div><label>Puerto</label><input id="r-puerto" type="number" placeholder="4000" /></div></div>
     <label>URL de salud</label><input id="r-salud" placeholder="http://localhost:4000/api/salud" />
-    <label>Notas para el Senior (stack, convenciones, cuidados)</label><textarea id="r-notas" rows="3"></textarea>
-    <button class="primario" style="margin-top:12px" onclick="registrar()">Registrar</button><div id="r-out"></div>`;
+    <label>Notas para Sage (stack, convenciones, cuidados)</label><textarea id="r-notas" rows="3"></textarea>
+    <div class="acciones"><button class="primario" onclick="registrar(this)">Registrar</button></div><div id="r-salida"></div>`;
 }
-async function registrar() {
+async function registrar(b) {
   const v = (i) => document.getElementById(i).value.trim();
-  try {
-    const r = await post("/api/codigo/proyectos", { nombre: v("r-nombre"), ruta: v("r-ruta"), rama_base: v("r-rama") || "main", cmd_build: v("r-build") || undefined, cmd_test: v("r-test") || undefined, cmd_lint: v("r-lint") || undefined, cmd_install: v("r-install") || undefined, cmd_start: v("r-start") || undefined, puerto: v("r-puerto") ? Number(v("r-puerto")) : undefined, url_salud: v("r-salud") || undefined, notas: v("r-notas") });
-    document.getElementById("r-out").innerHTML = renderResultado(r); await cargar();
-  } catch (e) { document.getElementById("r-out").innerHTML = renderResultado({ ok: false, error: e.message }); }
+  await accion(b, async () => { const r = await post("/api/codigo/proyectos", { nombre: v("r-nombre"), ruta: v("r-ruta"), rama_base: v("r-rama") || "main", cmd_build: v("r-build") || undefined, cmd_test: v("r-test") || undefined, cmd_lint: v("r-lint") || undefined, cmd_install: v("r-install") || undefined, cmd_start: v("r-start") || undefined, puerto: v("r-puerto") ? Number(v("r-puerto")) : undefined, url_salud: v("r-salud") || undefined, notas: v("r-notas") }).catch((e) => ({ ok: false, error: e.message })); salida(document.getElementById("r-salida"), r); });
 }
-cargar(); setInterval(cargar, 10000);
+
+refrescarAhora().then(enrutar);
+setInterval(refrescarAhora, 15000);
 </script>
 </body>
 </html>

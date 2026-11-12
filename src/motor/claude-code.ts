@@ -93,7 +93,10 @@ async function lanzar(id: string, op: OpcionesSesion, modo: Modo, clave: string)
   const cfg = rutasConfig();
   const presupuesto = op.presupuestoUsd ?? (Number(process.env.CLAUDE_CODE_PRESUPUESTO_USD) || 5);
   const args = ["-p", "--output-format", "stream-json", "--verbose",
-    "--permission-mode", "bypassPermissions",          // los permisos los decide el hook (Emilia), no los diálogos
+    // Modo normal + hook: el "allow" del hook de Emilia autoriza cada acción; si el hook
+    // no cargara, Claude Code niega lo no autorizado (falla cerrado). bypassPermissions
+    // sería al revés (todo abierto) y además Claude Code lo rechaza si corre como root.
+    "--permission-mode", "default",
     "--settings", comillas(cfg.settings), "--mcp-config", comillas(cfg.mcp),
     "--max-budget-usd", String(presupuesto)];
   if (modo === "lectura") args.push("--disallowedTools", "Write", "Edit", "MultiEdit", "NotebookEdit");   // doble candado
