@@ -27,6 +27,7 @@ import { entregarRespuesta, entregarTexto } from "../motor/entrega.js";
 import { obtenerOCrearConversacion, guardarMensajeEn } from "../dominio/conversaciones.js";
 import { aprobacionPendienteDelJefe, resolverAprobacion } from "../dominio/aprobaciones.js";
 import { enviarTextoWhatsapp, descargarMedia } from "./enviar.js";
+import { agenteDeWhatsapp } from "./agente-canal.js";
 import { guardarArchivo } from "../dominio/archivos.js";
 import { analizarImagen, esImagen } from "../motor/vision.js";
 import { transcribir } from "../motor/voz.js";
@@ -78,11 +79,7 @@ async function esNuevo(waId: string | undefined): Promise<boolean> {
  * 'whatsapp' en su esqueleto (pieza Canales). Si ninguno lo declara, nadie
  * responde y se loguea claro — ya no hay fallback silencioso.
  */
-async function agenteDeWhatsapp(): Promise<any | undefined> {
-  const activos = await query<any>(`SELECT id, canales FROM agentes WHERE estado='activo' ORDER BY creado_en ASC`);
-  const elegido = activos.find((a) => tieneCanal(a, "whatsapp"));
-  return elegido ? obtenerAgente(elegido.id) : undefined;
-}
+// (vive en agente-canal.ts para que otros módulos —avisos de Iris— la usen)
 
 // Exactas (siempre valen) y tolerantes (solo cuando hay una aprobación pendiente): "Ok disparalo", "sí dale", "no, cancelá".
 const RE_APRUEBA = /^\s*(ok|okay|oka|okey|sí|si|dale|apruebo|aprobado|aprobar|listo|hazlo|hacelo|confirmo|va|adelante|procede|proced[eé])\s*[.!]*\s*$/i;

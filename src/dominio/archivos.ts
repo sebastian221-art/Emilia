@@ -11,7 +11,7 @@ export interface Archivo {
 const DIR = path.resolve(process.env.DATA_DIR || "data", "archivos");
 
 export async function guardarArchivo(p: {
-  nombre: string; mime: string; contenido: Buffer; origen: "whatsapp" | "generado" | "panel";
+  nombre: string; mime: string; contenido: Buffer; origen: "whatsapp" | "generado" | "panel" | "correo";
   conversacionId?: string | null; agenteId?: string | null;
 }): Promise<Archivo> {
   await fs.mkdir(DIR, { recursive: true });

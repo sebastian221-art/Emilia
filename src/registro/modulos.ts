@@ -22,6 +22,8 @@ export const MODULOS: ModuloCapacidades[] = [
   { ruta: "tools/codigo.ts",       exporta: "toolsCodigo",       tipo: "tools" },
   { ruta: "tools/publicar.ts",     exporta: "toolsPublicar",     tipo: "tools" },
   { ruta: "tools/guardia.ts",      exporta: "toolsGuardia",      tipo: "tools" },
+  { ruta: "tools/correo.ts",       exporta: "toolsCorreo",       tipo: "tools" },
+  { ruta: "tools/agenda.ts",       exporta: "toolsAgenda",       tipo: "tools" },
   { ruta: "tools/agentes.ts",      exporta: "toolsAgentes",      tipo: "tools" },
   { ruta: "tools/observar.ts",     exporta: "toolsObservar",     tipo: "tools" },
   { ruta: "tools/conocimiento.ts", exporta: "toolsConocimiento", tipo: "tools" },

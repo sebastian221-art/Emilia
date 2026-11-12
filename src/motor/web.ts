@@ -7,6 +7,8 @@
 //  (texto) y respeta un límite de tamaño. Si DuckDuckGo falla, cae a Bing HTML.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { textoDeDocumento } from "./texto-documento.js";
+
 export interface ResultadoBusqueda { titulo: string; url: string; resumen: string; fuente: string }
 export interface PaginaLeida { titulo: string; url: string; texto: string; enlaces: { texto: string; href: string }[]; caracteres: number; recortado: boolean }
 
@@ -26,13 +28,13 @@ async function fetchTexto(url: string, timeoutSeg = 20, extraHeaders: Record<str
     if (/application\/pdf/i.test(tipo) || /\.pdf(\?|$)/i.test(url)) {
       const buf = Buffer.from(await r.arrayBuffer());
       let texto = "";
-      try { const nombreMod = "pdf-parse"; const mod: any = await import(nombreMod); const parse = mod.default || mod; const d = await parse(buf); texto = String(d.text || ""); } catch { texto = "(PDF: no pude extraer texto; falta el paquete pdf-parse → npm install pdf-parse)"; }
+      texto = (await textoDeDocumento(buf, "application/pdf", "", 200000)) || "(PDF: no pude extraer texto; puede ser un PDF escaneado o protegido)";
       return { ok: r.ok, status: r.status, texto, tipo: "pdf", urlFinal: r.url || url };
     }
     const cuerpo = Buffer.from(await r.arrayBuffer());
     if (cuerpo.subarray(0, 5).toString("latin1") === "%PDF-") {   // PDF servido sin content-type ni extensión
       let texto = "";
-      try { const nombreMod = "pdf-parse"; const mod: any = await import(nombreMod); const parse = mod.default || mod; const d = await parse(cuerpo); texto = String(d.text || ""); } catch { texto = "(PDF: no pude extraer texto; falta el paquete pdf-parse → npm install pdf-parse)"; }
+      texto = (await textoDeDocumento(cuerpo, "application/pdf", "", 200000)) || "(PDF: no pude extraer texto; puede ser un PDF escaneado o protegido)";
       return { ok: r.ok, status: r.status, texto, tipo: "pdf", urlFinal: r.url || url };
     }
     if (/^(image|audio|video|application\/(zip|octet-stream|x-))/i.test(tipo)) return { ok: r.ok, status: r.status, texto: `(contenido binario ${tipo}: no es texto legible)`, tipo: "binario", urlFinal: r.url || url };

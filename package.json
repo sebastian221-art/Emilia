@@ -9,7 +9,8 @@
         "migrate": "tsx src/db/migrar.ts",
         "setup": "tsx src/db/crear-base.ts && tsx src/db/migrar.ts",
         "lab:preparar": "tsx src/scripts/preparar-laboratorio.ts",
-        "pc:probar": "tsx src/scripts/probar-pantalla.ts"
+        "pc:probar": "tsx src/scripts/probar-pantalla.ts",
+        "google:conectar": "tsx src/scripts/conectar-google.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.131.0",
@@ -18,8 +19,12 @@
         "dotenv": "^16.4.5",
         "express": "^4.19.2",
         "groq-sdk": "^0.7.0",
+        "imapflow": "^2.11.0",
+        "mailparser": "^3.14.3",
+        "mammoth": "^1.13.0",
         "msedge-tts": "^2.0.9",
         "multer": "^1.4.5-lts.1",
+        "nodemailer": "^7.0.13",
         "pdf-parse": "^2.4.5",
         "pg": "^8.12.0",
         "playwright": "^1.63.0",
@@ -27,8 +32,10 @@
     },
     "devDependencies": {
         "@types/express": "^4.17.21",
+        "@types/mailparser": "^3.9.0",
         "@types/multer": "^1.4.11",
         "@types/node": "^20.14.2",
+        "@types/nodemailer": "^8.0.2",
         "@types/pg": "^8.11.6",
         "tsx": "^4.15.6",
         "typescript": "^5.5.2"

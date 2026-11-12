@@ -1,0 +1,33 @@
+// ARCHIVO: src/motor/iris-reloj.ts
+// ─────────────────────────────────────────────────────────────────────────────
+//  Arranque de Iris al prender Emilia: correo en tiempo real + un reloj cada
+//  minuto (recordatorios de la agenda, avisos diferidos por el silencio y
+//  los demás relojes de Iris que se registren aquí).
+// ─────────────────────────────────────────────────────────────────────────────
+import { iniciarCorreo } from "./correo.js";
+import { revisarRecordatorios } from "./agenda.js";
+import { entregarDiferidos } from "./avisos.js";
+
+type Tarea = { nombre: string; fn: () => Promise<unknown> };
+const tareas: Tarea[] = [
+  { nombre: "recordatorios", fn: () => revisarRecordatorios() },
+  { nombre: "diferidos", fn: () => entregarDiferidos() },
+];
+/** Otros módulos de Iris (vigilancia, resúmenes, Any) se cuelgan del mismo reloj. */
+export function cadaMinuto(nombre: string, fn: () => Promise<unknown>) { tareas.push({ nombre, fn }); }
+
+let reloj: NodeJS.Timeout | null = null;
+let corriendo = false;
+export async function tic() {
+  if (corriendo) return;
+  corriendo = true;
+  try { for (const t of tareas) await t.fn().catch((e) => console.warn(`[iris ${t.nombre}]`, e?.message || e)); }
+  finally { corriendo = false; }
+}
+export function iniciarIris() {
+  iniciarCorreo();
+  if (reloj) return;
+  reloj = setInterval(() => { tic(); }, 60_000);
+  setTimeout(() => tic(), 5_000);
+  console.log("[iris] reloj activo (agenda, avisos y vigilancia cada minuto).");
+}

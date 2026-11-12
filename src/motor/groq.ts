@@ -36,6 +36,8 @@ export async function llamarModelo(
   forzarToolLegado = false
 ): Promise<RespuestaModelo> {
   const op: OpcionesModelo = typeof modeloUOpciones === "string" ? { modelo: modeloUOpciones, forzarTool: forzarToolLegado } : modeloUOpciones;
+  // Solo pruebas: un modelo falso inyectado (nunca se define en producción).
+  if ((globalThis as any).__modeloPrueba) return (globalThis as any).__modeloPrueba(mensajes, tools, op);
   const modelo = op.modelo || MODELO_POR_DEFECTO;
   const temperature = clamp(op.temperatura ?? 0.3, 0, 1);
 

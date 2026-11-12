@@ -177,6 +177,8 @@ iniciarRegistro()
       console.log(`Emilia en http://localhost:${PORT}${PANEL_HOST === "127.0.0.1" ? " (solo esta máquina)" : ` (escuchando en ${PANEL_HOST})`}`);
       tokenInterno(); await prepararLaboratorio().then(() => console.log(`Laboratorio de Sage: ${LAB_DIR}`)).catch((e) => console.warn("[laboratorio]", e?.message || e));
       await recuperarSesionesHuerfanas();
+      // Iris: correo en tiempo real, recordatorios de la agenda y avisos guardados durante el silencio.
+      import("./motor/iris-reloj.js").then((m) => m.iniciarIris()).catch((e) => console.warn("[iris]", e?.message || e));
       await retomarFlujos();
       await retomarProcesos();
       iniciarReloj();
