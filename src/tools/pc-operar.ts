@@ -19,20 +19,40 @@ const libre = () => (process.env.PC_CONTROL_LIBRE || "").toLowerCase() === "true
 
 export const pcOperar: DefTool = {
   nombre: "pc_operar", modulo: MODULO,
-  descripcion: "OPERA el computador para cumplir una tarea en lenguaje natural: planifica, usa comandos y teclado cuando alcanza, controles por nombre (accesibilidad) cuando hay que hacer clic, y visión solo como último recurso; verifica el resultado y aprende la receta. Ej: 'en la calculadora hacé 2x2 y decime el resultado', 'abrí el bloc de notas, escribí X y guardalo en el escritorio como y.txt', 'en Excel poné Hola en A1'. Si la tarea requiere contraseñas o pagos, se detiene y pregunta.",
+  descripcion: "OPERA el computador como una persona: Claude ve la pantalla y usa mouse y teclado para cumplir una tarea en lenguaje natural (cualquier app de Windows, páginas, AnyDesk, PuTTY…). Respeta un PERFIL de seguridad: 'general' (tu PC) o p. ej. 'hospital_lectura' (solo AnyDesk+PuTTY, comandos de solo lectura, cada uno con tu OK por WhatsApp). Ej: 'en la calculadora haz 2x2 y dime el resultado', 'abre el Excel de ventas y dime el total de marzo', 'entra por AnyDesk al PC del hospital y revisa en PuTTY el espacio en disco del servidor' (perfil hospital_lectura). Se detiene y pregunta ante contraseñas que no tenga autorizadas, pagos o decisiones.",
   parametros: {
     type: "object",
     properties: {
       tarea: { type: "string", description: "Qué hacer, concreto, con el resultado esperado (y rutas/nombres exactos si los hay).", minLength: 5 },
-      modo: { type: "string", enum: ["auto", "visual"], description: "auto (defecto): planificador por capas. visual: solo el operador de visión (para apps sin accesibilidad).", default: "auto" },
+      perfil: { type: "string", description: "Perfil de seguridad (pc_perfiles). Por defecto 'general'.", default: "general" },
+      motor: { type: "string", enum: ["claude", "v2", "visual"], description: "claude (defecto si hay ANTHROPIC_API_KEY): uso del computador de Claude con visión. v2/visual: operadores anteriores (sin perfiles).", default: "claude" },
+      max_pasos: { type: "integer", minimum: 5, maximum: 400 },
     },
     required: ["tarea"],
   },
-  riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 900,
+  riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 7200,
   async ejecutar(a, ctx) {
     exigirPc();
+    const motor = a.motor || (process.env.ANTHROPIC_API_KEY && process.env.PC_MOTOR !== "v2" ? "claude" : "v2");
+    if (motor === "claude") {
+      const { usarComputador, obtenerPerfil } = await import("../motor/computer-use.js");
+      const perfil = await obtenerPerfil(a.perfil || "general");
+      await avisarProgreso(ctx.conversacionId, `🖥 Voy a usar el PC (perfil ${perfil.nombre}): "${a.tarea.slice(0, 120)}". No toques el mouse; si lo mueves, pauso. Escribe "para" para detenerme.`);
+      const r = await usarComputador({ objetivo: a.tarea, perfil: perfil.nombre, maxPasos: a.max_pasos, agenteId: ctx.agenteId, conversacionId: ctx.conversacionId, onAvance: (t) => avisarProgreso(ctx.conversacionId, t) });
+      await ctx.traza("tool", `pc_operar(claude): ${r.estado} en ${r.pasos} pasos, ${r.costoUsd} USD, ${r.comandos.length} comando(s). Carpeta ${r.carpeta}`).catch(() => {});
+      if (perfil.enviar_capturas && r.capturaFinal && process.env.WHATSAPP_NUMERO_JEFE && ["cumplida", "fallida", "necesita_jefe"].includes(r.estado)) {
+        const { enviarImagenWhatsapp } = await import("../whatsapp/enviar.js");
+        const fsp = await import("node:fs/promises");
+        await enviarImagenWhatsapp(process.env.WHATSAPP_NUMERO_JEFE, await fsp.readFile(r.capturaFinal), "image/png", r.estado === "cumplida" ? "Así quedó" : "Así está la pantalla").catch(() => {});
+      }
+      const pie = `\n(${r.pasos} pasos · ${r.costoUsd.toFixed(2)} USD${r.comandos.length ? ` · comandos: ${r.comandos.map((x) => `${x.comando}${x.aprobado === false ? " ✘" : ""}`).join("; ").slice(0, 400)}` : ""} · sesión ${r.sesionId.slice(0, 8)})`;
+      if (r.estado === "cumplida") return { ok: true, datos: { estado: r.estado, sesion: r.sesionId, comandos: r.comandos }, resumen: `✅ ${r.resumen}${pie}` };
+      if (r.estado === "necesita_jefe") return { ok: false, datos: { estado: r.estado, sesion: r.sesionId }, error: `Necesito al jefe: ${r.pregunta}${r.resumen ? `\nLo que llevo: ${r.resumen}` : ""}${pie}` };
+      if (r.estado === "cancelada") return { ok: false, datos: { estado: r.estado }, error: `${r.resumen}${pie}` };
+      return { ok: false, datos: { estado: r.estado, sesion: r.sesionId }, error: `${r.resumen}${pie}` };
+    }
     await avisarProgreso(ctx.conversacionId, `🖱 Voy a operar el PC: "${a.tarea.slice(0, 120)}". No toques el mouse; te aviso.`);
-    if (a.modo === "visual") {
+    if (motor === "visual") {
       const r = await operarPc(a.tarea, { maxPasos: 40, permitirTexto: true, contexto: { conversacionId: ctx.conversacionId, agenteId: ctx.agenteId }, onPaso: async (p) => { await ctx.traza("tool", `pc_operar(visual) paso ${p.n}: ${p.accion} ${p.detalle}${p.error ? " ERROR " + p.error : ""} — ${p.motivo}`); } });
       const bit = r.pasos.map((p) => `${p.n}. ${p.accion} ${p.detalle}${p.error ? " ✘ " + p.error : ""}`).join("\n");
       return r.estado === "cumplida" ? { ok: true, datos: r, resumen: `✅ ${r.resumen}` } : { ok: false, error: `${r.resumen}\n${bit}`, datos: r };

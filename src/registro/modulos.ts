@@ -35,6 +35,7 @@ export const MODULOS: ModuloCapacidades[] = [
   { ruta: "tools/pc.ts",           exporta: "toolsPc",           tipo: "tools" },
   { ruta: "tools/pc-operar.ts",    exporta: "toolsPcOperar",     tipo: "tools" },
   { ruta: "tools/pc-extra.ts",     exporta: "toolsPcExtra",      tipo: "tools" },
+  { ruta: "tools/pc-claude.ts",    exporta: "toolsPcClaude",     tipo: "tools" },
   { ruta: "tools/navegador.ts",    exporta: "toolsNavegador",    tipo: "tools" },
   { ruta: "tools/memoria.ts",      exporta: "toolsMemoria",      tipo: "tools" },
   { ruta: "tools/disparadores.ts", exporta: "toolsDisparadores", tipo: "tools" },

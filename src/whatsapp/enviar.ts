@@ -85,6 +85,15 @@ export async function enviarDocumentoWhatsapp(numero: string, contenido: Buffer,
   });
 }
 
+/** Manda una imagen (png/jpg) con texto opcional. Fuera de la ventana de 24 h Meta no deja mandar imágenes: devuelve el error. */
+export async function enviarImagenWhatsapp(numero: string, contenido: Buffer, mime = "image/png", caption?: string): Promise<ResultadoEnvio> {
+  const to = limpiar(numero);
+  if (!(await ventanaAbierta(to))) return { ok: false, error: "Fuera de la ventana de 24 h de WhatsApp: no se pueden mandar imágenes hasta que el jefe escriba." };
+  const subida = await subirMedia(contenido, mime.includes("jpeg") ? "captura.jpg" : "captura.png", mime);
+  if (!subida.ok) return subida;
+  return postMensaje({ messaging_product: "whatsapp", to, type: "image", image: { id: subida.id, ...(caption ? { caption: caption.slice(0, 1000) } : {}) } });
+}
+
 /** Manda un audio (mp3/ogg) como mensaje de audio. */
 export async function enviarAudioWhatsapp(numero: string, contenido: Buffer, mime = "audio/mpeg"): Promise<ResultadoEnvio> {
   const subida = await subirMedia(contenido, mime.includes("ogg") ? "audio.ogg" : "audio.mp3", mime);
