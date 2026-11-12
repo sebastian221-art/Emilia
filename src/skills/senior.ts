@@ -12,6 +12,18 @@
 import type { DefSkill, ContextoEjecucion, ResultadoTool } from "../registro/tipos.js";
 import { avisarProgreso } from "../motor/actividad.js";
 import { obtenerSandbox, obtenerProyecto, sandboxesAbiertos } from "../dominio/proyectos.js";
+import { iniciarSesionClaude, esperarSesion } from "../motor/claude-code.js";
+import { nuevoExperimento } from "../motor/laboratorio.js";
+import { ramaBaseReal } from "../motor/sandbox.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+/** Corre Claude Code directo (sin pasar por tools) y espera el resultado. */
+async function correrClaude(ctx: ContextoEjecucion, p: { cwd: string; modo: "escritura" | "lectura" | "experimento"; encargo: string; sistema?: string; maxTurnos?: number; timeoutSeg?: number; presupuestoUsd?: number; sandboxId?: string | null; proyectoId?: string | null }) {
+  const ses = await iniciarSesionClaude({ cwd: p.cwd, modo: p.modo, encargo: p.encargo, sistema: p.sistema, maxTurnos: p.maxTurnos, timeoutSeg: p.timeoutSeg, presupuestoUsd: p.presupuestoUsd, sandboxId: p.sandboxId ?? null, proyectoId: p.proyectoId ?? null, agenteId: ctx.agenteId, conversacionId: ctx.conversacionId });
+  const fin = await esperarSesion(ses.id, (p.timeoutSeg ?? 1800) + 600);
+  return { ok: fin.estado === "completada", resultado: fin.resultado || "", error: fin.error || (fin.estado === "en_curso" ? "sigue corriendo" : undefined), sesionId: ses.id, turnos: fin.turnos, costo: fin.costo_usd, duracion_s: Math.round((fin.duracion_ms || 0) / 1000) };
+}
 
 const MODULO = "senior";
 
@@ -24,7 +36,9 @@ const REGLAS = `Sos un ingeniero de software senior de primer nivel trabajando e
 - Calidad sobre cantidad: cambios mínimos y precisos, legibles, con el estilo del proyecto. No reescribas de más.
 - Nada de secretos hardcodeados, nada de dependencias nuevas sin necesidad real (si agregás una, justificá).
 - Si algo es ambiguo o riesgoso, explicá el supuesto que tomaste en tu informe final.
-- Terminá SIEMPRE con un informe claro: qué hiciste, qué archivos tocaste, cómo lo verificaste, qué quedó pendiente o qué habría que revisar.`;
+- Terminá SIEMPRE con un informe claro: qué hiciste, qué archivos tocaste, cómo lo verificaste, qué quedó pendiente o qué habría que revisar.
+- Memoria del proyecto: si aprendiste algo que le sirve a la próxima sesión (cómo se corre, convenciones, trampas, decisiones), agrégalo corto al CLAUDE.md de la raíz del proyecto (créalo si no existe). Nada de secretos ahí.
+- Tienes las herramientas de Emilia (MCP "emilia"): emilia_enviar_archivo para mandarle al jefe un archivo que generes, biblioteca_consultar/aportar para la memoria del equipo.`;
 
 /** Abre sandbox, corre el encargo, verifica e itera si hay build/lint/test que falla. Deja el sandbox ABIERTO para que el jefe vea el diff y decida. */
 async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
@@ -85,13 +99,15 @@ async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
   // Revisión cruzada: un segundo Claude, sin el contexto del primero, revisa el diff.
   let revision = "";
   if (ultimo.ok && p.revisionCruzada) {
-    const rv = await ctx.ejecutarTool("codigo_ejecutar_claude", {
-      sandbox_id, esperar: true, max_turnos: 30, timeout_seg: 900,
-      contexto: `${REGLAS}
-Sos un REVISOR de código independiente y exigente (no escribiste estos cambios). Tu trabajo es encontrar problemas reales: bugs, casos límite no cubiertos, riesgos de seguridad, tests insuficientes, violaciones de convenciones. No hagas cambios; solo revisá.`,
-      encargo: `Revisá los cambios de este sandbox respecto a la rama base (usá git diff contra ${(await ctx.ejecutarTool("codigo_git_estado", { sandbox_id })).datos ? "la rama base del proyecto" : "main"}). Contexto del encargo original: "${p.encargo.slice(0, 600)}". Entregá: VEREDICTO: APROBADO o BLOQUEANTE en la primera línea; luego la lista de hallazgos (bloqueante/mayor/menor) con archivo:línea y qué corregir.`,
+    const sbR = await obtenerSandbox(sandbox_id!);
+    const baseR = sbR ? await ramaBaseReal(sbR.proyecto) : "master";
+    const rv = await correrClaude(ctx, {
+      cwd: sbR!.ruta, modo: "lectura", sandboxId: sandbox_id, proyectoId: sbR?.proyecto_id, maxTurnos: 30, timeoutSeg: 900,
+      sistema: `${REGLAS}
+Eres un REVISOR de código independiente y exigente (no escribiste estos cambios). Tu trabajo es encontrar problemas reales: bugs, casos límite no cubiertos, riesgos de seguridad, tests insuficientes, violaciones de convenciones. No haces cambios; solo revisas.`,
+      encargo: `Revisa los cambios de este sandbox respecto a la rama base: git diff ${baseR}...HEAD y también git diff (lo que no tenga commit). Contexto del encargo original: "${p.encargo.slice(0, 600)}". Entrega: VEREDICTO: APROBADO o BLOQUEANTE en la primera línea; luego los hallazgos (bloqueante/mayor/menor) con archivo:línea y qué corregir.`,
     });
-    revision = (rv.datos as any)?.resultado || rv.error || "";
+    revision = rv.resultado || rv.error || "";
     await ctx.traza("skill", `revisión cruzada: ${/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "BLOQUEANTE" : "aprobado"}`);
     await avisarProgreso(ctx.conversacionId, /^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "🔍 El revisor encontró problemas bloqueantes; Claude los corrige…" : "🔍 Revisión cruzada: aprobado.");
     if (/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision)) {
@@ -127,14 +143,13 @@ Sos un REVISOR de código independiente y exigente (no escribiste estos cambios)
   return { ok: ultimo.ok, datos: { sandbox_id, rama, diff: diff.resumen, archivos: diff.archivos, informe, verificacion: (ultimo.datos as any)?.verificacion, revision }, resumen: cuerpo, error: ultimo.ok ? undefined : ultimo.error };
 }
 
-/** Encargo de solo lectura: no abre rama para escribir, usa un sandbox y no verifica. */
+/** Encargo de solo lectura: Claude Code directo en el repo real, sin poder escribir (segundos, no minutos). */
 async function ejecutarLectura(ctx: ContextoEjecucion, p: { proyecto: string; proposito: string; sistema: string; encargo: string; maxTurnos?: number; guardar?: boolean }): Promise<ResultadoTool> {
-  const ab = await ctx.ejecutarTool("codigo_abrir_sandbox", { proyecto: p.proyecto, proposito: p.proposito });
-  if (!ab.ok) return { ok: false, error: `No pude abrir el sandbox: ${ab.error}` };
-  const sandbox_id = (ab.datos as any).sandbox_id;
-  await avisarProgreso(ctx.conversacionId, `🧪 Sandbox listo. Claude Code está leyendo el proyecto (${p.proposito})…`);
-  const cc = await ctx.ejecutarTool("codigo_ejecutar_claude", { sandbox_id, encargo: p.encargo, contexto: p.sistema, max_turnos: p.maxTurnos ?? 60, timeout_seg: 1200, esperar: true });
-  await ctx.ejecutarTool("codigo_cerrar_sandbox", { sandbox_id, borrar_rama: true });   // lectura: no deja rastro
+  const proy = await obtenerProyecto(p.proyecto);
+  if (!proy) return { ok: false, error: `Proyecto "${p.proyecto}" no registrado.` };
+  await avisarProgreso(ctx.conversacionId, `🔎 Claude Code está leyendo ${p.proyecto} (${p.proposito}), sin tocar nada…`);
+  const cc0 = await correrClaude(ctx, { cwd: proy.ruta, modo: "lectura", proyectoId: proy.id, encargo: p.encargo, sistema: p.sistema, maxTurnos: p.maxTurnos ?? 60, timeoutSeg: 1200 });
+  const cc = { ok: cc0.ok, error: cc0.error, datos: { resultado: cc0.resultado } };
   if (!cc.ok) return { ok: false, error: `Claude Code: ${cc.error}` };
   const informe = (cc.datos as any)?.resultado || "";
   const fecha = new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -251,7 +266,7 @@ export const seniorAuditarSeguridad: DefSkill = {
 
 export const seniorAtacar: DefSkill = {
   nombre: "senior_atacar", modulo: MODULO,
-  descripcion: "Red team en el sandbox: intenta ACTIVAMENTE romper o vulnerar el propio sistema (payloads, casos límite, abuso de endpoints, condiciones de carrera) y reporta qué logró explotar y cómo cerrarlo. Trabaja en el sandbox aislado, nunca contra producción.",
+  descripcion: "Red team en el sandbox (con .env de PRUEBA, nunca credenciales reales): intenta ACTIVAMENTE romper o vulnerar el propio sistema (payloads, casos límite, abuso de endpoints, condiciones de carrera) y reporta qué logró explotar y cómo cerrarlo. Trabaja en el sandbox aislado, nunca contra producción.",
   cuandoUsar: "Cuando el jefe pide 'intentá romperlo', 'probá si es vulnerable', 'atacá el sistema'.",
   parametros: { type: "object", properties: { proyecto: PROYECTO, objetivo: { type: "string", description: "Qué parte atacar (endpoint, flujo, módulo). Opcional." } }, required: ["proyecto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 5400,
@@ -362,7 +377,81 @@ export const seniorCrearCapacidad: DefSkill = {
   },
 };
 
+// ─── Laboratorio libre: "como tener a Claude a la mano" ──────────────────────
+export const seniorLaboratorio: DefSkill = {
+  nombre: "senior_laboratorio", modulo: MODULO,
+  descripcion: "Trabajo libre en el laboratorio de Sage (una carpeta nueva, sin repo): prototipos, scripts, probar una API o una librería, analizar datos, generar documentos (Word, Excel, PowerPoint, PDF), maquetas de páginas, experimentos y comparaciones. Claude Code tiene terminal, archivos, internet de lectura y las herramientas de Emilia, y le manda al jefe los archivos que produzca. Devuelve el informe y la carpeta.",
+  cuandoUsar: "Cualquier pedido de código o de 'hazme/genera/prueba/calcula/compara' que NO es cambiar un proyecto registrado: 'hazme un Excel con…', 'arma una presentación de…', 'prueba si esta API responde…', 'compara estas dos librerías…', 'prototipo de…', 'calcula…'.",
+  parametros: {
+    type: "object",
+    properties: {
+      objetivo: { type: "string", description: "Qué hay que lograr, con todo el detalle que dio el jefe.", minLength: 5 },
+      enviar_archivos: { type: "boolean", description: "Mandarle al jefe por WhatsApp los archivos finales.", default: true },
+      archivos_entrada: { type: "array", items: { type: "string" }, description: "archivo_id de adjuntos del jefe que hay que usar (se copian al experimento)." },
+      presupuesto_usd: { type: "number", minimum: 0.5, maximum: 50 },
+    },
+    required: ["objetivo"],
+  },
+  riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 5400,
+  tools: ["conocimiento_guardar"],
+  async ejecutar(a, ctx) {
+    const dir = await nuevoExperimento(a.objetivo.slice(0, 40));
+    const entradas: string[] = [];
+    if (Array.isArray(a.archivos_entrada) && a.archivos_entrada.length) {
+      const { leerArchivo } = await import("../dominio/archivos.js");
+      await fs.mkdir(path.join(dir, "entrada"), { recursive: true });
+      for (const id of a.archivos_entrada) {
+        try { const { meta, contenido } = await leerArchivo(id); const dest = path.join(dir, "entrada", meta.nombre); await fs.writeFile(dest, contenido); entradas.push(dest); } catch { /* adjunto no encontrado */ }
+      }
+    }
+    await avisarProgreso(ctx.conversacionId, `🧪 Laboratorio abierto. Claude Code empieza.`);
+    const r = await correrClaude(ctx, {
+      cwd: dir, modo: "experimento", maxTurnos: 120, timeoutSeg: 2700, presupuestoUsd: a.presupuesto_usd,
+      sistema: `${REGLAS}
+Estás en tu laboratorio, en una carpeta nueva solo para esta tarea (${dir}). Puedes instalar lo que necesites aquí, escribir scripts, probar y repetir hasta que quede bien.${entradas.length ? `
+Archivos del jefe para usar (en ./entrada): ${entradas.map((e) => path.basename(e)).join(", ")}.` : ""}${a.enviar_archivos !== false ? `
+Cuando el resultado final esté listo y verificado, mándaselo al jefe con emilia_enviar_archivo (solo los archivos finales, con un mensaje corto de qué es).` : ""}`,
+      encargo: a.objetivo,
+    });
+    const archivos = await fs.readdir(dir).catch(() => [] as string[]);
+    const informe = r.resultado || "";
+    if (informe) await ctx.ejecutarTool("conocimiento_guardar", { nombre: `laboratorio/${path.basename(dir)}.md`, contenido: `# ${a.objetivo.slice(0, 120)}
+Carpeta: ${dir}
+
+${informe.slice(0, 2500)}` }).catch(() => {});
+    return { ok: r.ok, datos: { carpeta: dir, archivos, informe, costo_estimado_usd: r.costo, duracion_s: r.duracion_s }, error: r.ok ? undefined : r.error, resumen: `${r.ok ? "✅" : "⚠"} Laboratorio (${path.basename(dir)}, ${r.duracion_s}s):
+${informe.slice(0, 3500) || r.error}` };
+  },
+};
+
+export const seniorResolverConflictos: DefSkill = {
+  nombre: "senior_resolver_conflictos", modulo: MODULO,
+  descripcion: "Pone un sandbox al día con lo último de GitHub cuando la entrega encontró conflictos: Claude Code hace el rebase, resuelve los conflictos respetando ambos cambios y deja build/tests en verde. Después se puede volver a entregar.",
+  cuandoUsar: "Cuando entregar_cambios dice que hay conflictos, o el jefe pide 'resuelve los conflictos del sandbox X'.",
+  parametros: { type: "object", properties: { sandbox_id: { type: "string", minLength: 8 } }, required: ["sandbox_id"] },
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 3600,
+  tools: ["codigo_verificar"],
+  async ejecutar(a, ctx) {
+    const sb = await obtenerSandbox(a.sandbox_id);
+    if (!sb || sb.estado !== "abierto") return { ok: false, error: "Sandbox no encontrado o cerrado." };
+    const base = await ramaBaseReal(sb.proyecto);
+    await avisarProgreso(ctx.conversacionId, `🔀 Claude Code está resolviendo los conflictos con origin/${base}…`);
+    const r = await correrClaude(ctx, {
+      cwd: sb.ruta, modo: "escritura", sandboxId: sb.id, proyectoId: sb.proyecto_id, maxTurnos: 80, timeoutSeg: 1800, sistema: REGLAS,
+      encargo: `Este sandbox (rama ${sb.rama}) tiene que quedar encima de origin/${base}. Haz commit de lo pendiente, git fetch origin ${base}, git rebase origin/${base} y resuelve cada conflicto conservando la intención de AMBOS lados (lo nuevo de GitHub y el trabajo de esta rama). No uses --force ni descartes cambios de otros. Al final corre build y tests. Informe: qué conflictos hubo y cómo los resolviste.`,
+    });
+    const v = await ctx.ejecutarTool("codigo_verificar", { sandbox_id: sb.id });
+    return { ok: r.ok && v.ok, datos: { sandbox_id: sb.id, informe: r.resultado, verificacion: v.resumen }, error: r.ok && v.ok ? undefined : r.error || v.error, resumen: `${r.ok && v.ok ? "✅ Conflictos resueltos" : "⚠ No quedó del todo"}.
+${(r.resultado || "").slice(0, 2000)}
+Verificación:
+${v.resumen || v.error}
+
+Ahora se puede entregar otra vez: flujo entregar_cambios(sandbox_id: "${sb.id}").` };
+  },
+};
+
 export const skillsSenior: DefSkill[] = [
+  seniorLaboratorio, seniorResolverConflictos,
   seniorAnalizar, seniorExplicar, seniorPlanificar, seniorImplementar, seniorReparar,
   seniorAuditarSeguridad, seniorAtacar, seniorProbarLimites, seniorPredecirFallas, seniorReplicar, seniorCrearCapacidad,
 ];

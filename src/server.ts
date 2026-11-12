@@ -25,6 +25,8 @@ import { iniciarRegistro } from "./registro/cargar.js";
 import { retomarFlujos } from "./motor/flujo.js";
 import { recuperarSesionesHuerfanas } from "./motor/claude-code.js";
 import { rutasCodigo } from "./rutas/codigo.js";
+import { rutasInterno } from "./rutas/interno.js";
+import { prepararLaboratorio, tokenInterno, LAB_DIR } from "./motor/laboratorio.js";
 import { rutasEmpresa } from "./rutas/empresa.js";
 import { rutasEventos } from "./rutas/eventos.js";
 import { recibirWebhook } from "./motor/eventos.js";
@@ -46,6 +48,7 @@ app.use(express.json({
 }));
 // El esqueleto se genera desde el backend: va ANTES de static para que
 // /crear/piezas-1.js salga de src/esqueleto/piezas.ts y no de un archivo.
+app.use(rutasInterno);      // solo procesos lanzados por Emilia (token interno): permisos y herramientas de Claude Code
 app.use(rutasEsqueleto);
 app.get(/\.html$/, (req, res, next) => { const f = path.join(PUB, path.normalize(req.path)); if (f.startsWith(PUB) && existsSync(f)) return enviarHtml(res, f); next(); });
 app.use(express.static(PUB, { index: false }));
@@ -172,6 +175,7 @@ iniciarRegistro()
     publico.listen(PORT_PUBLICO, "127.0.0.1", () => console.log(`Puerta pública (solo webhooks) en 127.0.0.1:${PORT_PUBLICO}`));
     app.listen(PORT, PANEL_HOST, async () => {
       console.log(`Emilia en http://localhost:${PORT}${PANEL_HOST === "127.0.0.1" ? " (solo esta máquina)" : ` (escuchando en ${PANEL_HOST})`}`);
+      tokenInterno(); await prepararLaboratorio().then(() => console.log(`Laboratorio de Sage: ${LAB_DIR}`)).catch((e) => console.warn("[laboratorio]", e?.message || e));
       await recuperarSesionesHuerfanas();
       await retomarFlujos();
       await retomarProcesos();

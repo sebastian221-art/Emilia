@@ -19,11 +19,11 @@ async function proy(nombre: string) {
 export const runtimeIniciar: DefTool = {
   nombre: "runtime_iniciar", modulo: MODULO,
   descripcion: "Arranca el proceso de un proyecto (su cmd_start) en el repo real, o en un sandbox si pasás sandbox_id. Queda corriendo aparte de Emilia, con logs a archivo.",
-  parametros: { type: "object", properties: { proyecto: PROY, sandbox_id: { type: "string", description: "Correrlo desde un sandbox en vez del repo real (para probar cambios)." }, comando: { type: "string", description: "Comando alternativo al cmd_start (opcional)." } }, required: ["proyecto"] },
+  parametros: { type: "object", properties: { proyecto: PROY, sandbox_id: { type: "string", description: "Correrlo desde un sandbox en vez del repo real (para probar cambios)." } }, required: ["proyecto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 60,
   async ejecutar(a) {
     const p = await proy(a.proyecto);
-    const r = await iniciarProceso(p, { sandboxId: a.sandbox_id, comando: a.comando });
+    const r = await iniciarProceso(p, { sandboxId: a.sandbox_id });
     if (!r.ok) return { ok: false, error: r.error };
     // Esperar hasta 20 s a que responda (tsx/npm tardan en levantar).
     let salud: any = null;

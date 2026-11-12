@@ -1,40 +1,95 @@
 // ARCHIVO: src/motor/claude-code.ts
 // ─────────────────────────────────────────────────────────────────────────────
-//  CLAUDE CODE — corredor headless observable
-//  Lanza `claude -p` en el sandbox con salida stream-json, guarda cada evento
-//  en sesiones_codigo.log (visible en vivo), captura el resultado final
-//  (texto, session_id para continuar, costo, turnos) y permite cancelar.
-//  Las sesiones sobreviven al orquestador: si el servidor se reinicia, las que
-//  quedaron 'en_curso' sin proceso se marcan fallidas con motivo claro.
-//  .env: CLAUDE_CODE_BIN (por defecto "claude"), CLAUDE_CODE_MODELO (opcional)
+//  CLAUDE CODE — el motor de ingeniería de Sage
+//  Lanza `claude -p` (salida stream-json) en un sandbox, en un experimento del
+//  laboratorio o (modo lectura) directo en el repo, y lo deja observable.
+//   - Tu plan Max: al proceso NO se le pasa ANTHROPIC_API_KEY (si estuviera,
+//     Claude Code cobraría por la API). CLAUDE_CODE_USAR_API=true lo cambia.
+//   - Permisos reales: hook PreToolUse → Emilia decide permitir / negar /
+//     preguntarle al jefe por WhatsApp (motor/permisos-codigo.ts).
+//   - Herramientas de Emilia por MCP (mandar archivos, avisos, biblioteca…).
+//   - Tope de gasto (--max-budget-usd), timeout que SÍ mata el proceso,
+//     máximo CLAUDE_CODE_PARALELO sesiones a la vez y una por sandbox.
+//  .env: CLAUDE_CODE_BIN, CLAUDE_CODE_MODELO, CLAUDE_CODE_PARALELO (3),
+//        CLAUDE_CODE_PRESUPUESTO_USD (5), CLAUDE_CODE_USAR_API (false)
 // ─────────────────────────────────────────────────────────────────────────────
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { query } from "../db/cliente.js";
 import { crearSesionFila, obtenerSesion, logSesion, type SesionCodigo } from "../dominio/proyectos.js";
 import { matar } from "./sandbox.js";
+import { prepararLaboratorio, rutasConfig, tokenInterno, urlInterna } from "./laboratorio.js";
+import type { Modo } from "./permisos-codigo.js";
 
 const BIN = process.env.CLAUDE_CODE_BIN || "claude";
 const procesos = new Map<string, ChildProcess>();
 
 export interface OpcionesSesion {
-  sandboxId: string;
-  proyectoId: string;
+  sandboxId?: string | null;
+  proyectoId?: string | null;
   cwd: string;
   encargo: string;                 // prompt principal
   sistema?: string;                // contexto/reglas que van antes del encargo
+  modo?: Modo;                     // escritura (por defecto) | lectura | experimento
   maxTurnos?: number;              // --max-turns
+  presupuestoUsd?: number;         // --max-budget-usd
+  timeoutSeg?: number;             // pasado esto, se mata el proceso
+  raices?: string[];               // otras carpetas donde puede escribir sin preguntar
   continuarSesionClaude?: string;  // --resume <session_id>
   modelo?: string;
   agenteId?: string | null;
   conversacionId?: string | null;
 }
 
-/** Inicia una sesión y devuelve enseguida (corre en segundo plano). */
-export async function iniciarSesionClaude(op: OpcionesSesion): Promise<SesionCodigo> {
-  const sesion = await crearSesionFila({ sandboxId: op.sandboxId, proyectoId: op.proyectoId, encargo: op.encargo, agenteId: op.agenteId, conversacionId: op.conversacionId });
+// ─── Cola: N sesiones a la vez y una sola por carpeta ────────────────────────
+const enUso = new Set<string>();
+const espera: { clave: string; arrancar: () => void }[] = [];
+const maxParalelo = () => Math.max(1, Number(process.env.CLAUDE_CODE_PARALELO) || 3);
+function pedirTurno(clave: string): Promise<void> {
+  return new Promise((r) => { espera.push({ clave, arrancar: r }); repartir(); });
+}
+function liberarTurno(clave: string) { enUso.delete(clave); repartir(); }
+function repartir() {
+  for (let i = 0; i < espera.length && enUso.size < maxParalelo(); ) {
+    const e = espera[i];
+    if (enUso.has(e.clave)) { i++; continue; }
+    espera.splice(i, 1); enUso.add(e.clave); e.arrancar();
+  }
+}
 
-  const args = ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+/** El entorno del proceso: sin la API key (usa tu plan) y con lo que necesitan el hook y el MCP. */
+function entornoClaude(sesionId: string, op: OpcionesSesion): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: "0" };
+  if (process.env.CLAUDE_CODE_USAR_API !== "true") { delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; }
+  Object.assign(env, {
+    EMILIA_URL: urlInterna(), EMILIA_TOKEN: tokenInterno(), EMILIA_SESION: sesionId, EMILIA_MODO: op.modo || "escritura",
+    EMILIA_RAICES: (op.raices || []).join("|"), MCP_TOOL_TIMEOUT: String(((Number(process.env.PERMISO_ESPERA_SEG) || 900) + 300) * 1000),
+  });
+  return env;
+}
+
+const comillas = (s: string) => (/[\s"&|<>^]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
+
+/** Inicia una sesión y devuelve enseguida (corre en segundo plano, cuando le toque turno). */
+export async function iniciarSesionClaude(op: OpcionesSesion): Promise<SesionCodigo> {
+  const modo: Modo = op.modo || "escritura";
+  const sesion = await crearSesionFila({ sandboxId: op.sandboxId ?? null, proyectoId: op.proyectoId ?? null, encargo: op.encargo, agenteId: op.agenteId, conversacionId: op.conversacionId, modo, cwd: op.cwd });
+  const clave = op.sandboxId || op.cwd;
+  if (enUso.has(clave) || enUso.size >= maxParalelo()) await logSesion(sesion.id, "cola", "En cola: esperando turno (hay otras sesiones corriendo).");
+  pedirTurno(clave).then(() => lanzar(sesion.id, op, modo, clave)).catch(async (e) => { liberarTurno(clave); await finalizar(sesion.id, "fallida", { error: String(e?.message || e) }); });
+  return sesion;
+}
+
+async function lanzar(id: string, op: OpcionesSesion, modo: Modo, clave: string) {
+  const fila = await obtenerSesion(id);
+  if (fila?.estado !== "en_curso") { liberarTurno(clave); return; }   // la cancelaron en la cola
+  await prepararLaboratorio();
+  const cfg = rutasConfig();
+  const presupuesto = op.presupuestoUsd ?? (Number(process.env.CLAUDE_CODE_PRESUPUESTO_USD) || 5);
+  const args = ["-p", "--output-format", "stream-json", "--verbose",
+    "--permission-mode", "bypassPermissions",          // los permisos los decide el hook (Emilia), no los diálogos
+    "--settings", comillas(cfg.settings), "--mcp-config", comillas(cfg.mcp),
+    "--max-budget-usd", String(presupuesto)];
+  if (modo === "lectura") args.push("--disallowedTools", "Write", "Edit", "MultiEdit", "NotebookEdit");   // doble candado
   if (op.maxTurnos) args.push("--max-turns", String(op.maxTurnos));
   if (op.continuarSesionClaude) args.push("--resume", op.continuarSesionClaude);
   const modelo = op.modelo || process.env.CLAUDE_CODE_MODELO;
@@ -42,55 +97,66 @@ export async function iniciarSesionClaude(op: OpcionesSesion): Promise<SesionCod
 
   let hijo: ChildProcess;
   try {
-    // shell:true para que Windows resuelva claude.cmd; el prompt va por stdin
-    // (sin límites de longitud ni problemas de comillas).
-    hijo = spawn(BIN, args, { cwd: op.cwd, shell: true, windowsHide: true, env: { ...process.env, FORCE_COLOR: "0" } });
+    // shell:true para que Windows resuelva claude.cmd; el prompt va por stdin.
+    hijo = spawn(BIN, args, { cwd: op.cwd, shell: true, windowsHide: true, env: entornoClaude(id, { ...op, modo }) });
   } catch (e: any) {
-    await finalizar(sesion.id, "fallida", { error: `No se pudo lanzar Claude Code: ${e?.message || e}` });
-    return (await obtenerSesion(sesion.id))!;
+    liberarTurno(clave);
+    await finalizar(id, "fallida", { error: `No se pudo lanzar Claude Code: ${e?.message || e}` });
+    return;
   }
-  procesos.set(sesion.id, hijo);
-  await query(`UPDATE sesiones_codigo SET pid=$1 WHERE id=$2`, [hijo.pid ?? null, sesion.id]);
-  await logSesion(sesion.id, "inicio", `claude ${args.join(" ")} (cwd: ${op.cwd})`);
+  procesos.set(id, hijo);
+  await query(`UPDATE sesiones_codigo SET pid=$1, inicio=now() WHERE id=$2`, [hijo.pid ?? null, id]);
+  await logSesion(id, "inicio", `Claude Code (${modo}, tope $${presupuesto}${process.env.CLAUDE_CODE_USAR_API === "true" ? ", por API" : ", con tu plan"}) en ${op.cwd}`);
 
-  // El "sistema" del encargo va dentro del prompt (por stdin), no como flag:
-  // con shell:true los flags con espacios/comillas se rompen en Windows.
   const prompt = op.sistema ? `${op.sistema.trim()}\n\n────────────────\nENCARGO:\n${op.encargo}` : op.encargo;
   hijo.stdin?.write(prompt);
   hijo.stdin?.end();
+
+  const limite = (op.timeoutSeg ?? 1800) * 1000;
+  let porTiempo = false;
+  const reloj = setTimeout(() => { porTiempo = true; matar(hijo.pid); }, limite);
 
   let resto = "", stderr = "", resultado: any = null;
   hijo.stdout?.on("data", (d) => {
     resto += d.toString();
     const lineas = resto.split("\n"); resto = lineas.pop() || "";
-    for (const l of lineas) { const ev = parsear(l); if (ev) { procesarEvento(sesion.id, ev).catch(() => {}); if (ev.type === "result") resultado = ev; } }
+    for (const l of lineas) { const ev = parsear(l); if (ev) { procesarEvento(id, ev).catch(() => {}); if (ev.type === "result") resultado = ev; } }
   });
   hijo.stderr?.on("data", (d) => { stderr += d.toString(); if (stderr.length > 20000) stderr = stderr.slice(-20000); });
   hijo.on("close", async (codigo) => {
-    procesos.delete(sesion.id);
-    if (resto.trim()) { const ev = parsear(resto); if (ev) { await procesarEvento(sesion.id, ev); if (ev.type === "result") resultado = ev; } }
-    const fila = await obtenerSesion(sesion.id);
-    if (fila?.estado === "cancelada") return;
+    clearTimeout(reloj);
+    procesos.delete(id);
+    liberarTurno(clave);
+    avisos.delete(id);
+    if (resto.trim()) { const ev = parsear(resto); if (ev) { await procesarEvento(id, ev); if (ev.type === "result") resultado = ev; } }
+    const actual = await obtenerSesion(id);
+    if (actual?.estado === "cancelada") return;
+    if (porTiempo) { await finalizar(id, "fallida", { error: `Se pasó del tiempo máximo (${Math.round(limite / 60000)} min) y lo detuve.`, session: resultado?.session_id }); return; }
     if (resultado) {
       const txt = String(resultado.result ?? "");
-      // Fallo de autenticación real: Claude lo devuelve como error corto, no dentro de un informe.
       const authFall = (resultado.is_error || txt.length < 400) && /failed to authenticate|oauth (session|token)|not logged in|please run \/login|session expired|invalid api key|credit balance is too low/i.test(txt);
-      const ok = !resultado.is_error && resultado.subtype !== "error_max_turns" && resultado.subtype !== "error_during_execution" && !authFall;
-      if (resultado.total_cost_usd) { const { registrarConsumo } = await import("./presupuesto.js"); registrarConsumo({ agenteId: op.agenteId ?? null, proveedor: "claude_code", modelo: process.env.CLAUDE_CODE_MODELO || "claude", costoUsd: Number(resultado.total_cost_usd) }).catch(() => {}); }
-      await finalizar(sesion.id, ok ? "completada" : "fallida", {
-        resultado: txt, session: resultado.session_id, costo: resultado.total_cost_usd, turnos: resultado.num_turns, duracion: resultado.duration_ms,
-        error: ok ? undefined : authFall ? `Claude Code no pudo autenticarse (${txt.slice(0, 160)}). En la máquina donde corre Emilia, abrí una terminal, corré "claude", escribí /login, completá el navegador y volvé a intentar.` : `Claude Code terminó con ${resultado.subtype || "error"}${resultado.is_error ? ": " + txt.slice(0, 300) : ""}`,
+      const sinPresupuesto = /budget|presupuesto/i.test(String(resultado.subtype || "")) || /max.?budget/i.test(txt.slice(0, 300));
+      const ok = !resultado.is_error && !/^error/.test(String(resultado.subtype || "")) && !authFall;
+      const costo = Number(resultado.total_cost_usd || 0);
+      // Con tu plan Max el costo es una estimación (no se cobra): queda en el log, no en el presupuesto.
+      if (costo && process.env.CLAUDE_CODE_USAR_API === "true") { const { registrarConsumo } = await import("./presupuesto.js"); registrarConsumo({ agenteId: op.agenteId ?? null, proveedor: "claude_code", modelo: modelo || "claude", costoUsd: costo }).catch(() => {}); }
+      await finalizar(id, ok ? "completada" : "fallida", {
+        resultado: txt, session: resultado.session_id, costo, turnos: resultado.num_turns, duracion: resultado.duration_ms,
+        error: ok ? undefined
+          : authFall ? `Claude Code no pudo autenticarse (${txt.slice(0, 160)}). En el PC de Emilia abre una terminal, corre "claude", escribe /login y vuelve a intentar.`
+          : sinPresupuesto ? `Llegó al tope de gasto de $${presupuesto} para esta tarea. Puedo seguir con un tope mayor si me dices.`
+          : `Claude Code terminó con ${resultado.subtype || "error"}${resultado.is_error ? ": " + txt.slice(0, 300) : ""}`,
       });
     } else {
-      await finalizar(sesion.id, "fallida", { error: `Claude Code salió con código ${codigo} sin resultado. ${stderr.trim().slice(-600) || "(sin stderr)"}` });
+      await finalizar(id, "fallida", { error: `Claude Code salió con código ${codigo} sin resultado. ${stderr.trim().slice(-600) || "(sin stderr)"}` });
     }
   });
   hijo.on("error", async (e) => {
-    procesos.delete(sesion.id);
-    await finalizar(sesion.id, "fallida", { error: `Error lanzando Claude Code: ${e.message}. ¿Está instalado y en el PATH? (CLAUDE_CODE_BIN=${BIN})` });
+    clearTimeout(reloj);
+    procesos.delete(id);
+    liberarTurno(clave);
+    await finalizar(id, "fallida", { error: `Error lanzando Claude Code: ${e.message}. ¿Está instalado y en el PATH? (CLAUDE_CODE_BIN=${BIN})` });
   });
-
-  return sesion;
 }
 
 /** Espera a que termine (o hasta timeoutSeg). Devuelve la fila actual. */
@@ -109,9 +175,9 @@ export async function cancelarSesion(id: string): Promise<boolean> {
   const s = await obtenerSesion(id);
   if (!s || s.estado !== "en_curso") return false;
   const p = procesos.get(id);
+  await finalizar(id, "cancelada", { error: "Cancelada por el usuario." });
   matar(p?.pid ?? s.pid ?? undefined);
   procesos.delete(id);
-  await finalizar(id, "cancelada", { error: "Cancelada por el usuario." });
   return true;
 }
 
@@ -120,7 +186,7 @@ export function sesionesActivas(): string[] { return [...procesos.keys()]; }
 /** Al arrancar: las sesiones 'en_curso' de un proceso anterior ya no existen. */
 export async function recuperarSesionesHuerfanas(): Promise<void> {
   const filas = await query<{ id: string }>(`SELECT id FROM sesiones_codigo WHERE estado='en_curso'`);
-  for (const f of filas) await finalizar(f.id, "fallida", { error: "El servidor se reinició mientras corría; la sesión se perdió. Podés continuarla con su session_id si lo dejó." });
+  for (const f of filas) await finalizar(f.id, "fallida", { error: "El servidor se reinició mientras corría; la sesión se perdió. Se puede continuar con su session_id." });
   if (filas.length) console.log(`[claude-code] ${filas.length} sesión(es) huérfana(s) marcadas como fallidas.`);
 }
 
@@ -130,18 +196,26 @@ function parsear(linea: string): any | null {
   try { return JSON.parse(l); } catch { return null; }
 }
 
-const contadorAvisos = new Map<string, number>();
+/** "Sigo trabajando" al jefe: como mucho uno cada 5 minutos, y solo en tareas largas. */
+const avisos = new Map<string, { ultimo: number; acciones: number }>();
 async function avisoPeriodico(id: string, texto: string) {
-  const n = (contadorAvisos.get(id) || 0) + 1; contadorAvisos.set(id, n);
-  if (n % 12 !== 0) return;
-  const [s] = await query<{ conversacion_id: string | null; turnos: number | null }>(`SELECT conversacion_id FROM sesiones_codigo WHERE id=$1`, [id]).catch(() => [] as any);
+  const a = avisos.get(id) || { ultimo: Date.now(), acciones: 0 };
+  a.acciones++; avisos.set(id, a);
+  if (Date.now() - a.ultimo < 5 * 60_000) return;
+  a.ultimo = Date.now();
+  const [s] = await query<{ conversacion_id: string | null }>(`SELECT conversacion_id FROM sesiones_codigo WHERE id=$1`, [id]).catch(() => [] as any);
   if (!s?.conversacion_id) return;
   const { avisarProgreso } = await import("./actividad.js");
-  await avisarProgreso(s.conversacion_id, `⌛ Claude sigue: ${texto.slice(0, 140)}`);
+  await avisarProgreso(s.conversacion_id, `⌛ Sigo trabajando (${a.acciones} acciones). Ahora: ${texto.slice(0, 120)}`);
 }
 
 async function procesarEvento(id: string, ev: any) {
-  if (ev.type === "system" && ev.subtype === "init") { await logSesion(id, "sistema", `sesión ${ev.session_id} · modelo ${ev.model || "?"} · tools ${(ev.tools || []).length}`); if (ev.session_id) await query(`UPDATE sesiones_codigo SET session_id_claude=$1 WHERE id=$2`, [ev.session_id, id]); return; }
+  if (ev.type === "system" && ev.subtype === "init") {
+    const mcp = (ev.mcp_servers || []).map((m: any) => `${m.name}:${m.status}`).join(", ");
+    await logSesion(id, "sistema", `sesión ${ev.session_id} · modelo ${ev.model || "?"} · ${(ev.tools || []).length} herramientas${mcp ? ` · MCP ${mcp}` : ""}`);
+    if (ev.session_id) await query(`UPDATE sesiones_codigo SET session_id_claude=$1 WHERE id=$2`, [ev.session_id, id]);
+    return;
+  }
   if (ev.type === "assistant") {
     for (const b of ev.message?.content || []) {
       if (b.type === "text" && b.text?.trim()) await logSesion(id, "claude", b.text.trim());
@@ -151,17 +225,17 @@ async function procesarEvento(id: string, ev: any) {
   }
   if (ev.type === "user") {
     for (const b of ev.message?.content || []) {
-      if (b.type === "tool_result") {
+      if (b.type === "tool_result" && b.is_error) {
         const c = typeof b.content === "string" ? b.content : (b.content || []).map((x: any) => x.text || "").join(" ");
-        if (b.is_error) await logSesion(id, "error", String(c).slice(0, 400));
+        await logSesion(id, "error", String(c).slice(0, 400));
       }
     }
     return;
   }
-  if (ev.type === "result") await logSesion(id, "resultado", `${ev.subtype} · ${ev.num_turns} turnos · $${Number(ev.total_cost_usd || 0).toFixed(4)} · ${Math.round((ev.duration_ms || 0) / 1000)}s`);
+  if (ev.type === "result") await logSesion(id, "resultado", `${ev.subtype} · ${ev.num_turns ?? "?"} turnos · ~$${Number(ev.total_cost_usd || 0).toFixed(4)} · ${Math.round((ev.duration_ms || 0) / 1000)}s`);
 }
 
-function resumirInput(nombre: string, input: any): string {
+function resumirInput(_nombre: string, input: any): string {
   if (!input) return "";
   const i = input;
   if (i.command) return `$ ${String(i.command).slice(0, 160)}`;
@@ -173,6 +247,6 @@ function resumirInput(nombre: string, input: any): string {
 
 async function finalizar(id: string, estado: "completada" | "fallida" | "cancelada", d: { resultado?: string; session?: string; costo?: number; turnos?: number; duracion?: number; error?: string }) {
   await query(
-    `UPDATE sesiones_codigo SET estado=$1, resultado=COALESCE($2, resultado), session_id_claude=COALESCE($3, session_id_claude), costo_usd=$4, turnos=$5, duracion_ms=$6, error=$7, fin=now(), pid=NULL WHERE id=$8`,
+    `UPDATE sesiones_codigo SET estado=$1, resultado=COALESCE($2, resultado), session_id_claude=COALESCE($3, session_id_claude), costo_usd=$4, turnos=$5, duracion_ms=$6, error=$7, fin=now(), pid=NULL WHERE id=$8 AND estado IN ('en_curso', $1)`,
     [estado, d.resultado ?? null, d.session ?? null, d.costo ?? null, d.turnos ?? null, d.duracion ?? null, d.error ?? null, id]);
 }

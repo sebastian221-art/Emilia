@@ -68,10 +68,10 @@ export async function cerrarSandboxFila(id: string): Promise<void> {
 }
 
 // ── Sesiones ──
-export async function crearSesionFila(p: { sandboxId: string; proyectoId: string; encargo: string; agenteId?: string | null; conversacionId?: string | null }): Promise<SesionCodigo> {
+export async function crearSesionFila(p: { sandboxId?: string | null; proyectoId?: string | null; encargo: string; agenteId?: string | null; conversacionId?: string | null; modo?: string; cwd?: string }): Promise<SesionCodigo> {
   const [s] = await query<SesionCodigo>(
-    `INSERT INTO sesiones_codigo (sandbox_id, proyecto_id, encargo, agente_id, conversacion_id) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [p.sandboxId, p.proyectoId, p.encargo, p.agenteId ?? null, p.conversacionId ?? null]);
+    `INSERT INTO sesiones_codigo (sandbox_id, proyecto_id, encargo, agente_id, conversacion_id, modo, cwd) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [p.sandboxId ?? null, p.proyectoId ?? null, p.encargo, p.agenteId ?? null, p.conversacionId ?? null, p.modo || "escritura", p.cwd ?? null]);
   return s;
 }
 export async function obtenerSesion(id: string): Promise<SesionCodigo | undefined> {
@@ -82,8 +82,8 @@ export async function sesionesDeSandbox(sandboxId: string, limite = 20): Promise
   return query<SesionCodigo>(`SELECT id, estado, encargo, session_id_claude, resultado, error, costo_usd, turnos, duracion_ms, inicio, fin FROM sesiones_codigo WHERE sandbox_id=$1 ORDER BY inicio DESC LIMIT $2`, [sandboxId, limite]);
 }
 export async function sesionesRecientes(limite = 30): Promise<any[]> {
-  return query(`SELECT s.id, s.estado, s.encargo, s.costo_usd, s.turnos, s.inicio, s.fin, sb.rama, p.nombre AS proyecto
-                FROM sesiones_codigo s JOIN sandboxes sb ON sb.id=s.sandbox_id JOIN proyectos p ON p.id=s.proyecto_id ORDER BY s.inicio DESC LIMIT $1`, [limite]);
+  return query(`SELECT s.id, s.estado, s.encargo, s.costo_usd, s.turnos, s.inicio, s.fin, s.modo, s.cwd, sb.rama, COALESCE(p.nombre, 'laboratorio') AS proyecto
+                FROM sesiones_codigo s LEFT JOIN sandboxes sb ON sb.id=s.sandbox_id LEFT JOIN proyectos p ON p.id=s.proyecto_id ORDER BY s.inicio DESC LIMIT $1`, [limite]);
 }
 export async function logSesion(id: string, tipo: string, texto: string): Promise<void> {
   await query(`UPDATE sesiones_codigo SET log = log || $1::jsonb WHERE id=$2`, [JSON.stringify([{ t: new Date().toISOString(), tipo, texto: texto.slice(0, 1500) }]), id]);

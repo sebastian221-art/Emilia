@@ -13,9 +13,9 @@ import {
   listarProyectos, obtenerProyecto, registrarProyecto, borrarProyecto,
   crearSandboxFila, obtenerSandbox, sandboxesAbiertos, cerrarSandboxFila, obtenerSesion, sesionesDeSandbox,
 } from "../dominio/proyectos.js";
-import { crearWorktree, borrarWorktree, ejecutarComando, diffSandbox, estadoGit, commitSandbox, pushSandbox, integrarEnBase } from "../motor/sandbox.js";
+import { crearWorktree, borrarWorktree, ejecutarComando, diffSandbox, estadoGit, commitSandbox, pushSandbox, entregarSandbox, actualizarSandbox, ramaBaseReal, pendientesSandbox } from "../motor/sandbox.js";
 import { iniciarSesionClaude, esperarSesion, cancelarSesion } from "../motor/claude-code.js";
-import { encolar } from "../motor/cola.js";
+import { decidirPermiso } from "../motor/permisos-codigo.js";
 
 const MODULO = "codigo";
 const SANDBOX_ID = { type: "string" as const, description: "Id del sandbox (lo devuelve codigo_abrir_sandbox).", minLength: 8 };
@@ -27,8 +27,8 @@ async function sandboxAbierto(id: string) {
   return s;
 }
 function dentro(base: string, rel: string): string {
-  const abs = path.resolve(base, rel);
-  if (!abs.startsWith(path.resolve(base))) throw new Error("Ruta fuera del sandbox.");
+  const raiz = path.resolve(base), abs = path.resolve(base, rel);
+  if (abs !== raiz && !abs.startsWith(raiz + path.sep)) throw new Error("Ruta fuera del sandbox.");
   return abs;
 }
 
@@ -37,8 +37,11 @@ function dentro(base: string, rel: string): string {
  * "escape": rutas absolutas fuera del sandbox y operaciones destructivas.
  */
 function comandoPeligroso(cmd: string, sandbox: string): string | null {
-  const c = cmd.toLowerCase();
-  if (/\b(rm\s+-rf?\s+[\/~]|rmdir\s+\/s|del\s+\/[sq]|format\s+[a-z]:|shutdown|reg\s+(add|delete)|diskpart)\b/.test(c)) return "Comando destructivo bloqueado. Si de verdad hace falta, pedíselo al jefe.";
+  // Misma política que Claude Code: lo destructivo se niega y lo que sale del laboratorio
+  // (push, despliegues, ssh, producción…) no se hace desde aquí: va por su flujo con aprobación.
+  const d = decidirPermiso({ tool: "Bash", input: { command: cmd }, cwd: sandbox, modo: "escritura" });
+  if (d.decision === "negar") return `Bloqueado: ${d.motivo}.`;
+  if (d.decision === "preguntar") return `Esto (${d.motivo}) no se hace con un comando suelto: usa la herramienta o el flujo que corresponde (entregar_cambios, runtime_*, etc.), que piden el OK del jefe.`;
   const sinUrls = cmd.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"']+/gi, " ");   // las URLs no son rutas
   const abs = sinUrls.match(/(?<![\w])[a-zA-Z]:\\[^\s"']+|(?<![\w])[a-zA-Z]:\/[^\s"']+|(?<![\w.])\/(?:home|users|etc|var|mnt)\/[^\s"']+/g) || [];
   const base = path.resolve(sandbox).toLowerCase().replace(/\\/g, "/");
@@ -81,7 +84,7 @@ export const codigoRegistrarProyecto: DefTool = {
     },
     required: ["nombre", "ruta"],
   },
-  riesgo: "escritura", requiereAprobacion: false,
+  riesgo: "escritura", requiereAprobacion: true,
   async ejecutar(a) {
     const p = await registrarProyecto(a as any);
     return { ok: true, datos: p, resumen: `Proyecto ${p.nombre} registrado en ${p.ruta} (base ${p.rama_base}).` };
@@ -107,7 +110,7 @@ export const codigoAbrirSandbox: DefTool = {
     if (!p) return { ok: false, error: `Proyecto "${a.proyecto}" no registrado.` };
     const w = await crearWorktree(p, a.proposito);
     const s = await crearSandboxFila(p.id, w.ruta, w.rama, a.proposito);
-    return { ok: true, datos: { sandbox_id: s.id, ruta: w.ruta, rama: w.rama, instalacion: w.instalacion }, resumen: `Sandbox ${s.id} abierto en rama ${w.rama}${w.instalacion ? ` · ${w.instalacion}` : ""}.` };
+    return { ok: true, datos: { sandbox_id: s.id, ruta: w.ruta, rama: w.rama, instalacion: w.instalacion }, resumen: `Sandbox ${s.id} abierto en rama ${w.rama}${w.instalacion ? ` · ${w.instalacion}` : ""} · .env de prueba: ${w.env}.` };
   },
 };
 
@@ -145,23 +148,25 @@ export const codigoEjecutarClaude: DefTool = {
       encargo: { type: "string", description: "El encargo completo y preciso: qué hacer, dónde, criterios de aceptación, qué no tocar, cómo verificar.", minLength: 10 },
       contexto: { type: "string", description: "Reglas y contexto que van antes del encargo (convenciones del proyecto, límites)." },
       max_turnos: { type: "integer", description: "Tope de turnos de Claude Code.", default: 60, minimum: 1, maximum: 300 },
+      presupuesto_usd: { type: "number", description: "Tope de gasto de esta sesión (por defecto CLAUDE_CODE_PRESUPUESTO_USD).", minimum: 0.5, maximum: 100 },
       continuar_sesion: { type: "string", description: "session_id de Claude de una sesión anterior para continuarla con el mismo contexto." },
       esperar: { type: "boolean", description: "Esperar a que termine.", default: true },
-      timeout_seg: { type: "integer", description: "Máximo a esperar si esperar=true.", default: 900, minimum: 30, maximum: 3600 },
+      timeout_seg: { type: "integer", description: "Tiempo máximo de la sesión: pasado esto se detiene.", default: 900, minimum: 30, maximum: 5400 },
     },
     required: ["sandbox_id", "encargo"],
   },
-  riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 3700,
+  riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 5600,
   async ejecutar(a, ctx) {
     const s = await sandboxAbierto(a.sandbox_id);
-    // Una sesión de Claude a la vez por sandbox.
-    const sesion = await encolar(`claude:${s.id}`, () => iniciarSesionClaude({
-      sandboxId: s.id, proyectoId: s.proyecto_id, cwd: s.ruta, encargo: a.encargo, sistema: a.contexto,
-      maxTurnos: a.max_turnos || 60, continuarSesionClaude: a.continuar_sesion, agenteId: ctx.agenteId, conversacionId: ctx.conversacionId,
-    }));
+    // El corredor ya garantiza una sesión a la vez por sandbox y un máximo global.
+    const sesion = await iniciarSesionClaude({
+      sandboxId: s.id, proyectoId: s.proyecto_id, cwd: s.ruta, encargo: a.encargo, sistema: a.contexto, modo: "escritura",
+      maxTurnos: a.max_turnos || 60, presupuestoUsd: a.presupuesto_usd, timeoutSeg: (a.timeout_seg || 900) + 60,
+      continuarSesionClaude: a.continuar_sesion, agenteId: ctx.agenteId, conversacionId: ctx.conversacionId,
+    });
     if (a.esperar === false) return { ok: true, datos: { sesion_id: sesion.id, estado: "en_curso" }, resumen: `Sesión ${sesion.id} iniciada en segundo plano.` };
-    const fin = await esperarSesion(sesion.id, a.timeout_seg || 900);
-    if (fin.estado === "en_curso") return { ok: true, datos: { sesion_id: fin.id, estado: "en_curso" }, resumen: `La sesión ${fin.id} sigue corriendo tras ${a.timeout_seg || 900}s. Observala con codigo_estado_sesion.` };
+    const fin = await esperarSesion(sesion.id, (a.timeout_seg || 900) + 120);
+    if (fin.estado === "en_curso") return { ok: true, datos: { sesion_id: fin.id, estado: "en_curso" }, resumen: `La sesión ${fin.id} sigue en cola o corriendo. Obsérvala con codigo_estado_sesion.` };
     return {
       ok: fin.estado === "completada",
       datos: { sesion_id: fin.id, estado: fin.estado, session_id_claude: fin.session_id_claude, resultado: fin.resultado, costo_usd: fin.costo_usd, turnos: fin.turnos, duracion_s: Math.round((fin.duracion_ms || 0) / 1000) },
@@ -306,9 +311,9 @@ export const codigoGitEstado: DefTool = {
 
 export const codigoCommit: DefTool = {
   nombre: "codigo_commit", modulo: MODULO,
-  descripcion: "Hace commit de todo lo cambiado en el sandbox (en su rama). Requiere aprobación.",
+  descripcion: "Hace commit de todo lo cambiado en el sandbox, en SU rama (no toca tu repo ni GitHub; eso lo hace la entrega con aprobación).",
   parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID, mensaje: { type: "string", description: "Mensaje de commit claro.", minLength: 5 } }, required: ["sandbox_id", "mensaje"] },
-  riesgo: "ejecucion", requiereAprobacion: true, timeoutSeg: 120,
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 120,
   async ejecutar(a) { const s = await sandboxAbierto(a.sandbox_id); const r = await commitSandbox(s.ruta, a.mensaje); return r.codigo === 0 ? { ok: true, resumen: `Commit hecho en ${s.rama}:\n${r.stdout.slice(0, 500)}` } : { ok: false, error: (r.stderr || r.stdout).slice(-800) }; },
 };
 
@@ -320,17 +325,31 @@ export const codigoPush: DefTool = {
   async ejecutar(a) { const s = await sandboxAbierto(a.sandbox_id); const r = await pushSandbox(s.ruta, s.rama); return r.codigo === 0 ? { ok: true, resumen: `Rama ${s.rama} subida.\n${(r.stderr || r.stdout).slice(-500)}` } : { ok: false, error: (r.stderr || r.stdout).slice(-800) }; },
 };
 
-export const codigoIntegrar: DefTool = {
-  nombre: "codigo_integrar", modulo: MODULO,
-  descripcion: "Integra la rama del sandbox en la rama base del REPO REAL (merge) Y la sube a GitHub (push de la rama base), en un solo paso. Es lo que lleva el trabajo a producción (Railway despliega al ver el push). No necesitás llamar codigo_push después. Requiere aprobación; los commits del sandbox deben estar hechos.",
+export const codigoActualizarSandbox: DefTool = {
+  nombre: "codigo_actualizar_sandbox", modulo: MODULO,
+  descripcion: "Pone el sandbox al día con lo último de GitHub (fetch + rebase sobre la rama base) para que la entrega no pise cambios que alguien subió mientras tanto. Si hay conflictos, lo dice y deja el sandbox como estaba. Los cambios deben estar en commit.",
   parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID }, required: ["sandbox_id"] },
-  riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 240,
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 300,
   async ejecutar(a) {
     const s = await sandboxAbierto(a.sandbox_id);
-    const e = await estadoGit(s.ruta);
-    if (e.estado !== "(limpio)") return { ok: false, error: "El sandbox tiene cambios sin commit. Hacé commit primero (codigo_commit)." };
-    const r = await integrarEnBase(s.proyecto, s.rama);
-    return r.codigo === 0 ? { ok: true, resumen: `Rama ${s.rama} integrada en ${s.proyecto.rama_base} del repo real y subida a GitHub.\n${r.stdout.slice(-600)}` } : { ok: false, error: (r.stderr || r.stdout).slice(-800) };
+    const pend = await pendientesSandbox(s.ruta);
+    if (pend.length) return { ok: false, error: `El sandbox tiene cambios sin commit: haz codigo_commit primero.\n${pend.slice(0, 10).join("\n")}` };
+    const r = await actualizarSandbox(s.ruta, await ramaBaseReal(s.proyecto));
+    return r.ok ? { ok: true, datos: r, resumen: r.mensaje } : { ok: false, error: r.mensaje, datos: { conflicto: true, nuevos: r.nuevos } };
+  },
+};
+
+export const codigoIntegrar: DefTool = {
+  nombre: "codigo_integrar", modulo: MODULO,
+  descripcion: "ENTREGA: sube la rama del sandbox directo a la rama base en GitHub (Railway despliega solo) sin tocar tu carpeta de trabajo; si tu copia local está limpia y en esa rama, la pone al día. Requiere aprobación. Antes: commit y codigo_actualizar_sandbox. Úsalo dentro del flujo entregar_cambios.",
+  parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID }, required: ["sandbox_id"] },
+  riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 300,
+  async ejecutar(a) {
+    const s = await sandboxAbierto(a.sandbox_id);
+    const pend = await pendientesSandbox(s.ruta);
+    if (pend.length) return { ok: false, error: `El sandbox tiene cambios sin commit. Haz commit primero (codigo_commit).\n${pend.slice(0, 10).join("\n")}` };
+    const r = await entregarSandbox(s.proyecto, s.ruta, s.rama);
+    return r.codigo === 0 ? { ok: true, resumen: r.stdout } : { ok: false, error: (r.stderr || r.stdout).slice(-800) };
   },
 };
 
@@ -338,5 +357,5 @@ export const toolsCodigo: DefTool[] = [
   codigoListarProyectos, codigoRegistrarProyecto, codigoEliminarProyecto,
   codigoAbrirSandbox, codigoListarSandboxes, codigoCerrarSandbox,
   codigoEjecutarClaude, codigoEstadoSesion, codigoCancelarSesion, codigoListarSesiones,
-  codigoEjecutarComando, codigoVerificar, codigoDiff, codigoLeerArchivo, codigoBuscar,
+  codigoEjecutarComando, codigoVerificar, codigoDiff, codigoLeerArchivo, codigoBuscar, codigoActualizarSandbox,
   codigoGitEstado, codigoCommit, codigoPush, codigoIntegrar, codigoEscribirArchivo];

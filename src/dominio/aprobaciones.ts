@@ -3,7 +3,7 @@ import { query } from "../db/cliente.js";
 
 export interface Aprobacion {
   id: string;
-  tipo: "flujo" | "tool";
+  tipo: "flujo" | "tool" | "externa";   // externa: algo fuera del loop (Claude Code) espera la respuesta
   ejecucion_id: string | null;          // flujo_ejecuciones.id (tipo flujo)
   agente_ejecucion_id: string | null;   // ejecuciones.id (tipo tool)
   conversacion_id: string | null;

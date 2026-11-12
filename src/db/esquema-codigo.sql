@@ -52,3 +52,8 @@ CREATE TABLE IF NOT EXISTS sesiones_codigo (
 );
 CREATE INDEX IF NOT EXISTS idx_sesiones_sandbox ON sesiones_codigo(sandbox_id, inicio DESC);
 CREATE INDEX IF NOT EXISTS idx_sesiones_estado ON sesiones_codigo(estado);
+-- Laboratorio (nov 2026): sesiones sin sandbox (lectura directa en el repo, experimentos libres)
+ALTER TABLE sesiones_codigo ALTER COLUMN sandbox_id DROP NOT NULL;
+ALTER TABLE sesiones_codigo ALTER COLUMN proyecto_id DROP NOT NULL;
+ALTER TABLE sesiones_codigo ADD COLUMN IF NOT EXISTS modo TEXT NOT NULL DEFAULT 'escritura';   -- escritura | lectura | experimento
+ALTER TABLE sesiones_codigo ADD COLUMN IF NOT EXISTS cwd TEXT;

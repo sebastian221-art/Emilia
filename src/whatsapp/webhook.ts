@@ -227,6 +227,13 @@ async function procesarEntrante(m: any) {
         await entregarRespuesta(conv, r);
         return;
       }
+      if (ap?.tipo === "externa") {
+        // Algo que corre fuera del loop (Claude Code) está esperando esta respuesta: solo se resuelve.
+        const aprobada = apruebaTxt;
+        if (!(await resolverAprobacion(ap.id, aprobada))) { await entregarTexto(conv, "Esa aprobación ya estaba resuelta; no hice nada nuevo."); return; }
+        await entregarTexto(conv, aprobada ? "👍 Listo, sigue." : "🛑 Entendido, no lo hace.");
+        return;
+      }
       if (ap?.tipo === "flujo" && ap.ejecucion_id) {
         const aprobada = apruebaTxt;
         // Si otro canal (panel) ya la resolvió, NO aplicar este "ok" a otra cosa.

@@ -50,12 +50,35 @@ export async function pidsEnPuerto(puerto: number): Promise<number[]> {
   return [...new Set(r.stdout.split("\n").map((l) => Number(l.trim())).filter((n) => n > 0))];
 }
 
-/** Libera el puerto matando lo que escuche ahí. Devuelve los pids matados. */
-export async function liberarPuerto(puerto: number): Promise<number[]> {
-  const pids = await pidsEnPuerto(puerto);
-  for (const pid of pids) matar(pid);
-  if (pids.length) await new Promise((r) => setTimeout(r, 1500));
-  return pids;
+/** Línea de comando de un proceso (para saber si es nuestro antes de matarlo). */
+async function comandoDe(pid: number): Promise<string> {
+  try {
+    if (process.platform === "win32") {
+      const { ejecutarComando } = await import("./sandbox.js");
+      const r = await ejecutarComando(process.cwd(), `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine"`, 15);
+      return r.stdout.trim();
+    }
+    return (await fs.readFile(`/proc/${pid}/cmdline`, "utf-8")).replace(/\0/g, " ").trim();
+  } catch { return ""; }
+}
+
+/**
+ * Libera el puerto SOLO si quien lo ocupa es un proceso de este proyecto (su línea
+ * de comando menciona la carpeta del proyecto o es el pid que Emilia lanzó). Nunca
+ * mata otra cosa (Postgres, la propia Emilia, otro programa). Devuelve los matados.
+ */
+export async function liberarPuerto(puerto: number, proyecto?: Proyecto): Promise<number[]> {
+  const pids = (await pidsEnPuerto(puerto)).filter((pid) => pid !== process.pid);
+  const nuestro = proyecto ? (await fila(proyecto.id))?.pid : null;
+  const matados: number[] = [];
+  for (const pid of pids) {
+    const cmd = (await comandoDe(pid)).toLowerCase();
+    const delProyecto = !!proyecto && (pid === nuestro || (!!cmd && cmd.includes(path.resolve(proyecto.ruta).toLowerCase())));
+    if (!delProyecto) { console.warn(`[runtime] El puerto ${puerto} lo usa otro programa (pid ${pid}${cmd ? `: ${cmd.slice(0, 120)}` : ""}); no lo mato.`); continue; }
+    matar(pid); matados.push(pid);
+  }
+  if (matados.length) await new Promise((r) => setTimeout(r, 1500));
+  return matados;
 }
 
 function pidVivo(pid: number | null | undefined): boolean {
@@ -77,17 +100,17 @@ export async function estadoProceso(proyecto: Proyecto): Promise<Proceso> {
   return f;
 }
 
-export async function iniciarProceso(proyecto: Proyecto, op: { sandboxId?: string; comando?: string } = {}): Promise<{ ok: boolean; pid?: number; error?: string; ruta_log?: string; zombis?: number[] }> {
+export async function iniciarProceso(proyecto: Proyecto, op: { sandboxId?: string } = {}): Promise<{ ok: boolean; pid?: number; error?: string; ruta_log?: string; zombis?: number[] }> {
   const actual = await estadoProceso(proyecto);
   if (actual.estado === "corriendo") return { ok: false, error: `${proyecto.nombre} ya está corriendo (pid ${actual.pid}). Usá reiniciar si querés relanzarlo.` };
-  const comando = op.comando || proyecto.cmd_start;
+  const comando = proyecto.cmd_start;   // solo el comando registrado (registrar un proyecto pide aprobación)
   if (!comando) return { ok: false, error: `El proyecto ${proyecto.nombre} no tiene cmd_start configurado (ej. "npm run dev"). Registralo con codigo_registrar_proyecto.` };
 
   // Puerto ocupado por un proceso viejo (zombi de un arranque anterior) → liberarlo y avisar.
   let zombis: number[] = [];
   if (proyecto.puerto && (await puertoEnUso(proyecto.puerto))) {
-    zombis = await liberarPuerto(proyecto.puerto);
-    if (await puertoEnUso(proyecto.puerto)) return { ok: false, error: `El puerto ${proyecto.puerto} sigue ocupado (pids ${zombis.join(", ") || "desconocidos"}) y no pude liberarlo. Otro programa lo usa.` };
+    zombis = await liberarPuerto(proyecto.puerto, proyecto);
+    if (await puertoEnUso(proyecto.puerto)) return { ok: false, error: `El puerto ${proyecto.puerto} lo ocupa otro programa que no es de ${proyecto.nombre}; no lo maté. Ciérralo o cambia el puerto del proyecto.` };
   }
 
   let cwd = proyecto.ruta;
