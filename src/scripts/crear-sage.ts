@@ -9,6 +9,7 @@
 //    npx tsx src/scripts/crear-sage.ts
 // ─────────────────────────────────────────────────────────────────────────────
 import "dotenv/config";
+import { crearDisparador } from "../dominio/disparadores.js";
 import { iniciarRegistro } from "../registro/cargar.js";
 import { registro } from "../registro/registro.js";
 import { crearAgente, actualizarAgente, asignarTools, asignarSkills, asignarFlujos } from "../dominio/agentes.js";
@@ -32,7 +33,8 @@ ENTENDER SIN TOCAR (segundos, directo en el repo): "analiza X" → senior_analiz
 PROBAR A FONDO (sandbox con datos de prueba): "intenta romperlo" → senior_atacar. "hasta dónde aguanta" → senior_probar_limites.
 PROYECTO NUEVO CON LINK → senior_crear_proyecto(objetivo, referencia_url?): "hazme una página como esta <url> pero con…", "crea una landing/app/API para…", "móntalo y súbelo". Captura y estudia la referencia, construye, prueba, compara, lo sube a GitHub, lo despliega en Railway (el jefe aprueba por WhatsApp) y le manda link, captura y opinión. "¿cómo va lo que publicaste?" → publicar_estado / publicar_listar. Cambios a algo ya publicado → senior_crear_proyecto otra vez NO: senior_laboratorio con la carpeta y que vuelva a usar publicar_proyecto.
 TODO LO DEMÁS DE CÓDIGO → senior_laboratorio(objetivo): "hazme un Excel/Word/PowerPoint/PDF de…", "prueba esta API", "compara estas librerías", "prototipo de…", "calcula…". Pásale los archivo_id que mandó el jefe en archivos_entrada. Claude Code le manda los archivos finales al jefe solo.
-"quiero algo como X pero mío" DENTRO de un proyecto registrado → senior_replicar. "crea una tool/skill que…" → flujo capacidad_nueva.
+"quiero algo como X pero mío" DENTRO de un proyecto registrado → senior_replicar.
+GUARDIA (corre sola cada rato; tú también puedes): "vigila X" / "vigila X, su URL es Y" → guardia_configurar. "¿cómo van mis proyectos?" / "pasa la guardia" → guardia_ronda. "¿qué ha encontrado la guardia?" → guardia_estado o guardia_resumen(siempre=true). "arregla las leves de X" → guardia_arreglar_leves. "ignora eso" → guardia_ignorar(id). Lo grave la guardia lo arregla en sandbox y le pide el OK al jefe para subirlo; nunca sube sola. "crea una tool/skill que…" → flujo capacidad_nueva.
 Si el proyecto no está registrado: codigo_listar_proyectos; si no existe, pide la ruta y usa codigo_registrar_proyecto (pide OK).
 Cuando hablas directo con el jefe, sigues siendo tú: no lo mandes con Emilia salvo que pida algo que no es de código.`,
 };
@@ -42,9 +44,9 @@ async function idsDe(tabla: string, nombres: string[]) { if (!nombres.length) re
 async function main() {
   await iniciarRegistro();
   const tools = registro.tools().map((t) => t.nombre).filter((n) =>
-    n.startsWith("codigo_") || n.startsWith("publicar_") || n.startsWith("web_") || n.startsWith("archivo_") || n.startsWith("conocimiento_") || n.startsWith("observar_") ||
+    n.startsWith("codigo_") || n.startsWith("publicar_") || n.startsWith("guardia_") || n.startsWith("web_") || n.startsWith("archivo_") || n.startsWith("conocimiento_") || n.startsWith("observar_") ||
     ["registro_verificar", "runtime_estado", "runtime_salud", "runtime_logs", "runtime_reiniciar", "github_push", "github_estado", "whatsapp_enviar_texto", "whatsapp_enviar_documento", "sistema_ahora", "flujo_activos", "flujo_cancelar"].includes(n));
-  const skills = registro.skills().map((s) => s.nombre).filter((n) => n.startsWith("senior_"));
+  const skills = registro.skills().map((s) => s.nombre).filter((n) => n.startsWith("senior_") || n.startsWith("guardia_"));
   const flujos = registro.flujos().map((f) => f.nombre).filter((n) => n.startsWith("senior_") || n.startsWith("capacidad_") || n.startsWith("proyecto_") || n.startsWith("entregar_"));
 
   const cfg = {
@@ -60,6 +62,12 @@ async function main() {
   else { id = (await crearAgente(cfg)).id; console.log(`Sage creado (${id}).`); }
   await actualizarAgente(id, { estado: "activo" });
   await asignarTools(id, await idsDe("tools", tools)); await asignarSkills(id, await idsDe("skills", skills)); await asignarFlujos(id, await idsDe("flujos", flujos));
+
+  // Guardia de código: ronda cada N minutos y resumen diario (hora del PC).
+  const cada = Number(process.env.GUARDIA_CADA_MIN) || 30;
+  await crearDisparador({ nombre: "guardia_ronda", descripcion: `Guardia de código: revisa los proyectos vigilados cada ${cada} min; lo grave lo arregla en sandbox y pide OK.`, tipo: "cron", config: { cada_minutos: cada }, accion: { tipo: "skill", nombre: "guardia_ronda", args: {} }, agente_id: id } as any);
+  await crearDisparador({ nombre: "guardia_resumen", descripcion: "Resumen diario de la guardia por WhatsApp (leves, pendientes y resueltos).", tipo: "cron", config: { expresion: process.env.GUARDIA_RESUMEN_CRON || "0 19 * * *" }, accion: { tipo: "skill", nombre: "guardia_resumen", args: {} }, agente_id: id } as any);
+  console.log(`🛡 Guardia programada: ronda cada ${cada} min y resumen diario (${process.env.GUARDIA_RESUMEN_CRON || "0 19 * * *"}).`);
 
   const admin = await administradora();
   await crearPuesto({ nombre: "ingenieria", titulo: "Ingeniero senior (código)", descripcion: "Código e ingeniería de los proyectos de Sebastián", agente_id: id, reporta_a: admin?.id ?? null, responsabilidades: "Analizar, implementar, reparar, auditar, atacar, probar límites y replicar sistemas; crear capacidades nuevas de Emilia. Todo en sandbox, con verificación y aprobación para integrar." });

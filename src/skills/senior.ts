@@ -105,7 +105,7 @@ async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
       cwd: sbR!.ruta, modo: "lectura", sandboxId: sandbox_id, proyectoId: sbR?.proyecto_id, maxTurnos: 30, timeoutSeg: 900,
       sistema: `${REGLAS}
 Eres un REVISOR de código independiente y exigente (no escribiste estos cambios). Tu trabajo es encontrar problemas reales: bugs, casos límite no cubiertos, riesgos de seguridad, tests insuficientes, violaciones de convenciones. No haces cambios; solo revisas.`,
-      encargo: `Revisa los cambios de este sandbox respecto a la rama base: git diff ${baseR}...HEAD y también git diff (lo que no tenga commit). Contexto del encargo original: "${p.encargo.slice(0, 600)}". Entrega: VEREDICTO: APROBADO o BLOQUEANTE en la primera línea; luego los hallazgos (bloqueante/mayor/menor) con archivo:línea y qué corregir.`,
+      encargo: `Revisa los cambios de este sandbox respecto a la rama base: git diff origin/${baseR}...HEAD (o ${baseR}...HEAD si no hay remoto) y también git diff (lo que no tenga commit). Contexto del encargo original: "${p.encargo.slice(0, 600)}". Entrega: VEREDICTO: APROBADO o BLOQUEANTE en la primera línea; luego los hallazgos (bloqueante/mayor/menor) con archivo:línea y qué corregir.`,
     });
     revision = rv.resultado || rv.error || "";
     await ctx.traza("skill", `revisión cruzada: ${/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "BLOQUEANTE" : "aprobado"}`);

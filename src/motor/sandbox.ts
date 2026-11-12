@@ -50,15 +50,8 @@ export function slug(texto: string): string {
 }
 
 /** Crea el worktree en una rama nueva desde rama_base. Devuelve ruta y rama. */
-export async function crearWorktree(proyecto: Proyecto, proposito: string): Promise<{ ruta: string; rama: string; instalacion?: string; env?: string }> {
-  const rama = `senior/${slug(proposito)}-${Date.now().toString(36)}`;
-  const ruta = path.join(SANDBOX_DIR, proyecto.nombre, rama.replace("senior/", ""));
-  await fs.mkdir(path.dirname(ruta), { recursive: true });
-
-  const base = await ramaBaseReal(proyecto);
-  const r = await git(proyecto.ruta, `worktree add -b "${rama}" "${ruta}" ${base}`, 120);
-  if (r.codigo !== 0) throw new Error(`No se pudo crear el worktree: ${(r.stderr || r.stdout).trim()}`);
-
+/** Escribe el .env de PRUEBA en una copia (nunca el real) y hace que git lo ignore. Devuelve de dónde salió. */
+export async function escribirEnvPrueba(proyecto: Proyecto, ruta: string): Promise<string> {
   // .env de PRUEBA: .env.sandbox del proyecto o .env.lab del laboratorio. Nunca el real
   // (antes se copiaba: un red team o una prueba de carga habría pegado contra producción).
   let env = "", origenEnv = "ninguno";
@@ -73,12 +66,42 @@ export async function crearWorktree(proyecto: Proyecto, proposito: string): Prom
     if (!/^\.env$/m.test(actual)) { await fs.mkdir(path.dirname(excl), { recursive: true }); await fs.appendFile(excl, `${actual && !actual.endsWith("\n") ? "\n" : ""}# Emilia: .env de prueba de los sandboxes\n.env\n`); }
   }
 
+  return origenEnv;
+}
+
+export async function crearWorktree(proyecto: Proyecto, proposito: string): Promise<{ ruta: string; rama: string; instalacion?: string; env?: string }> {
+  const rama = `senior/${slug(proposito)}-${Date.now().toString(36)}`;
+  const ruta = path.join(SANDBOX_DIR, proyecto.nombre, rama.replace("senior/", ""));
+  await fs.mkdir(path.dirname(ruta), { recursive: true });
+
+  const base = await ramaBaseReal(proyecto);
+  // Partir de lo ÚLTIMO de GitHub, no de la rama local (puede estar atrasada si no has hecho pull).
+  let desde = base;
+  if (await tieneRemoto(proyecto.ruta)) {
+    await git(proyecto.ruta, `${await authGit(proyecto.ruta)} fetch -q origin ${base}`, 180);
+    if ((await git(proyecto.ruta, `rev-parse --verify --quiet origin/${base}`)).codigo === 0) desde = `origin/${base}`;
+  }
+  const r = await git(proyecto.ruta, `worktree add --no-track -b "${rama}" "${ruta}" ${desde}`, 120);
+  if (r.codigo !== 0) throw new Error(`No se pudo crear el worktree: ${(r.stderr || r.stdout).trim()}`);
+
+  const origenEnv = await escribirEnvPrueba(proyecto, ruta);
+
   // Dependencias.
   let instalacion: string | undefined;
   const cmdInstall = proyecto.cmd_install || (await existe(path.join(ruta, "package.json")) ? "npm install --no-audit --no-fund" : null);
   if (cmdInstall) {
     const i = await ejecutarComando(ruta, cmdInstall, 600);
     instalacion = i.codigo === 0 ? `dependencias instaladas (${Math.round(i.duracion_ms / 1000)}s)` : `instalación falló: ${(i.stderr || i.stdout).slice(-500)}`;
+  }
+  // Si la instalación creó un lockfile que el proyecto no versiona, que no se cuele en los commits.
+  const nuevos = (await git(ruta, "ls-files --others --exclude-standard")).stdout.split("\n").map((x) => x.trim())
+    .filter((f) => ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"].includes(f));
+  if (nuevos.length) {
+    const comun = (await git(ruta, "rev-parse --git-common-dir")).stdout.trim();
+    const excl = path.join(path.resolve(ruta, comun), "info", "exclude");
+    const actual = await fs.readFile(excl, "utf-8").catch(() => "");
+    const faltan = nuevos.filter((f) => !actual.split(/\r?\n/).includes(f));
+    if (faltan.length) await fs.appendFile(excl, `${actual && !actual.endsWith("\n") ? "\n" : ""}${faltan.join("\n")}\n`);
   }
   return { ruta, rama, instalacion, env: origenEnv };
 }
@@ -91,7 +114,9 @@ export async function borrarWorktree(proyecto: Proyecto, ruta: string, rama: str
 
 /** Diff del sandbox contra la rama base: cambios sin commit + commits de la rama. */
 export async function diffSandbox(ruta: string, ramaBase: string, maxChars = 12000): Promise<{ resumen: string; diff: string; archivos: string[]; truncado: boolean }> {
-  const base = (await git(ruta, `rev-parse --verify --quiet ${ramaBase}`)).codigo === 0 ? ramaBase : "HEAD";
+  // Contra lo último de GitHub (origin/<base>) si existe: la rama local puede estar atrasada.
+  const base = (await git(ruta, `rev-parse --verify --quiet origin/${ramaBase}`)).codigo === 0 ? `origin/${ramaBase}`
+    : (await git(ruta, `rev-parse --verify --quiet ${ramaBase}`)).codigo === 0 ? ramaBase : "HEAD";
   const stat = await git(ruta, `diff --stat ${base}`);
   const nombres = await git(ruta, `diff --name-only ${base}`);
   const sinTrack = await git(ruta, `ls-files --others --exclude-standard`);

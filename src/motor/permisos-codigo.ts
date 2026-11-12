@@ -99,7 +99,7 @@ export function describirAccion(tool: string, input: any): string {
 }
 
 /** Conversación de WhatsApp del jefe con un agente (para colgar ahí la aprobación). */
-async function conversacionDelJefe(preferida?: string | null): Promise<string | null> {
+export async function conversacionDelJefe(preferida?: string | null): Promise<string | null> {
   if (preferida) return preferida;
   const jefe = (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, "");
   if (!jefe) return null;

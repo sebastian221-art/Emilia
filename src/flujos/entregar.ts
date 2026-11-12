@@ -45,7 +45,7 @@ export const entregarCambios: DefFlujo = {
         `🧩 *Listo para subir: ${c.proyecto}*`,
         `📄 ${c.diff?.archivos?.length || 0} archivo(s): ${lista(c.diff?.archivos)}`,
         `🔄 ${c.actualizado?.mensaje || "Al día con GitHub."}`,
-        `✅ Verificación: ${c.verificar === false ? "omitida" : String(c.ver?.resumen || "sin comandos configurados").split("\n").slice(0, 3).join(" · ")}`,
+        `✅ Verificación: ${c.verificar === false ? "omitida" : String(c.__resultados?.verificar?.resumen || "sin comandos configurados").split("\n").filter((l: string) => /^[✔✘]/.test(l) || !/^[✔✘]/.test(String(c.__resultados?.verificar?.resumen || ""))).slice(0, 4).join(" · ")}`,
         `🚀 Sube a la rama base en GitHub (Railway despliega solo)${c.reiniciar !== false ? " y reinicio el proyecto local si corre" : ""}.`,
         ``, `¿Lo subo? Responde *ok* o *no*.`,
       ].join("\n") },
@@ -63,7 +63,7 @@ export const entregarCambios: DefFlujo = {
     { id: "fin_no_existe", tipo: "fin", fallo: true, resultado: (c) => ({ error: `No encuentro el sandbox ${c.sandbox_id} abierto.` }) },
     { id: "fin_conflicto", tipo: "fin", fallo: true, resultado: (c) => ({ error: `No subí nada: ${c.__resultados?.actualizar?.error || "no pude actualizar el sandbox con GitHub"}. Dime "resuelve los conflictos del sandbox ${String(c.sandbox_id).slice(0, 8)}" y le pido a Claude Code que los arregle.` }) },
     { id: "fin_sin_cambios", tipo: "fin", fallo: true, resultado: (c) => ({ error: `El sandbox ${String(c.sandbox_id).slice(0, 8)} no tiene cambios respecto a la rama base. Nada que subir.` }) },
-    { id: "fin_no_verifica", tipo: "fin", fallo: true, resultado: (c) => ({ error: `La verificación falló, no subo nada.\n${String(c.__resultados?.verificar?.error || c.ver?.resumen || "").slice(0, 600)}` }) },
+    { id: "fin_no_verifica", tipo: "fin", fallo: true, resultado: (c) => ({ error: `La verificación falló, no subo nada.\n${String(c.__resultados?.verificar?.resumen || c.__resultados?.verificar?.error || "").slice(0, 900)}` }) },
   ],
   reporte: (c, r: any) => r?.error ? `❌ ${r.error}` : `✅ *${r?.proyecto || "Proyecto"} actualizado en GitHub*: ${(r?.archivos || []).length} archivo(s).\n${r?.subido || ""}${r?.reiniciado ? "\n🔁 Proyecto local reiniciado." : ""}\nRailway despliega solo en un momento.`,
 };
