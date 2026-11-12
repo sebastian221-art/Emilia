@@ -109,7 +109,7 @@ export const vigilanciaInforme: DefTool = {
 };
 
 export const railwayServicios: DefTool = {
-  nombre: "railway_servicios", modulo: MODULO,
+  nombre: "railway_servicios", modulo: "railway",
   descripcion: "Todos tus servicios en Railway con su último despliegue (estado, cuándo, commit) y su dominio.",
   parametros: { type: "object", properties: {} },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 60,
@@ -122,7 +122,7 @@ export const railwayServicios: DefTool = {
 };
 
 export const railwayLogs: DefTool = {
-  nombre: "railway_logs", modulo: MODULO,
+  nombre: "railway_logs", modulo: "railway",
   descripcion: "Logs del último despliegue de un servicio de Railway (construcción y ejecución) y sus últimos despliegues.",
   parametros: { type: "object", properties: { servicio: { type: "string" }, lineas: { type: "integer", default: 60, minimum: 10, maximum: 300 } }, required: ["servicio"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 60,
@@ -135,7 +135,7 @@ export const railwayLogs: DefTool = {
 };
 
 export const railwayReiniciar: DefTool = {
-  nombre: "railway_reiniciar", modulo: MODULO,
+  nombre: "railway_reiniciar", modulo: "railway",
   descripcion: "Reinicia el servicio de Railway (mismo código, contenedor nuevo). Pide OK.",
   parametros: { type: "object", properties: { servicio: { type: "string" } }, required: ["servicio"] },
   riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 60,
@@ -148,7 +148,7 @@ export const railwayReiniciar: DefTool = {
 };
 
 export const railwayRollback: DefTool = {
-  nombre: "railway_rollback", modulo: MODULO,
+  nombre: "railway_rollback", modulo: "railway",
   descripcion: "Vuelve un servicio de Railway a su versión anterior que funcionaba (cuando un despliegue nuevo lo rompió). Pide OK. El arreglo de fondo lo hace Sage después.",
   parametros: { type: "object", properties: { servicio: { type: "string" } }, required: ["servicio"] },
   riesgo: "sistema", requiereAprobacion: true, timeoutSeg: 60,
@@ -161,7 +161,7 @@ export const railwayRollback: DefTool = {
 };
 
 export const copiaAhora: DefTool = {
-  nombre: "copia_ahora", modulo: MODULO,
+  nombre: "copia_ahora", modulo: "copia",
   descripcion: "Hace YA una copia de seguridad de la base de Emilia (además de la diaria automática) y la verifica.",
   parametros: { type: "object", properties: {} },
   riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 900,

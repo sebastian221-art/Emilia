@@ -160,7 +160,7 @@ async function revisarCrons(): Promise<Resultado> {
     const limite = d.config?.cada_minutos ? (2 * d.config.cada_minutos + 5) * 60_000 : 26 * 3600_000;   // expresiones: casi siempre diarias
     if (Date.now() - ref > limite) atrasadas.push(`${d.nombre} (última vez ${d.ultimo_disparo ? `hace ${duracion(Date.now() - ref)}` : "nunca"})`);
   }
-  return atrasadas.length ? { estado: "caido", detalle: `Tareas programadas que no se ejecutaron: ${atrasadas.join(", ")}.` } : { estado: "ok", detalle: `${xs.length} tarea(s) programada(s) al día.` };
+  return atrasadas.length ? { estado: "aviso", detalle: `Tareas programadas que no se ejecutaron: ${atrasadas.join(", ")}.` } : { estado: "ok", detalle: `${xs.length} tarea(s) programada(s) al día.` };
 }
 
 // ── Copias de seguridad ──────────────────────────────────────────────────────
@@ -220,7 +220,7 @@ async function revisarCopias(m: Monitor): Promise<Resultado> {
 
 /** Tokens: que no estén vencidos ni por vencer. */
 async function revisarCredenciales(): Promise<Resultado> {
-  const malas: string[] = [], bien: string[] = [];
+  const malas: string[] = [], porVencer: string[] = [], bien: string[] = [];
   if (process.env.WHATSAPP_TOKEN) {
     try {
       const r = await fetch(`https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || "v21.0"}/${process.env.WHATSAPP_PHONE_ID}?fields=id`, { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` }, signal: AbortSignal.timeout(15_000) });
@@ -233,7 +233,7 @@ async function revisarCredenciales(): Promise<Resultado> {
       const r = await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "User-Agent": "Emilia" }, signal: AbortSignal.timeout(15_000) });
       const vence = r.headers.get("github-authentication-token-expiration");
       if (r.status === 401) malas.push("el token de GitHub ya no sirve");
-      else if (vence) { const dias = Math.floor((new Date(vence).getTime() - Date.now()) / 86400_000); if (dias <= 7) malas.push(`el token de GitHub vence en ${dias} día(s)`); else bien.push(`GitHub (vence en ${dias} d)`); }
+      else if (vence) { const dias = Math.floor((new Date(vence).getTime() - Date.now()) / 86400_000); if (dias < 0) malas.push("el token de GitHub ya venció"); else if (dias <= 7) porVencer.push(`el token de GitHub vence en ${dias} día(s)`); else bien.push(`GitHub (vence en ${dias} d)`); }
       else bien.push("GitHub");
     } catch { /* sin red */ }
   }
@@ -241,7 +241,10 @@ async function revisarCredenciales(): Promise<Resultado> {
     try { const { railway } = await import("./publicar.js"); await railway(`query{me{id}}`); bien.push("Railway"); }
     catch (e: any) { if (/Not Authorized|unauthorized|invalid/i.test(String(e?.message))) malas.push("el token de Railway ya no sirve"); }
   }
-  return malas.length ? { estado: "caido", detalle: `Credenciales: ${malas.join("; ")}.` } : { estado: "ok", detalle: bien.length ? `Vigentes: ${bien.join(", ")}` : "Sin credenciales que revisar." };
+  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  if (malas.length) return { estado: "caido", detalle: `${cap([...malas, ...porVencer].join("; "))}.` };
+  if (porVencer.length) return { estado: "aviso", detalle: `${cap(porVencer.join("; "))}. Renuévalo antes para que nada se caiga.` };
+  return { estado: "ok", detalle: bien.length ? `Vigentes: ${bien.join(", ")}` : "Sin credenciales que revisar." };
 }
 
 const REVISORES: Record<string, (m: Monitor) => Promise<Resultado>> = {

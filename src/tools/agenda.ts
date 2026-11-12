@@ -62,7 +62,7 @@ export const agendaCambiar: DefTool = {
 };
 
 export const irisConfigurar: DefTool = {
-  nombre: "iris_configurar", modulo: MODULO,
+  nombre: "iris_configurar", modulo: "iris",
   descripcion: "Ajusta cómo te asiste Iris: horas de silencio (ej. 22:00 a 07:00; solo lo crítico sale), personas importantes (avisa al instante sus correos), hora del resumen de la mañana y de la noche, desde qué importancia avisar correos al instante. Sin parámetros, muestra la configuración.",
   parametros: {
     type: "object",
@@ -91,4 +91,17 @@ export const irisConfigurar: DefTool = {
   },
 };
 
-export const toolsAgenda = [agendaCrear, agendaListar, agendaCambiar, irisConfigurar];
+export const irisResumen: DefTool = {
+  nombre: "iris_resumen", modulo: "iris",
+  descripcion: "El resumen del día ahora mismo: 'manana' (tu día: agenda, correos por responder, quién no te ha contestado, compromisos, sistemas, Any) o 'noche' (qué pasó hoy, qué quedó pendiente y qué hay mañana). Llegan solos a las horas configuradas.",
+  parametros: { type: "object", properties: { cual: { type: "string", enum: ["manana", "noche"] } } },
+  riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 60,
+  async ejecutar(a) {
+    const { resumenManana, resumenNoche } = await import("../motor/resumen-dia.js");
+    const { h } = (await import("../motor/avisos.js")).ahoraBogota();
+    const cual = a.cual || (h >= 16 ? "noche" : "manana");
+    return { ok: true, resumen: cual === "noche" ? await resumenNoche() : await resumenManana() };
+  },
+};
+
+export const toolsAgenda = [irisResumen, agendaCrear, agendaListar, agendaCambiar, irisConfigurar];
