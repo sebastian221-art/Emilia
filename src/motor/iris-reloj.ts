@@ -7,11 +7,13 @@
 import { iniciarCorreo } from "./correo.js";
 import { revisarRecordatorios } from "./agenda.js";
 import { entregarDiferidos } from "./avisos.js";
+import { vigilar, asegurarMonitoresSistema } from "./vigilancia.js";
 
 type Tarea = { nombre: string; fn: () => Promise<unknown> };
 const tareas: Tarea[] = [
   { nombre: "recordatorios", fn: () => revisarRecordatorios() },
   { nombre: "diferidos", fn: () => entregarDiferidos() },
+  { nombre: "vigilancia", fn: () => vigilar() },
 ];
 /** Otros módulos de Iris (vigilancia, resúmenes, Any) se cuelgan del mismo reloj. */
 export function cadaMinuto(nombre: string, fn: () => Promise<unknown>) { tareas.push({ nombre, fn }); }
@@ -26,6 +28,7 @@ export async function tic() {
 }
 export function iniciarIris() {
   iniciarCorreo();
+  asegurarMonitoresSistema().catch((e) => console.warn("[iris] monitores:", e?.message || e));
   if (reloj) return;
   reloj = setInterval(() => { tic(); }, 60_000);
   setTimeout(() => tic(), 5_000);

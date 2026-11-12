@@ -78,7 +78,7 @@ export async function subirCarpeta(carpeta: string, repo: string, rama: string, 
 }
 
 // ── Railway ─────────────────────────────────────────────────────────────────
-async function railway<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+export async function railway<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const token = process.env.RAILWAY_TOKEN;
   if (!token) throw new Error("Falta RAILWAY_TOKEN en el .env de Emilia (token de CUENTA: railway.com/account/tokens).");
   const r = await fetch(RW, {

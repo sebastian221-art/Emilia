@@ -33,7 +33,11 @@ export const guardiaConfigurar: DefTool = {
          url_produccion = CASE WHEN $5 THEN $3 ELSE guardia_proyectos.url_produccion END, auto_reparar = COALESCE($4, guardia_proyectos.auto_reparar)
        RETURNING *`,
       [p.id, a.activo ?? null, url ?? null, a.auto_reparar ?? null, url !== undefined]);
-    return { ok: true, datos: c, resumen: `🛡 Guardia de ${p.nombre}: ${c.activo ? "activa" : "apagada"}${c.url_produccion ? ` · producción ${c.url_produccion}` : ""} · ${c.auto_reparar ? "lo grave lo arreglo en sandbox y te pido OK" : "solo aviso, no reparo"}.${p.cmd_test || p.cmd_build ? "" : " ⚠ El proyecto no tiene cmd_test ni cmd_build: solo puedo vigilar proceso, logs y URL."}` };
+    if (url !== undefined) {
+      if (url) await query(`INSERT INTO monitores (nombre, tipo, config, cada_seg, fallos_para_alertar) VALUES ($1, 'url', $2, 300, 2) ON CONFLICT (nombre) DO UPDATE SET config = EXCLUDED.config, activo = true`, [`${p.nombre} (producción)`, JSON.stringify({ url, proyecto: p.nombre })]);
+      else await query(`UPDATE monitores SET activo = false WHERE nombre = $1`, [`${p.nombre} (producción)`]);
+    }
+    return { ok: true, datos: c, resumen: `🛡 Guardia de ${p.nombre}: ${c.activo ? "activa" : "apagada"}${c.url_produccion ? ` · producción ${c.url_produccion}` : ""} · ${c.auto_reparar ? "lo grave lo arreglo en sandbox y te pido OK" : "solo aviso, no reparo"}.${c.url_produccion ? " Iris vigila la URL cada 5 min (caídas, lentitud, SSL)." : ""}${p.cmd_test || p.cmd_build ? "" : " ⚠ El proyecto no tiene cmd_test ni cmd_build: solo puedo vigilar proceso, logs y URL."}` };
   },
 };
 

@@ -101,3 +101,56 @@ CREATE TABLE IF NOT EXISTS agenda (
   actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_agenda_inicio ON agenda (inicio);
+
+-- Vigilancia unificada de Iris: un monitor por cosa vigilada.
+CREATE TABLE IF NOT EXISTS monitores (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre             TEXT NOT NULL UNIQUE,
+  tipo               TEXT NOT NULL,          -- url, proceso, railway, pc, postgres, correo, crons, copias, credenciales
+  config             JSONB NOT NULL DEFAULT '{}',
+  memoria            JSONB NOT NULL DEFAULT '{}',   -- estado interno (avisos ya dados, etc.)
+  cada_seg           INT NOT NULL DEFAULT 300,
+  fallos_para_alertar INT NOT NULL DEFAULT 2,
+  critico            BOOLEAN NOT NULL DEFAULT false, -- sus caídas suenan aunque sea hora de silencio
+  activo             BOOLEAN NOT NULL DEFAULT true,
+  sistema            BOOLEAN NOT NULL DEFAULT false, -- creado por Iris (PC, base, correo…)
+  estado             TEXT NOT NULL DEFAULT 'desconocido',   -- ok, lento, aviso, caido, desconocido
+  desde              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ultimo_chequeo     TIMESTAMPTZ,
+  ultimo_ok          TIMESTAMPTZ,
+  fallos_seguidos    INT NOT NULL DEFAULT 0,
+  ultima_latencia_ms INT,
+  ultimo_detalle     TEXT,
+  incidente_id       UUID,
+  creado_en          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS monitor_chequeos (
+  id          BIGSERIAL PRIMARY KEY,
+  monitor_id  UUID NOT NULL REFERENCES monitores(id) ON DELETE CASCADE,
+  t           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  estado      TEXT NOT NULL,
+  latencia_ms INT,
+  detalle     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_chequeos_monitor_t ON monitor_chequeos (monitor_id, t DESC);
+CREATE TABLE IF NOT EXISTS incidentes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  monitor_id  UUID REFERENCES monitores(id) ON DELETE SET NULL,
+  monitor     TEXT NOT NULL,
+  severidad   TEXT NOT NULL,                 -- caido, lento, aviso
+  titulo      TEXT NOT NULL,
+  inicio      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  fin         TIMESTAMPTZ,
+  detalles    JSONB NOT NULL DEFAULT '[]',   -- lo que se vio
+  acciones    JSONB NOT NULL DEFAULT '[]',   -- lo que se hizo
+  resumen     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_incidentes_inicio ON incidentes (inicio DESC);
+CREATE TABLE IF NOT EXISTS copias (
+  id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  archivo  TEXT,
+  bytes    BIGINT,
+  ok       BOOLEAN NOT NULL,
+  detalle  TEXT,
+  t        TIMESTAMPTZ NOT NULL DEFAULT now()
+);

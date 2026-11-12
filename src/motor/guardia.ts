@@ -127,16 +127,17 @@ export async function revisarBase(p: Proyecto, cfg: ConfigGuardia, forzar = fals
 }
 
 // ── Proceso local y logs ─────────────────────────────────────────────────────
-export async function revisarProceso(p: Proyecto): Promise<Revision> {
+export async function revisarProceso(p: Proyecto, op: { soloLogs?: boolean } = {}): Promise<Revision> {
   if (!p.cmd_start) return { revisados: [], hallazgos: [], notas: [] };
   const est = await estadoProceso(p);
   const hallazgos: Hallazgo[] = [];
-  const revisados = ["proceso", "salud", "logs"];
-  if (est.estado === "caido") {
+  const revisados = op.soloLogs ? ["logs"] : ["proceso", "salud", "logs"];
+  if (op.soloLogs && est.estado !== "corriendo") return { revisados: [], hallazgos: [], notas: [`Proceso: ${est.estado} (la disponibilidad la vigila Iris).`] };
+  if (!op.soloLogs && est.estado === "caido") {
     const err = (await leerLogs(p, { ultimas: 30, soloErrores: true })).slice(-8);
     hallazgos.push({ origen: "proceso", severidad: "grave", titulo: `${p.nombre} se cayó`, detalle: `Código de salida ${est.codigo_salida ?? "?"}.\nÚltimos errores:\n${err.join("\n") || "(sin errores en el log)"}`, huella: huella("proceso", `caido ${err.slice(-3).join("\n")}`) });
   }
-  if (est.estado === "corriendo" && (p.url_salud || p.puerto)) {
+  if (!op.soloLogs && est.estado === "corriendo" && (p.url_salud || p.puerto)) {
     const s = await saludProceso(p);
     if (!s.ok) hallazgos.push({ origen: "salud", severidad: "grave", titulo: `${p.nombre} está corriendo pero no responde`, detalle: `${s.url}: ${s.error || `HTTP ${s.status}`}`, huella: huella("salud", `no responde ${s.status || ""}`) });
     else if ((s.latencia_ms || 0) > 3000) hallazgos.push({ origen: "salud", severidad: "leve", titulo: `${p.nombre} responde lento`, detalle: `${s.url} tardó ${s.latencia_ms} ms.`, huella: huella("salud", "lento") });

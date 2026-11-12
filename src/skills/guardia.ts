@@ -21,7 +21,7 @@ import { SANDBOX_DIR } from "../motor/sandbox.js";
 import { listarDespliegues, estadoPublicado } from "../motor/publicar.js";
 import { conversacionDelJefe } from "../motor/permisos-codigo.js";
 import {
-  revisarBase, revisarProceso, revisarUrl, revisarAuditoria, registrarRevision, marcarHallazgo, hallazgosAbiertos, huella,
+  revisarBase, revisarProceso, revisarAuditoria, registrarRevision, marcarHallazgo, hallazgosAbiertos, huella,
   type ConfigGuardia, type FilaHallazgo, type Hallazgo, type Revision,
 } from "../motor/guardia.js";
 
@@ -88,8 +88,8 @@ async function ronda(a: any, ctx: ContextoEjecucion) {
     let base: Awaited<ReturnType<typeof revisarBase>> | undefined;
     try { base = await revisarBase(p, cfg, !!a.forzar); partes.push(base); }
     catch (e: any) { partes.push({ revisados: [], hallazgos: [], notas: [`No pude verificar la rama base: ${e.message}`] }); }
-    partes.push(await revisarProceso(p).catch((e) => ({ revisados: [], hallazgos: [], notas: [`Proceso: ${e.message}`] })));
-    if (cfg.url_produccion) partes.push(await revisarUrl(cfg.url_produccion, p.nombre));
+    // Caídas y URL de producción las vigila Iris (y escala a Sage); aquí: código y errores en los logs.
+    partes.push(await revisarProceso(p, { soloLogs: true }).catch((e) => ({ revisados: [], hallazgos: [], notas: [`Proceso: ${e.message}`] })));
     const copia = base?.copia || path.join(SANDBOX_DIR, p.nombre, "_guardia");
     const tocaAuditoria = !cfg.ultima_auditoria || Date.now() - new Date(cfg.ultima_auditoria).getTime() > 23 * 3600_000;
     let auditado = false;
@@ -235,5 +235,20 @@ export const guardiaArreglarLeves: DefSkill = {
     return { ok: true, resumen: await reparar(a.proyecto, hs, ctx, p) };
   },
 };
+
+/**
+ * Iris escala aquí cuando algo se cae y no levanta con reinicios: queda como hallazgo
+ * grave y Sage lo repara en sandbox, te manda el texto de cómo falló y te pide OK.
+ */
+export async function escalarASage(proyecto: string, titulo: string, detalle: string): Promise<void> {
+  const { crearContexto } = await import("../motor/ejecutor.js");
+  const [ag] = await query<{ id: string }>(`SELECT id FROM agentes WHERE lower(nombre) = 'sage' AND estado = 'activo' LIMIT 1`).catch(() => [] as any[]);
+  const ctx = crearContexto(ag?.id ?? null, null);
+  const r = await registrarRevision(proyecto, "proyecto", { revisados: [], hallazgos: [{ origen: "proceso", severidad: "grave", titulo, detalle, huella: huella("escalado", `${titulo} ${detalle.slice(0, 200)}`) }], notas: [] });
+  const h = r.nuevos[0] || (await hallazgosAbiertos(proyecto)).find((x) => x.titulo === titulo && x.estado === "abierto");
+  if (!h) return;
+  const p = (await listarProyectos()).find((x) => x.nombre === proyecto);
+  if (p) await reparar(proyecto, [h], ctx, p);
+}
 
 export const skillsGuardia: DefSkill[] = [guardiaRonda, guardiaResumen, guardiaArreglarLeves];
