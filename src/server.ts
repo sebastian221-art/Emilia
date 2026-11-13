@@ -180,7 +180,7 @@ iniciarRegistro()
       // Iris: correo en tiempo real, recordatorios de la agenda y avisos guardados durante el silencio.
       import("./motor/iris-reloj.js").then((m) => m.iniciarIris()).catch((e) => console.warn("[iris]", e?.message || e));
       // Cerebro compartido: pasar la memoria vieja (una vez) y completar vectores pendientes.
-      import("./motor/cerebro.js").then(async (c) => { const n = await c.migrarMemoriaVieja(); if (n) console.log(`[cerebro] ${n} recuerdo(s) migrados de la memoria vieja.`); await c.revectorizar(500); await c.cifrarPendientes(); const k = await import("./motor/carpetas.js"); const n2 = await k.indexarCapacidades(); if (n2) console.log(`[cerebro] ${n2} capacidad(es) del equipo indexadas.`); }).catch((e) => console.warn("[cerebro]", e?.message || e));
+      import("./motor/cerebro.js").then(async (c) => { const n = await c.migrarMemoriaVieja(); if (n) console.log(`[cerebro] ${n} recuerdo(s) migrados de la memoria vieja.`); await c.revectorizar(500); await c.cifrarPendientes(); const k = await import("./motor/carpetas.js"); const n2 = await k.indexarCapacidades(); if (n2) console.log(`[cerebro] ${n2} capacidad(es) del equipo indexadas.`); const ct = await import("./motor/contactos.js"); await ct.migrarContactosDelCerebro(); }).catch((e) => console.warn("[cerebro]", e?.message || e));
       await retomarFlujos();
       await retomarProcesos();
       iniciarReloj();

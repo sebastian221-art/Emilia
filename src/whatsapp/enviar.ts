@@ -18,7 +18,7 @@ function config() {
 }
 const limpiar = (n: string) => String(n).replace(/\D/g, "");
 
-export interface ResultadoEnvio { ok: boolean; id?: string; error?: string }
+export interface ResultadoEnvio { ok: boolean; id?: string; error?: string; viaPlantilla?: boolean }
 
 /**
  * ¿Los agentes pueden escribirle a este número por su cuenta? Solo al jefe y a
@@ -36,7 +36,7 @@ export function destinoPermitido(numero: string): boolean {
  * Ventana de 24 h de WhatsApp: fuera de ella Meta acepta el texto pero NUNCA lo
  * entrega. Se mira el último mensaje que esa persona nos escribió (a cualquier agente).
  */
-async function ventanaAbierta(to: string): Promise<boolean> {
+export async function ventanaAbierta(to: string): Promise<boolean> {
   try {
     const { query } = await import("../db/cliente.js");
     const [f] = await query<{ ultimo: string | null }>(
@@ -46,15 +46,15 @@ async function ventanaAbierta(to: string): Promise<boolean> {
   } catch { return true; }   // si no se puede saber, se intenta como texto
 }
 
-export async function enviarTextoWhatsapp(numero: string, texto: string): Promise<ResultadoEnvio> {
+export async function enviarTextoWhatsapp(numero: string, texto: string, op: { plantilla?: string } = {}): Promise<ResultadoEnvio> {
   const to = limpiar(numero);
   if (!to) return { ok: false, error: "Número vacío." };
   // Fuera de la ventana: va como plantilla aprobada (una variable con el texto en una línea).
-  const plantilla = process.env.WHATSAPP_PLANTILLA_AVISO || "recordatorio_emilia";
+  const plantilla = op.plantilla || process.env.WHATSAPP_PLANTILLA_AVISO || "recordatorio_emilia";
   if (plantilla !== "ninguna" && !(await ventanaAbierta(to))) {
     const linea = texto.replace(/\s*\n+\s*/g, " · ").replace(/[\t]/g, " ").replace(/ {4,}/g, "   ").trim().slice(0, 900);
     const r = await enviarPlantillaWhatsapp(to, plantilla, linea, process.env.WHATSAPP_PLANTILLA_AVISO_IDIOMA || "es");
-    if (r.ok) return r;
+    if (r.ok) return { ...r, viaPlantilla: true };
     console.warn(`[whatsapp] Fuera de la ventana de 24 h y la plantilla "${plantilla}" falló (${r.error}); intento como texto.`);
   }
   const partes = partir(texto, 4000);

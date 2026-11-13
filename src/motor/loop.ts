@@ -407,8 +407,12 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       continue;
     }
 
-    if (inv.requiereAprobacion && tc.decision !== "aprobada") {
+    let pideOk = inv.requiereAprobacion && tc.decision !== "aprobada";
+    const defTool = pideOk ? registro.tool(inv.nombre) : undefined;
+    if (pideOk && defTool?.necesitaAprobacion) pideOk = await defTool.necesitaAprobacion(tc.argumentos || {}).catch(() => true);
+    if (pideOk) {
       // ── PAUSA ──
+      const vista = defTool?.vistaAprobacion ? await defTool.vistaAprobacion(tc.argumentos || {}).catch(() => null) : null;
       const detalle = detalleAprobacion(inv.nombre, tc.argumentos);
       const ap = await crearAprobacionTool({ agenteEjecucionId: e.ejId, agenteId: e.agenteId, conversacionId: e.conversacionId, tool: inv.nombre, args: tc.argumentos, detalle });
       await ctx.traza("aprobacion", `Esperando tu aprobación: ${detalle}`);
@@ -418,7 +422,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
         [JSON.stringify(e.mensajes), JSON.stringify(e.pendientes), e.turnos, e.toolCalls, JSON.stringify(e.mensajesEnviados), e.ejId]);
       return {
         ok: true, estado: "esperando_aprobacion", aprobacionId: ap.id,
-        respuesta: textoAprobacion(inv.nombre, tc.argumentos),
+        respuesta: vista || textoAprobacion(inv.nombre, tc.argumentos),
         ejecucionId: e.ejId, conversacionId: e.conversacionId, turnos: e.turnos, toolCalls: e.toolCalls, mensajesEnviados: e.mensajesEnviados,
       };
     }

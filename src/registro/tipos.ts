@@ -81,6 +81,10 @@ export interface DefTool {
   requiereAprobacion: boolean;
   /** Tiempo máximo de ejecución. Por defecto 30s. */
   timeoutSeg?: number;
+  /** Con requiereAprobacion: decide según los argumentos si de verdad hace falta el OK (p. ej. contacto "libre"). Ante error, se pide. */
+  necesitaAprobacion?: (args: Record<string, any>) => Promise<boolean>;
+  /** Texto propio para el mensaje de aprobación (p. ej. el mensaje completo y a quién va). */
+  vistaAprobacion?: (args: Record<string, any>) => Promise<string | null>;
   ejecutar: FnEjecutar;
 }
 
