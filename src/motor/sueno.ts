@@ -225,7 +225,7 @@ export async function suenoSiToca(): Promise<void> {
     const { avisarJefe } = await import("./avisos.js");
     if (new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" }).endsWith("-01")) await avisarJefe(await informeCerebro(30), "normal", "sueno", "Lara").catch(() => {});
     if (inf.preguntas.length) {
-      await avisarJefe(`🧠 Anoche ordené la memoria y encontré ${inf.preguntas.length === 1 ? "algo que no cuadra" : `${inf.preguntas.length} cosas que no cuadran`}:\n${inf.preguntas.slice(0, 5).map((p, i) => `${i + 1}) ${p}`).join("\n")}\nRespóndeme cuál es cierto y lo corrijo.`, "normal", "sueno", "Lara");
+      await avisarJefe(`🧠 Anoche ordené la memoria y encontré ${inf.preguntas.length === 1 ? "algo que no cuadra" : `${inf.preguntas.length} cosas que no cuadran`}:\n${inf.preguntas.slice(0, 5).map((p, i) => `${i + 1}) ${p}`).join("\n")}\nRespóndeme cuál es cierto y lo corrijo.`, "normal", "sueno-preguntas", "Lara");
     }
   }).catch((e) => console.warn("[sueño]", e?.message || e)).finally(() => { durmiendo = false; });
 }

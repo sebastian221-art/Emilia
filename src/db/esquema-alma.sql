@@ -50,3 +50,46 @@ CREATE TABLE IF NOT EXISTS alma_iniciativas (
   texto       TEXT NOT NULL,
   creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── Emilia administradora ──
+-- Encargos: todo lo que delega, con su estado y resultado.
+CREATE TABLE IF NOT EXISTS encargos (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agente          TEXT NOT NULL,
+  tarea           TEXT NOT NULL,
+  conv_padre      UUID,
+  conv_delegacion UUID,
+  ejecucion_id    UUID,
+  mision_id       UUID,
+  paso            INT,
+  estado          TEXT NOT NULL DEFAULT 'en_curso' CHECK (estado IN ('en_curso','esperando_jefe','hecho','fallido','cancelado','reintentado')),
+  resultado       TEXT,
+  intentos        INT NOT NULL DEFAULT 0,
+  avisado_demora  BOOLEAN NOT NULL DEFAULT false,
+  terminado_en    TIMESTAMPTZ,
+  creado_en       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_encargos_estado ON encargos (estado, creado_en DESC);
+CREATE INDEX IF NOT EXISTS idx_encargos_mision ON encargos (mision_id);
+-- Misiones: un pedido grande, varios agentes, pasos con dependencias, una respuesta final.
+CREATE TABLE IF NOT EXISTS misiones (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  objetivo       TEXT NOT NULL,
+  pasos          JSONB NOT NULL,
+  estado         TEXT NOT NULL DEFAULT 'en_curso' CHECK (estado IN ('en_curso','hecha','atascada','cancelada')),
+  conv_padre     UUID,
+  final          TEXT,
+  creado_en      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Una sola voz: los avisos no urgentes esperan al resumen.
+ALTER TABLE avisos_diferidos ADD COLUMN IF NOT EXISTS digesto BOOLEAN NOT NULL DEFAULT false;
+-- Reparto: cuando el jefe corrige a quién iba un pedido, se aprende.
+CREATE TABLE IF NOT EXISTS reparto_correcciones (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  texto      TEXT NOT NULL,
+  agente     TEXT NOT NULL,
+  antes      TEXT,
+  creado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

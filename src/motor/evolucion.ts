@@ -209,7 +209,7 @@ export async function proponerCambio(p: PropuestaCambio): Promise<{ id: string; 
     return { id: c.id, ref, nivel, estado: r.ok ? "aplicado" : "fallido", mensaje: r.ok ? `🔧 ${ref} aplicado solo (nivel 1): ${p.titulo}. Lo mido 7 días y si empeora lo devuelvo.` : `No pude aplicar ${ref}: ${r.error}` };
   }
   const { avisarJefe } = await import("./avisos.js");
-  await avisarJefe(textoPropuesta({ ...p, nivel, antes, despues }, ref), "normal", "system", "system");
+  await avisarJefe(textoPropuesta({ ...p, nivel, antes, despues }, ref), "normal", "system-decision", "system");   // espera su respuesta: no va al resumen
   return { id: c.id, ref, nivel, estado: "propuesto", mensaje: `📨 ${ref} propuesto al jefe (nivel ${nivel}).` };
 }
 
@@ -303,7 +303,7 @@ export async function medirCambios(): Promise<string[]> {
         out.push(`↩️ ${refCambio(c.id)} (${c.titulo}) empeoró y lo devolví: ${resumen}${r.ok ? "" : ` — ${r.error}`}`);
       } else if (final) {
         await query(`UPDATE sys_cambios SET resultado = COALESCE(resultado, '{}'::jsonb) || $2::jsonb, medir_hasta = now() + interval '30 days' WHERE id = $1`, [c.id, JSON.stringify({ ...resultado, veredicto: "empeoró" })]);
-        await avisarJefe(`🧬 *${refCambio(c.id)}* (${c.titulo}) no funcionó: ${resumen}.\nResponde *revierte ${refCambio(c.id)}* para volver a como estaba.`, "normal", "system", "system");
+        await avisarJefe(`🧬 *${refCambio(c.id)}* (${c.titulo}) no funcionó: ${resumen}.\nResponde *revierte ${refCambio(c.id)}* para volver a como estaba.`, "normal", "system-decision", "system");
         out.push(`${refCambio(c.id)} empeoró: le propuse revertirlo.`);
       }
       continue;

@@ -81,6 +81,14 @@ async function enviar(texto: string, agente = "iris"): Promise<boolean> {
 /** agente: quién habla (su cuaderno guarda el contexto para que pueda seguir la conversación). */
 export async function avisarJefe(texto: string, nivel: "critico" | "normal" = "normal", origen = "iris", agente = "iris"): Promise<"enviado" | "diferido" | "fallo"> {
   const cfg = await configIris();
+  // Una sola voz: lo no urgente de ciertos agentes espera al resumen de Emilia (a las horas configuradas).
+  if (nivel !== "critico") {
+    const { vaAlResumen } = await import("./administradora.js");
+    if (await vaAlResumen(origen, agente).catch(() => false)) {
+      await query(`INSERT INTO avisos_diferidos (texto, origen, digesto) VALUES ($1, $2, true)`, [texto, agente || origen]);
+      return "diferido";
+    }
+  }
   if (nivel !== "critico" && enSilencio(cfg)) {
     await query(`INSERT INTO avisos_diferidos (texto, origen) VALUES ($1, $2)`, [texto, origen]);
     return "diferido";
@@ -92,7 +100,7 @@ export async function avisarJefe(texto: string, nivel: "critico" | "normal" = "n
 export async function entregarDiferidos(): Promise<number> {
   const cfg = await configIris();
   if (enSilencio(cfg)) return 0;
-  const xs = await query<{ id: string; texto: string; creado_en: string }>(`SELECT id, texto, creado_en FROM avisos_diferidos WHERE enviado_en IS NULL ORDER BY creado_en`);
+  const xs = await query<{ id: string; texto: string; creado_en: string }>(`SELECT id, texto, creado_en FROM avisos_diferidos WHERE enviado_en IS NULL AND NOT digesto ORDER BY creado_en`);
   if (!xs.length) return 0;
   const hora = (iso: string) => new Date(iso).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
   const texto = `🌙 *Mientras estabas en silencio* (${xs.length}):\n\n${xs.map((x) => `🕐 ${hora(x.creado_en)} · ${x.texto}`).join("\n\n")}`;

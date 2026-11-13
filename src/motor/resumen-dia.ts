@@ -127,6 +127,9 @@ export async function resumenSiToca(): Promise<"manana" | "noche" | null> {
   if (!cual) return null;
   est[cual] = hoy;
   await query(`INSERT INTO iris_config (clave, valor) VALUES ('resumen_estado', $1) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor, actualizado_en = now()`, [JSON.stringify(est)]);
-  await avisarJefe(cual === "manana" ? await resumenManana() : await resumenNoche(), "normal", "resumen");
+  // La mañana la da Emilia (con lo de todo el equipo y una línea suya); sin alma, el resumen de Iris de siempre.
+  const deEmilia = cual === "manana" && (process.env.ALMA || "true") !== "false";
+  const texto = cual === "manana" ? (deEmilia ? await (await import("./administradora.js")).buenosDias().catch(() => resumenManana()) : await resumenManana()) : await resumenNoche();
+  await avisarJefe(texto, "normal", "resumen", deEmilia ? "emilia" : "iris");
   return cual;
 }

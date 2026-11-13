@@ -25,6 +25,8 @@ const tareas: Tarea[] = [
   { nombre: "sueno", fn: () => suenoSiToca() },               // Lara: consolidación nocturna de la memoria
   { nombre: "lyra", fn: () => import("./terceros.js").then((t) => t.revisarTerceros()) },
   { nombre: "gestiones", fn: () => import("./gestiones.js").then((g) => g.revisarGestiones()) },
+  { nombre: "emilia_encargos", fn: async () => { if (new Date().getMinutes() % 5 === 0) await import("./administradora.js").then((a) => a.seguimientoEncargos()); } },   // demoras y reintentos de lo delegado
+  { nombre: "emilia_resumen", fn: () => import("./administradora.js").then((a) => a.resumenEquipoSiToca()) },   // una sola voz: lo no urgente, junto
   { nombre: "emilia_noche", fn: () => import("./vida.js").then((v) => v.nocheEmiliaSiToca()) },   // Emilia: su diario y su curiosidad (después de System)
   { nombre: "emilia_iniciativa", fn: () => import("./vida.js").then((v) => v.iniciativaSiToca()) },   // Emilia: a veces le escribe ella primero
   { nombre: "system", fn: () => import("./evolucion.js").then((e) => e.nocheSiToca()) },   // System: medir, sensores, adaptar (después del sueño de Lara)

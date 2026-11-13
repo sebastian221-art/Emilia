@@ -545,6 +545,16 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
         const { contextoAlma } = await import("./alma.js");
         const charla = /MODO CONVERSACIÓN|RESPUESTA RÁPIDA SIN HERRAMIENTAS/.test(contextoCanal || "");
         cerebro = `${await contextoAlma(mensajeUsuario, charla ? "charla" : "trabajo").catch(() => "")}\n\n${cerebro}`;
+        // Como administradora: lo que su equipo tiene entre manos y, en trabajo, a quién le toca el pedido.
+        const A = await import("./administradora.js");
+        const equipo = await A.contextoEquipo().catch(() => "");
+        let reparto = "";
+        if (!charla && mensajeUsuario && conv) {
+          const corregido = await A.aprenderCorreccionReparto(mensajeUsuario, conv.id).catch(() => null);
+          const s = corregido ? { agente: corregido, confianza: 1, motivo: "el jefe lo corrigió (ya quedó aprendido)" } as any : await A.sugerirReparto(mensajeUsuario).catch(() => null);
+          if (s?.agente) reparto = `=== REPARTO SUGERIDO (pista, tú decides) ===\n${s.agente === "varios" ? `Necesita varios agentes en orden → agente_mision con pasos: ${(s.pasos || []).map((p: any, i: number) => `${i + 1}. ${p.agente}: ${p.tarea}`).join(" | ")}` : s.agente.toLowerCase() === "emilia" ? "Lo resuelves tú." : `Le toca a ${s.agente}`} (confianza ${Math.round((s.confianza || 0) * 100)}%${s.motivo ? `: ${s.motivo}` : ""}).${(s.confianza || 0) < 0.55 ? " Está dudoso: si no es obvio, pregúntale en una línea." : ""}\n=== FIN ===`;
+        }
+        cerebro = [cerebro, equipo, reparto].filter(Boolean).join("\n\n");
       }
     } catch (e: any) { console.warn("[cerebro]", e?.message || e); }
   }
