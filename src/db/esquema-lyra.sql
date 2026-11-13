@@ -59,3 +59,27 @@ CREATE TABLE IF NOT EXISTS lyra_propuestas (
   estado        TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','enviada','ignorada','vencida')),
   creado_en     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Gestiones: Lyra habla con alguien para lograr algo (agendar, confirmar, preguntar, coordinar), dentro de los límites que el jefe aprobó.
+CREATE TABLE IF NOT EXISTS gestiones (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contacto_id     UUID REFERENCES contactos(id) ON DELETE SET NULL,
+  numero          TEXT NOT NULL,
+  objetivo        TEXT NOT NULL,
+  limites         TEXT,                       -- qué puede aceptar sin preguntar (horarios, montos, qué no decir)
+  agendar         BOOLEAN NOT NULL DEFAULT true,
+  estado          TEXT NOT NULL DEFAULT 'activa' CHECK (estado IN ('activa','esperando_jefe','cerrada','fallida','cancelada','sin_respuesta')),
+  pregunta_jefe   TEXT,
+  resultado       TEXT,
+  acuerdo         JSONB,
+  agenda_id       UUID,
+  turnos          INT NOT NULL DEFAULT 0,
+  max_turnos      INT NOT NULL DEFAULT 10,
+  insistencias    INT NOT NULL DEFAULT 0,
+  esperar_horas   NUMERIC NOT NULL DEFAULT 24,
+  ultimo_mov      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  conversacion_id UUID,
+  creado_en       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gest_activas ON gestiones (numero) WHERE estado IN ('activa','esperando_jefe');

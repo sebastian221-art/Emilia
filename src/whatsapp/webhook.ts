@@ -234,6 +234,12 @@ async function procesarEntrante(m: any) {
       const { respuestaRapidaDelJefe } = await import("../motor/terceros.js");
       const rr = await respuestaRapidaDelJefe(texto, convRaiz.id, apPend ? new Date(apPend.creado_en as any) : undefined);
       if (rr) { await entregarTexto(conv, rr); return; }
+      // ── respuesta a una consulta de una gestión de Lyra ──
+      if (!(apPend && (apruebaTxt || rechazaTxt))) {
+        const { respuestaRapidaGestion } = await import("../motor/gestiones.js");
+        const rg = await respuestaRapidaGestion(texto, convRaiz.id, apPend ? new Date(apPend.creado_en as any) : undefined);
+        if (rg !== null) { if (rg) await entregarTexto(conv, rg); return; }
+      }
     }
     if (apPend && (apruebaTxt || rechazaTxt)) {
       const ap = apPend;

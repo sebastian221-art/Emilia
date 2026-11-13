@@ -51,6 +51,7 @@ export async function atenderTercero(p: { numero: string; texto: string }): Prom
       WHERE right(numero, 10) = right($1, 10) AND respondido_en IS NULL AND tipo <> 'autorespuesta' AND creado_en > now() - interval '14 days' RETURNING id, creado_en)
     SELECT id FROM r ORDER BY creado_en DESC LIMIT 1`, [p.numero]);
   if (contacto) await query(`UPDATE contactos SET ultimo_contacto = now() WHERE id = $1`, [contacto.id]);
+  await import("./gestiones.js");   // registra su manejador (gestiones abiertas)
   for (const m of manejadores) { try { if (await m({ numero: p.numero, texto: p.texto, contacto })) return true; } catch (e: any) { console.warn("[lyra] gestión:", e?.message || e); } }
   if (cfg.terceros === "ignorar") return true;
   await query(`INSERT INTO mensajes_terceros (numero, contacto_id, texto, saliente_id) VALUES ($1,$2,$3,$4)`, [p.numero, contacto?.id ?? null, p.texto.slice(0, 4000), sal?.id ?? null]);
