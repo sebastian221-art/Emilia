@@ -262,6 +262,9 @@ export async function asegurarMonitoresSistema() {
     { nombre: "Copias de seguridad", tipo: "copias", cada_seg: 1800, fallos: 1, config: { hora: process.env.COPIAS_HORA || "03:00" } },
     { nombre: "Credenciales", tipo: "credenciales", cada_seg: 6 * 3600, fallos: 1 },
   ];
+  // Buscador de Soga (Docker): si se configuró, Iris avisa si se apaga (no es crítico: hay respaldo).
+  if (process.env.SEARXNG_URL) base.push({ nombre: "Buscador SearXNG", tipo: "url", cada_seg: 600, fallos: 3, config: { url: `${process.env.SEARXNG_URL.replace(/\/+$/, "")}/healthz` } } as any);
+  if (process.env.LIGHTPANDA_URL) base.push({ nombre: "Navegador Lightpanda", tipo: "url", cada_seg: 600, fallos: 3, config: { url: `${process.env.LIGHTPANDA_URL.replace(/^ws/, "http").replace(/\/+$/, "")}/json/version` } } as any);
   // Any (chatbot del mall): si está configurado, se vigila que esté arriba; la calidad la mide calidad-any.
   if (process.env.ANY_URL) base.push({ nombre: "Any (chatbot)", tipo: "url", cada_seg: 300, fallos: 2, critico: true, config: { url: `${process.env.ANY_URL.replace(/\/+$/, "")}/health` } } as any);
   for (const b of base) {

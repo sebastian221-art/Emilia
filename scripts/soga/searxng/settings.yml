@@ -1,0 +1,17 @@
+# Configuración de SearXNG para Soga. Solo escucha en este PC.
+use_default_settings: true
+general:
+  instance_name: "Soga"
+server:
+  limiter: false          # es solo para Emilia; no hace falta limitar
+  image_proxy: false
+  method: "GET"
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "all"
+  formats:
+    - html
+    - json                # Emilia lee los resultados en JSON
+ui:
+  default_locale: "es"

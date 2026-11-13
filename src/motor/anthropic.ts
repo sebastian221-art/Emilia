@@ -12,6 +12,7 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from "groq-sdk/re
 import type { RespuestaModelo } from "./groq.js";
 
 let cliente: Anthropic | null = null;
+export function clienteAnthropic() { return get(); }
 function get() {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("Falta ANTHROPIC_API_KEY en .env para usar modelos Claude.");
   // Las claves de usuario (sk-ant-usr…) no están atadas a un workspace: Anthropic exige el header anthropic-workspace-id.

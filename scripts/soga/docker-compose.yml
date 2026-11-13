@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Servicios del buscador de Soga (solo en este PC, no expuestos a la red).
+#    docker compose -f scripts/soga/docker-compose.yml up -d
+#  SearXNG   → http://127.0.0.1:8888  (busca en Google, Bing, DuckDuckGo, etc. a la vez)
+#  Lightpanda → 127.0.0.1:9222        (navegador rápido para agentes; páginas con JavaScript)
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: soga-searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./searxng:/etc/searxng
+    environment:
+      - SEARXNG_BASE_URL=http://127.0.0.1:8888/
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-cambia-esta-clave-larga-y-aleatoria}
+  lightpanda:
+    image: lightpanda/browser:latest
+    container_name: soga-lightpanda
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9222:9222"
