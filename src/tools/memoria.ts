@@ -60,12 +60,14 @@ export const memoriaGuardar: DefTool = {
     cuando: { type: "string", description: "Para episodios: cuándo pasó (AAAA-MM-DD)." },
     clave: { type: "string", description: "(compatibilidad) igual que titulo." },
     sujeto: { type: "string", description: "(compatibilidad) 'jefe' o el nombre de la persona/proyecto." },
+    categoria: { type: "string", description: "(compatibilidad) personal, preferencia, trabajo, proyecto, persona, contacto, decision, general." },
   }, required: ["contenido"] },
   riesgo: "escritura", requiereAprobacion: false,
   async ejecutar(a, ctx) {
     const sujeto = a.sujeto && a.sujeto !== "jefe" ? a.sujeto : null;
     const titulo = a.titulo || (a.clave ? `${sujeto ? `${sujeto}: ` : ""}${String(a.clave).replace(/_/g, " ")}` : String(a.contenido).slice(0, 60));
-    const clase: Clase = a.clase || (sujeto ? "persona" : a.sujeto === "jefe" ? "perfil" : "hecho");
+    const porCategoria: Record<string, Clase> = { personal: "perfil", preferencia: "perfil", persona: "persona", contacto: "persona", decision: "hecho", trabajo: "hecho", proyecto: "hecho", general: "hecho" };
+    const clase: Clase = a.clase || (a.categoria && porCategoria[a.categoria]) || (sujeto ? "persona" : a.sujeto === "jefe" ? "perfil" : "hecho");
     const carpeta = a.carpeta || (clase === "perfil" || clase === "persona" ? "personal" : "general");
     if (carpeta === "personal" && !(await conversacionDelJefe(ctx?.conversacionId))) return { ok: false, error: "No guardo cosas personales del jefe desde conversaciones con otras personas." };
     const r = await guardarRecuerdo({ titulo, contenido: a.contenido, clase, espacio: carpeta, importancia: a.importancia, ocurrioEn: a.cuando || null, confianza: 0.95, origenRef: ctx?.conversacionId ? `conversacion:${ctx.conversacionId}` : null, agenteId: ctx?.agenteId ?? null });

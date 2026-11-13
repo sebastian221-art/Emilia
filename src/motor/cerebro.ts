@@ -52,7 +52,7 @@ export interface NuevoRecuerdo {
   ocurrioEn?: string | Date | null; vigenteHasta?: string | Date | null; origenRef?: string | null; privado?: boolean;
   agenteId?: string | null; conectarCon?: { slug: string; relacion: string }[];
 }
-export interface ResultadoGuardar { nodo: Recuerdo; accion: "creado" | "actualizado" | "reforzado"; parecido?: { slug: string; titulo: string; sim: number } }
+export interface ResultadoGuardar { nodo: Recuerdo; accion: "creado" | "actualizado" | "reforzado"; parecido?: { slug: string; titulo: string; sim: number }; contradice?: string }
 
 /** Vecinos por significado dentro de la misma carpeta (para no duplicar y para conectar). */
 async function masParecidos(vec: number[], espacio: string, clase: string | null, n = 3, excluirId?: string): Promise<{ id: string; slug: string; titulo: string; resumen: string; cifrado?: Buffer | null; clase: string; sim: number }[]> {
@@ -75,6 +75,7 @@ export async function guardarRecuerdo(p: NuevoRecuerdo): Promise<ResultadoGuarda
   let slug = p.slug;
   let parecido: ResultadoGuardar["parecido"];
   let contenido = p.contenido;
+  let contradiceA: { id: string; slug: string; titulo: string } | null = null;
   if (!slug) {
     // ¿Ya lo sabemos? Mismo significado en la misma carpeta y clase → se refuerza/actualiza en vez de duplicar.
     const [c] = await masParecidos(vec, espacio, clase, 1);
@@ -84,20 +85,33 @@ export async function guardarRecuerdo(p: NuevoRecuerdo): Promise<ResultadoGuarda
       const { abrirResumen } = await import("./cifrado.js");
       const abierto = await abrirResumen(c);
       const viejo = norm(abierto), nuevo = norm(p.contenido);
+      // ¿Dicen lo mismo pero con OTRAS cifras (precio, fecha, cantidad)? No se mezclan: es una posible contradicción.
+      const { cifras } = await import("./informes.js");
+      // Se comparan los contenidos (el título puede repetir la cifra vieja); si alguno no trae cifras, se usa el título.
+      const cv = cifras(abierto), cn = cifras(p.contenido);
+      const nViejo = new Set(cv.length ? cv : cifras(c.titulo)), nNuevo = cn.length ? cn : cifras(p.titulo);
+      const choca = nNuevo.length > 0 && nViejo.size > 0 && nNuevo.some((x) => !nViejo.has(x)) && [...nViejo].some((x) => !nNuevo.includes(x));
+      if (choca) contradiceA = c;
       // ¿Lo nuevo ya está dicho? (todas sus frases aparecen en lo que sabíamos)
       const frases = nuevo.split(/(?<=[.;:!?])\s+|\n+/).map((f) => f.replace(/[.;:!?\s]+$/, "").trim()).filter((f) => f.length > 8);
       const yaDicho = viejo.includes(nuevo.replace(/[.;:!?\s]+$/, "")) || (frases.length > 0 && frases.every((f) => viejo.includes(f)));
-      if (yaDicho || c.sim >= 0.985) {
+      if (contradiceA) { slug = undefined; }
+      else if (yaDicho || c.sim >= 0.985) {
         await query(`UPDATE bib_nodos SET fuerza = LEAST(3, fuerza + 0.2), usos = usos + 1, actualizado_en = now(), importancia = GREATEST(importancia, $2) WHERE id = $1`, [c.id, p.importancia ?? 0]);
         const [n] = await query<Recuerdo>(`SELECT * FROM bib_nodos WHERE id = $1`, [c.id]);
         return { nodo: n, accion: "reforzado", parecido };
       }
-      slug = c.slug;   // mismo tema con datos nuevos: se SUMAN al mismo nodo (nunca se pierde lo que ya sabíamos)
-      contenido = `${abierto.trim()}\n${p.contenido.trim()}`;
-    } else slug = `${clase === "conocimiento" ? "" : `${clase}-`}${slugDe(p.titulo).slice(0, 60)}`;
+      if (!contradiceA) {
+        slug = c.slug;   // mismo tema con datos nuevos: se SUMAN al mismo nodo (nunca se pierde lo que ya sabíamos)
+        contenido = `${abierto.trim()}\n${p.contenido.trim()}`;
+      }
+    }
+    if (!slug) slug = `${clase === "conocimiento" ? "" : `${clase}-`}${slugDe(p.titulo).slice(0, 60)}`;
     // slug libre en otra carpeta
     const [ocupado] = await query<{ espacio: string }>(`SELECT espacio FROM bib_nodos WHERE slug = $1`, [slug]);
     if (ocupado && ocupado.espacio !== espacio) slug = `${slug}-${slugDe(espacio).slice(0, 20)}`;
+    // Si contradice a otro, va en un recuerdo aparte (nunca pisa al que ya estaba).
+    if (contradiceA) { const base = slug; for (let k = 2; (await query(`SELECT 1 FROM bib_nodos WHERE slug = $1`, [slug])).length; k++) slug = `${base}-${k}`; }
   }
   const existia = (await query(`SELECT 1 FROM bib_nodos WHERE slug = $1`, [slug])).length > 0;
   const vecFinal = contenido === p.contenido ? vec : await embedDoc(`${p.titulo}. ${contenido}`);
@@ -117,13 +131,19 @@ export async function guardarRecuerdo(p: NuevoRecuerdo): Promise<ResultadoGuarda
     RETURNING *`,
     [slug, p.titulo.slice(0, 200), p.tipo || null, sello.resumen, JSON.stringify(p.ficha || {}), p.estado ?? null, p.confianza ?? null, p.etiquetas || [], p.agenteId ?? null, vecFinal, espacio, clase,
      p.importancia ?? null, fechaBogota(p.ocurrioEn), fechaBogota(p.vigenteHasta), p.origenRef ?? null, version, privado, sello.cifrado, ...(conVec ? [lit(vecFinal)] : [])]);
+  if (contradiceA && contradiceA.id !== n.id) {
+    await query(`INSERT INTO bib_conexiones (origen_id, destino_id, relacion, peso) VALUES ($1,$2,'contradice',1) ON CONFLICT (origen_id, destino_id, relacion) DO NOTHING`, [n.id, contradiceA.id]);
+    const { proponer } = await import("./biblioteca.js");
+    const [ya] = await query(`SELECT 1 FROM bib_propuestas WHERE estado = 'pendiente' AND tipo = 'contradiccion' AND ((nodo_id = $1 AND nodo2_id = $2) OR (nodo_id = $2 AND nodo2_id = $1))`, [contradiceA.id, n.id]);
+    if (!ya) await proponer({ tipo: "contradiccion", nodoId: contradiceA.id, nodo2Id: n.id, motivo: `¿Qué es cierto: "${contradiceA.titulo}" o "${p.titulo}"?`, datos: { origen: "al guardar" } });
+  }
   // Conexiones: las pedidas + "relacionado_con" a lo más parecido (si se parece bastante) para que la red crezca sola.
   for (const c of p.conectarCon || []) {
     const [d] = await query<{ id: string }>(`SELECT id FROM bib_nodos WHERE slug = $1 AND borrado_en IS NULL`, [c.slug]);
     if (d && d.id !== n.id) await query(`INSERT INTO bib_conexiones (origen_id, destino_id, relacion, creado_por) VALUES ($1,$2,$3,$4) ON CONFLICT (origen_id, destino_id, relacion) DO NOTHING`, [n.id, d.id, c.relacion, p.agenteId ?? null]);
   }
   for (const v of await masParecidos(vec, espacio, null, 3, n.id)) if (v.sim >= 0.75) await query(`INSERT INTO bib_conexiones (origen_id, destino_id, relacion, peso) VALUES ($1,$2,'relacionado_con',$3) ON CONFLICT (origen_id, destino_id, relacion) DO NOTHING`, [n.id, v.id, +v.sim.toFixed(2)]);
-  return { nodo: n, accion: existia ? "actualizado" : "creado", parecido };
+  return { nodo: n, accion: existia ? "actualizado" : "creado", parecido, ...(contradiceA ? { contradice: contradiceA.titulo } : {}) };
 }
 
 // ── Recordar ─────────────────────────────────────────────────────────────────

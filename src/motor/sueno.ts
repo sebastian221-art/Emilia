@@ -222,9 +222,53 @@ export async function suenoSiToca(): Promise<void> {
   durmiendo = true;
   dormir({ cosechar: dia === 0 }).then(async (inf) => {
     console.log(`[sueño] ${inf.bandeja} de la bandeja, ${inf.unidos} unidos, ${inf.lecciones} lecciones, ${inf.contradicciones} contradicciones (${Math.round(inf.duracion_ms / 1000)} s).`);
+    const { avisarJefe } = await import("./avisos.js");
+    if (new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" }).endsWith("-01")) await avisarJefe(await informeCerebro(30), "normal", "sueno", "Lara").catch(() => {});
     if (inf.preguntas.length) {
-      const { avisarJefe } = await import("./avisos.js");
       await avisarJefe(`🧠 Anoche ordené la memoria y encontré ${inf.preguntas.length === 1 ? "algo que no cuadra" : `${inf.preguntas.length} cosas que no cuadran`}:\n${inf.preguntas.slice(0, 5).map((p, i) => `${i + 1}) ${p}`).join("\n")}\nRespóndeme cuál es cierto y lo corrijo.`, "normal", "sueno", "Lara");
     }
   }).catch((e) => console.warn("[sueño]", e?.message || e)).finally(() => { durmiendo = false; });
+}
+
+// ── Informe mensual ──────────────────────────────────────────────────────────
+export async function informeCerebro(dias = 30): Promise<string> {
+  const [t] = await query<any>(`SELECT count(*) FILTER (WHERE borrado_en IS NULL)::int AS total, count(*) FILTER (WHERE borrado_en IS NULL AND creado_en > now() - make_interval(days => $1))::int AS nuevos,
+    count(*) FILTER (WHERE borrado_en IS NULL AND clase = 'leccion' AND creado_en > now() - make_interval(days => $1))::int AS lecciones,
+    count(*) FILTER (WHERE borrado_en IS NULL AND espacio = 'personal' AND creado_en > now() - make_interval(days => $1))::int AS personales FROM bib_nodos WHERE clase <> 'capacidad'`, [dias]);
+  const lecciones = await query<any>(`SELECT titulo, espacio FROM bib_nodos WHERE clase = 'leccion' AND borrado_en IS NULL AND creado_en > now() - make_interval(days => $1) ORDER BY importancia DESC LIMIT 6`, [dias]);
+  const usados = await query<any>(`SELECT titulo, usos FROM bib_nodos WHERE borrado_en IS NULL AND NOT privado AND clase NOT IN ('capacidad','resumen') AND ultimo_uso_en > now() - make_interval(days => $1) ORDER BY usos DESC LIMIT 5`, [dias]);
+  const viejos = await query<any>(`SELECT titulo, actualizado_en FROM bib_nodos WHERE borrado_en IS NULL AND NOT privado AND importancia >= 0.6 AND clase IN ('conocimiento','hecho','procedimiento') AND actualizado_en < now() - interval '120 days' ORDER BY importancia DESC LIMIT 5`);
+  const carpetas = await query<any>(`SELECT e.slug, e.nombre, count(n.id)::int AS n FROM bib_espacios e LEFT JOIN bib_nodos n ON n.espacio = e.slug AND n.borrado_en IS NULL WHERE e.tipo = 'proyecto' GROUP BY 1, 2 ORDER BY 3`);
+  const [p] = await query<any>(`SELECT count(*)::int AS n FROM bib_propuestas WHERE estado = 'pendiente'`);
+  return [
+    `🧠 *La memoria del equipo — últimos ${dias} días*`,
+    `${t.total} recuerdos (${t.nuevos} nuevos, ${t.personales} de tu vida, ${t.lecciones} lecciones).`,
+    lecciones.length ? `\n*Lo que aprendimos*\n${lecciones.map((l) => `• ${l.titulo}${l.espacio !== "general" ? ` (${l.espacio.replace("proyecto:", "")})` : ""}`).join("\n")}` : "",
+    usados.length ? `\n*Lo que más se usó*\n${usados.map((u) => `• ${u.titulo} (${u.usos})`).join("\n")}` : "",
+    viejos.length ? `\n*Importante pero viejo* (¿sigue igual?)\n${viejos.map((v) => `• ${v.titulo} (${new Date(v.actualizado_en).toLocaleDateString("es-CO", { month: "short", year: "numeric" })})`).join("\n")}` : "",
+    carpetas.length ? `\n*Carpetas de proyectos*\n${carpetas.map((c) => `• ${c.nombre}: ${c.n} recuerdos${c.n < 15 ? " ← casi vacía: mándame sus documentos" : ""}`).join("\n")}` : "",
+    p.n ? `\nTengo ${p.n} pregunta(s) para ti (pídeme "preguntas de la memoria").` : "",
+  ].filter(Boolean).join("\n");
+}
+
+// ── Exportar una carpeta a PDF ───────────────────────────────────────────────
+export async function exportarCarpeta(carpeta: string, tema: string | undefined, agenteId: string | null): Promise<{ ok: boolean; nombre?: string; recuerdos?: number; enviado?: boolean; error?: string }> {
+  const { abrirResumen } = await import("./cifrado.js");
+  const [e] = await query<any>(`SELECT * FROM bib_espacios WHERE slug = $1`, [carpeta]);
+  if (!e) return { ok: false, error: `No existe la carpeta ${carpeta}.` };
+  const filas = tema
+    ? (await recordar(tema, { espacios: [carpeta], max: 60, incluirPrivado: carpeta === "personal", reforzar: false }))
+    : await query<any>(`SELECT * FROM bib_nodos WHERE espacio = $1 AND borrado_en IS NULL AND estado <> 'obsoleto' AND clase <> 'capacidad' AND NOT (etiquetas @> ARRAY['seccion']) ORDER BY importancia DESC, actualizado_en DESC LIMIT 300`, [carpeta]);
+  if (!filas.length) return { ok: false, error: "No hay nada que exportar." };
+  const ORDEN: [string, string][] = [["procedimiento", "Cómo se hace"], ["leccion", "Fallas conocidas y lecciones"], ["hecho", "Datos y decisiones"], ["persona", "Personas"], ["perfil", "Sobre Sebastián"], ["conocimiento", "Conocimiento"], ["episodio", "Lo que pasó"], ["resumen", "Documentos"]];
+  const secciones: { titulo: string; texto: string }[] = [];
+  for (const [clase, nombre] of ORDEN) {
+    const xs = filas.filter((f: any) => f.clase === clase); if (!xs.length) continue;
+    const lineas: string[] = [];
+    for (const x of xs) lineas.push(`**${x.titulo}**${x.clase === "episodio" && (x.ocurrio_en || x.actualizado_en) ? ` (${new Date(x.ocurrio_en || x.actualizado_en).toISOString().slice(0, 10)})` : ""}\n${(await abrirResumen(x)).slice(0, 1500)}`);
+    secciones.push({ titulo: nombre, texto: lineas.join("\n\n") });
+  }
+  const { crearInforme } = await import("./informes.js");
+  const r = await crearInforme({ titulo: `${e.nombre}${tema ? ` — ${tema}` : ""}`, resumen: e.resumen || e.descripcion || `Lo que el equipo sabe de ${e.nombre}.`, secciones, fuentes: [], autor: "Lara · memoria del equipo" }, { agenteId, caption: `🧠 ${e.nombre}${tema ? ` — ${tema}` : ""}` });
+  return { ok: true, nombre: r.nombre, recuerdos: filas.length, enviado: r.enviado };
 }
