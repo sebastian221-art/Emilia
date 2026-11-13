@@ -31,11 +31,18 @@ function hashing(texto: string): number[] {
   const n = Math.sqrt(v.reduce((a, b) => a + b * b, 0)) || 1; return v.map((x) => x / n);
 }
 
-export async function embed(texto: string): Promise<number[]> {
+/** Vector de una PREGUNTA (lo que se busca). */
+export async function embed(texto: string): Promise<number[]> { return vector(texto, "query"); }
+/** Vector de un TEXTO GUARDADO (un recuerdo, una ficha). e5 rinde mejor si se distinguen. */
+export async function embedDoc(texto: string): Promise<number[]> { return vector(texto, "passage"); }
+/** Con qué se hicieron los vectores: si cambia, Lara los rehace de noche. */
+export async function versionEmbeddings(): Promise<string> { return (await cargar()) ? `${MODELO}:v2` : "hashing:v1"; }
+
+async function vector(texto: string, rol: "query" | "passage"): Promise<number[]> {
   const p = await cargar();
   const t = texto.slice(0, 2000);
   if (!p) return hashing(t);
-  const out = await p((MODELO.includes("e5") ? "query: " : "") + t, { pooling: "mean", normalize: true });
+  const out = await p((MODELO.includes("e5") ? `${rol}: ` : "") + t, { pooling: "mean", normalize: true });
   return Array.from(out.data as Float32Array);
 }
 

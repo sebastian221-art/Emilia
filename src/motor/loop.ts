@@ -22,7 +22,6 @@ import { herramientasDeAgente, type Invocable } from "./herramientas.js";
 import { iniciarFlujo } from "./flujo.js";
 import { textoAprobacion, detalleAprobacion } from "./aprobacion-texto.js";
 import { historialParaModelo, resumirSiHaceFalta, extraerHechosSiHaceFalta } from "./memoria.js";
-import { memoriaParaPrompt } from "../dominio/memoria-lp.js";
 import { dentroDePresupuesto, registrarConsumo } from "./presupuesto.js";
 import { elegirModulos, definicionesActivas, esPseudoToolModulo, moduloDe, resumenModulos } from "./enrutador.js";
 import { cancelada } from "./cancelacion.js";
@@ -515,10 +514,18 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
     const pasos = await query<{ detalle: string; creado_en: string }>(`SELECT p.detalle, p.creado_en FROM pasos p JOIN ejecuciones e ON e.id=p.ejecucion_id WHERE e.conversacion_id=$1 AND p.tipo IN ('tool','aprobacion') AND p.creado_en > now() - interval '6 hours' ORDER BY p.creado_en DESC LIMIT 12`, [conv.id]).catch(() => [] as any);
     if (pasos.length) accionesRecientes = `=== ACCIONES REALES RECIENTES EN ESTA CONVERSACIÓN (hechos, no recuerdos; si el jefe pregunta "¿lo hiciste?" respondé con esto) ===\n${(pasos as any[]).reverse().map((p) => `${new Date(p.creado_en).toLocaleTimeString("es-CO")} ${String(p.detalle).slice(0, 220)}`).join("\n")}\n=== FIN ===`;
   }
-  const memoriaLp = (ag.memoria?.modo === "persistente") ? await memoriaParaPrompt(60) : "";
-  // Biblioteca compartida: lo que la red sabe sobre el pedido (por significado), con avisos de edad/duda.
-  let biblioteca = "";
-  try { const { contextoPara } = await import("./biblioteca.js"); if (mensajeUsuario.trim()) biblioteca = await contextoPara(mensajeUsuario.slice(0, 500), 4); } catch { /* sin biblioteca */ }
+  // Cerebro compartido: núcleo de quién es el jefe + lo que el equipo sabe y recuerda del pedido (con tope de tamaño).
+  let cerebro = "";
+  if ((ag.memoria?.modo || "por_sesion") !== "ninguna") {
+    try {
+      const { contextoCerebro } = await import("./cerebro.js");
+      const jefe = (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, "");
+      // ¿Atiende al jefe? Panel, su WhatsApp, o una delegación que viene de una conversación suya.
+      let esJefe = !conv || conv.canal === "panel" || (conv.canal === "whatsapp" && conv.contacto === jefe);
+      if (conv?.canal === "delegacion") { const [p] = await query<any>(`SELECT canal, contacto FROM conversaciones WHERE id::text = $1`, [conv.contacto]).catch(() => [] as any[]); esJefe = !p || p.canal === "panel" || p.contacto === jefe || p.canal === "delegacion"; }
+      cerebro = await contextoCerebro(mensajeUsuario, { espacios: ag.memoria?.espacios, personal: esJefe && ag.memoria?.personal !== false, presupuesto: ag.memoria?.presupuesto, agenteId: ag.id });
+    } catch (e: any) { console.warn("[cerebro]", e?.message || e); }
+  }
   const contexto = await contextoDeAgente(ag.id);
   // Primero lo ESTABLE (identidad, reglas, documentos) y después de la marca lo que cambia
   // en cada pedido: así Claude reutiliza el caché de la parte grande entre tareas.
@@ -527,9 +534,8 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
     contexto ? `=== CONTEXTO / DOCUMENTOS ===\n${contexto}\n=== FIN ===` : "",
   ].filter(Boolean).join("\n\n");
   const dinamico = [
-    memoriaLp ? `=== LO QUE SABÉS DE LARGO PLAZO (memoria persistente; usalo con naturalidad, sin recitarlo) ===\n${memoriaLp}\n=== FIN MEMORIA ===` : "",
     accionesRecientes,
-    biblioteca,
+    cerebro,
   ].filter(Boolean).join("\n\n");
   return dinamico ? `${estable}${MARCA_DINAMICO}${dinamico}` : estable;
 }

@@ -179,6 +179,8 @@ iniciarRegistro()
       await recuperarSesionesHuerfanas();
       // Iris: correo en tiempo real, recordatorios de la agenda y avisos guardados durante el silencio.
       import("./motor/iris-reloj.js").then((m) => m.iniciarIris()).catch((e) => console.warn("[iris]", e?.message || e));
+      // Cerebro compartido: pasar la memoria vieja (una vez) y completar vectores pendientes.
+      import("./motor/cerebro.js").then(async (c) => { const n = await c.migrarMemoriaVieja(); if (n) console.log(`[cerebro] ${n} recuerdo(s) migrados de la memoria vieja.`); await c.revectorizar(500); }).catch((e) => console.warn("[cerebro]", e?.message || e));
       await retomarFlujos();
       await retomarProcesos();
       iniciarReloj();

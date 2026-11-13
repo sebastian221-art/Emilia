@@ -6,7 +6,7 @@
 //  envejecer (debilita lo que nadie usa) → podar (propuestas al jefe).
 // ─────────────────────────────────────────────────────────────────────────────
 import { query } from "../db/cliente.js";
-import { embed, coseno } from "./embeddings.js";
+import { embedDoc, versionEmbeddings } from "./embeddings.js";
 
 export interface Nodo { id: string; slug: string; titulo: string; tipo: string; resumen: string; ficha: any; estado: string; confianza: number; fuerza: number; etiquetas: string[]; aprendido_por: string | null; verificado_por: string | null; usos: number; creado_en: string; actualizado_en: string; ultimo_uso_en: string | null }
 
@@ -24,15 +24,16 @@ export const entradasPendientes = (limite = 20) => query<any>(`SELECT e.*, a.nom
 export async function crearOActualizarNodo(p: { slug?: string; titulo: string; tipo?: string; resumen: string; ficha?: any; estado?: string; confianza?: number; etiquetas?: string[]; aprendidoPor?: string | null; verificadoPor?: string | null }): Promise<Nodo> {
   const slug = p.slug || slugDe(p.titulo);
   const texto = `${p.titulo}. ${p.resumen}. ${Object.values(p.ficha || {}).filter((v) => typeof v === "string").join(" ").slice(0, 1200)}`;
-  const vec = await embed(texto);
-  const [n] = await query<Nodo>(`INSERT INTO bib_nodos (slug, titulo, tipo, resumen, ficha, estado, confianza, etiquetas, aprendido_por, verificado_por, embedding)
-    VALUES ($1,$2,COALESCE($3,'concepto'),$4,$5,COALESCE($6,'probable'),COALESCE($7,0.6),$8,$9,$10,$11)
+  const vec = await embedDoc(texto), version = await versionEmbeddings();
+  const { hayPgvector } = await import("./cerebro.js"); const conVec = await hayPgvector();
+  const [n] = await query<Nodo>(`INSERT INTO bib_nodos (slug, titulo, tipo, resumen, ficha, estado, confianza, etiquetas, aprendido_por, verificado_por, embedding, emb_version${conVec ? ", vec" : ""})
+    VALUES ($1,$2,COALESCE($3,'concepto'),$4,$5,COALESCE($6,'probable'),COALESCE($7,0.6),$8,$9,$10,$11,$12${conVec ? ",$13::vector" : ""})
     ON CONFLICT (slug) DO UPDATE SET titulo=EXCLUDED.titulo, tipo=COALESCE($3, bib_nodos.tipo), resumen=EXCLUDED.resumen,
       ficha = bib_nodos.ficha || EXCLUDED.ficha, estado=COALESCE($6, bib_nodos.estado), confianza=COALESCE($7, bib_nodos.confianza),
       etiquetas = (SELECT ARRAY(SELECT DISTINCT unnest(bib_nodos.etiquetas || EXCLUDED.etiquetas))), verificado_por=COALESCE(EXCLUDED.verificado_por, bib_nodos.verificado_por),
-      embedding=EXCLUDED.embedding, actualizado_en=now(), borrado_en=NULL
+      embedding=EXCLUDED.embedding, emb_version=EXCLUDED.emb_version, actualizado_en=now(), borrado_en=NULL${conVec ? ", vec=EXCLUDED.vec" : ""}
     RETURNING *`,
-    [slug, p.titulo, p.tipo || null, p.resumen, JSON.stringify(p.ficha || {}), p.estado ?? null, p.confianza == null ? null : Number(p.confianza), p.etiquetas || [], p.aprendidoPor ?? null, p.verificadoPor ?? null, vec]);
+    [slug, p.titulo, p.tipo || null, p.resumen, JSON.stringify(p.ficha || {}), p.estado ?? null, p.confianza == null ? null : Number(p.confianza), p.etiquetas || [], p.aprendidoPor ?? null, p.verificadoPor ?? null, vec, version, ...(conVec ? [`[${vec.join(",")}]`] : [])]);
   return n;
 }
 export const nodoPorSlug = async (slug: string) => (await query<Nodo>(`SELECT * FROM bib_nodos WHERE slug=$1 AND borrado_en IS NULL`, [slug]))[0];
@@ -70,15 +71,14 @@ export async function recalcularConfianza(nodoId: string) {
 
 // ── Consulta: por significado + vecinos ──
 export async function buscarSemantico(texto: string, limite = 5, filtro: { tipo?: string; etiqueta?: string } = {}): Promise<(Nodo & { score: number })[]> {
-  const vec = await embed(texto);
-  const filas = await query<Nodo & { embedding: number[] }>(`SELECT * FROM bib_nodos WHERE borrado_en IS NULL AND embedding IS NOT NULL ${filtro.tipo ? "AND tipo=$1" : ""} ${filtro.etiqueta ? `AND $${filtro.tipo ? 2 : 1} = ANY(etiquetas)` : ""}`, [filtro.tipo, filtro.etiqueta].filter(Boolean));
-  const q = texto.toLowerCase();
-  return filas.map((f) => {
-    let s = coseno(vec, f.embedding as any);
-    if (f.titulo.toLowerCase().includes(q) || q.includes(f.titulo.toLowerCase())) s += 0.25;   // coincidencia literal cuenta
-    s = s * (0.7 + 0.3 * Math.min(1, f.fuerza)) * (0.6 + 0.4 * f.confianza);
-    const { embedding: _e, ...resto } = f as any; return { ...resto, score: +s.toFixed(3) };
-  }).sort((a, b) => b.score - a.score).slice(0, limite);
+  // Usa el cerebro (significado + palabras + vecinos); nunca devuelve lo privado.
+  const { recordar } = await import("./cerebro.js");
+  let xs = await recordar(texto, { max: limite * 3, incluirPrivado: false, reforzar: false });
+  if (filtro.tipo) xs = xs.filter((x) => x.tipo === filtro.tipo);
+  if (filtro.etiqueta) xs = xs.filter((x) => x.etiquetas?.includes(filtro.etiqueta!));
+  const top = xs.slice(0, limite);
+  const max = top[0]?.score || 1;
+  return top.map((x) => ({ ...(x as any), score: +(0.4 + 0.6 * (x.score || 0) / max).toFixed(3) }));
 }
 export async function vecinos(nodoId: string, limite = 12) {
   return query<any>(`SELECT c.relacion, c.peso, c.nota, n.id, n.slug, n.titulo, n.tipo, n.estado, n.confianza, 'sale' AS direccion FROM bib_conexiones c JOIN bib_nodos n ON n.id=c.destino_id WHERE c.origen_id=$1 AND n.borrado_en IS NULL
