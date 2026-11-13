@@ -62,3 +62,16 @@ CREATE TABLE IF NOT EXISTS radar_vistos (
   visto_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS radar_vistos_fecha ON radar_vistos (visto_en DESC);
+-- Herramientas de GitHub que Soga encontró y auditó (y qué pasó con ellas).
+CREATE TABLE IF NOT EXISTS herramientas_evaluadas (
+  repo         TEXT PRIMARY KEY,
+  url          TEXT,
+  necesidad    TEXT,
+  veredicto    TEXT NOT NULL,          -- recomendable | con_cuidado | no_recomendable
+  puntaje      INT,                    -- 0..100
+  hallazgos    JSONB NOT NULL DEFAULT '[]',
+  resumen      TEXT,
+  integracion  TEXT,
+  estado       TEXT NOT NULL DEFAULT 'evaluada',  -- evaluada | probando | probada | integrada | descartada
+  evaluado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
