@@ -23,7 +23,7 @@ import { costoClaude, registrarConsumo } from "./presupuesto.js";
 import { cancelada } from "./cancelacion.js";
 import { pedirAprobacionYEsperar, conversacionDelJefe } from "./permisos-codigo.js";
 import { ControladorWindows, limpiarSesionesViejas, type Controlador, type Inspeccion } from "./pantalla.js";
-import { decidirAccion, decidirComando, esTerminal, ventanaPermitida, normalizarPerfil, PERFIL_GENERAL, PERFIL_HOSPITAL, type PerfilPc } from "./permisos-pc.js";
+import { decidirAccion, decidirComando, esTerminal, ventanaPermitida, normalizarPerfil, PERFIL_GENERAL, PERFIL_HOSPITAL, PERFIL_WHATSAPP_LECTURA, PERFIL_WHATSAPP_RESPONDER, type PerfilPc } from "./permisos-pc.js";
 
 export const DIR_SESIONES_PC = path.join(LAB_DIR, "pc-sesiones");
 const MAX_ANCHO = () => Number(process.env.COMPUTER_USE_ANCHO) || 1366;
@@ -38,6 +38,8 @@ export async function obtenerPerfil(nombre = "general"): Promise<PerfilPc> {
   if (f) return normalizarPerfil({ ...f.config, nombre });
   if (nombre === PERFIL_GENERAL.nombre) return PERFIL_GENERAL;
   if (nombre === PERFIL_HOSPITAL.nombre) return PERFIL_HOSPITAL;
+  if (nombre === PERFIL_WHATSAPP_LECTURA.nombre) return PERFIL_WHATSAPP_LECTURA;
+  if (nombre === PERFIL_WHATSAPP_RESPONDER.nombre) return PERFIL_WHATSAPP_RESPONDER;
   throw new Error(`No existe el perfil "${nombre}" (pc_perfiles para ver los que hay).`);
 }
 export async function listarPerfiles(): Promise<PerfilPc[]> {
@@ -88,7 +90,7 @@ CÓMO TRABAJAR
 
 REGLAS DURAS (el sistema las hace cumplir; si una acción se rechaza, lee el motivo y adáptate, no insistas)
 - Perfil "${perfil.nombre}": ${perfil.descripcion}
-- Apps permitidas: ${perfil.apps.join(", ")}.${perfil.apps_bloqueadas.length ? ` Bloqueadas: ${perfil.apps_bloqueadas.join(", ")}.` : ""}
+- Apps permitidas: ${perfil.apps.join(", ")}.${perfil.apps_bloqueadas.length ? ` Bloqueadas: ${perfil.apps_bloqueadas.join(", ")}.` : ""}${perfil.escritura === "nada" ? "\n- SOLO LECTURA: no escribes nada, no das Enter, no reaccionas, no envías, no borras. Solo clics para abrir/navegar, scroll y zoom para leer." : perfil.escritura === "solo_lista" ? `\n- SOLO puedes escribir (acción type) estos textos EXACTOS, nada más: ${(perfil.textos_permitidos || []).map((t) => JSON.stringify(t)).join(" | ")}.` : ""}
 - Terminales y escritorios remotos (${perfil.terminales.slice(0, 8).join(", ")}…): NO escribes libre, NO das Enter, NO pegas, NO clic derecho. Comandos SOLO con terminal_comando (uno por vez); texto sin Enter con escribir_texto_remoto; contraseñas SOLO con escribir_credencial${perfil.credenciales.length ? ` (autorizadas: ${perfil.credenciales.join(", ")})` : " (este perfil no tiene credenciales autorizadas)"}. Nunca escribas una contraseña tú ni la pidas.
 - Comandos: ${perfil.comandos === "solo_lectura" ? "SOLO LECTURA. Nada que cambie, borre, reinicie o instale. Si el objetivo exige un cambio, NO lo hagas: prepara el comando exacto y el porqué, y termina con pedir_ayuda proponiéndoselo al jefe." : perfil.comandos === "aprobar_todos" ? "cada comando lo aprueba el jefe." : "los de lectura pasan; los que cambian o borran algo los aprueba el jefe; los catastróficos nunca."}${perfil.aprobar_comandos ? " Cada comando espera el OK del jefe por WhatsApp: pide los necesarios, bien pensados, con un motivo claro." : ""}
 - Antes de algo con consecuencias fuera de lo pedido (enviar, borrar, comprar, aceptar términos, cambiar configuración) usa pedir_aprobacion.
@@ -111,6 +113,8 @@ export interface OpcionesUsoPc {
   objetivo: string; perfil?: string; modelo?: string; maxPasos?: number;
   agenteId?: string | null; conversacionId?: string | null;
   onAvance?: (texto: string) => Promise<void> | void;
+  /** Textos exactos que se pueden escribir (perfiles con escritura = solo_lista). Los marcados como únicos, una sola vez. */
+  textosPermitidos?: string[]; textosUnicos?: string[];
   controlador?: Controlador;
   llamarModelo?: (req: any) => Promise<any>;
 }
@@ -120,7 +124,8 @@ interface Salida { contenido: string | Bloque[]; error?: boolean; fin?: { estado
 
 // ── Sesión ───────────────────────────────────────────────────────────────────
 export async function usarComputador(op: OpcionesUsoPc): Promise<ResultadoUsoPc> {
-  const perfil = await obtenerPerfil(op.perfil || "general");
+  const perfil: PerfilPc = { ...(await obtenerPerfil(op.perfil || "general")), textos_permitidos: op.textosPermitidos || [] };
+  const yaEscritos = new Set<string>();
   const modelo = resolverModeloClaude(op.modelo || perfil.modelo || process.env.COMPUTER_USE_MODELO || "claude:sonnet");
   const ctl = op.controlador || new ControladorWindows();
   const maxPasos = Math.min(op.maxPasos || perfil.max_pasos, 400);
@@ -250,6 +255,7 @@ export async function usarComputador(op: OpcionesUsoPc): Promise<ResultadoUsoPc>
       }
       case "type": {
         const texto = String(input?.text ?? "");
+        if (op.textosUnicos?.includes(texto.replace(/\n$/, ""))) { if (yaEscritos.has(texto)) throw new Error("Rechazado por las reglas: ese mensaje ya se escribió una vez en esta sesión. No se repite."); yaEscritos.add(texto); }
         await ctl.escribir(texto, texto.length > 60 && !/\n/.test(texto) ? "pegar" : "teclear"); return { contenido: "OK" };
       }
       case "key": await ctl.teclas(String(input?.text || ""), Math.min(100, Math.max(1, Number(input?.repeat) || 1))); return { contenido: "OK" };

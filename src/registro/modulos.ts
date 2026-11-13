@@ -28,6 +28,7 @@ export const MODULOS: ModuloCapacidades[] = [
   { ruta: "tools/contactos.ts",    exporta: "toolsContactos",    tipo: "tools" },
   { ruta: "tools/mensajes.ts",     exporta: "toolsMensajes",     tipo: "tools" },
   { ruta: "tools/gestiones.ts",    exporta: "toolsGestiones",    tipo: "tools" },
+  { ruta: "tools/whatsapp-personal.ts", exporta: "toolsWhatsappPersonal", tipo: "tools" },
   { ruta: "tools/jelcom.ts",       exporta: "toolsJelcom",       tipo: "tools" },
   { ruta: "tools/codigo.ts",       exporta: "toolsCodigo",       tipo: "tools" },
   { ruta: "tools/publicar.ts",     exporta: "toolsPublicar",     tipo: "tools" },

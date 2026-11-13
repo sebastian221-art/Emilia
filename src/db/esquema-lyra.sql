@@ -83,3 +83,29 @@ CREATE TABLE IF NOT EXISTS gestiones (
   actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_gest_activas ON gestiones (numero) WHERE estado IN ('activa','esperando_jefe');
+
+-- WhatsApp personal del jefe (leído en su WhatsApp de escritorio): cada revisión y lo que salió de cada chat.
+CREATE TABLE IF NOT EXISTS wa_personal_revisiones (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  origen      TEXT NOT NULL DEFAULT 'jefe',          -- jefe | programada
+  estado      TEXT NOT NULL DEFAULT 'hecha',
+  informe     TEXT,
+  sesion_id   UUID,
+  creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS wa_personal_items (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  revision_id  UUID NOT NULL REFERENCES wa_personal_revisiones(id) ON DELETE CASCADE,
+  n            INT NOT NULL,
+  chat         TEXT NOT NULL,
+  es_grupo     BOOLEAN NOT NULL DEFAULT false,
+  no_leidos    INT,
+  resumen      TEXT,
+  me_mencionan BOOLEAN NOT NULL DEFAULT false,
+  urgencia     TEXT,
+  sugerencia   TEXT,                                  -- ignorar | responder | agendar | leer
+  borrador     TEXT,
+  evento       JSONB,
+  estado       TEXT NOT NULL DEFAULT 'pendiente',     -- pendiente | respondido | ignorado | agendado | fallo
+  creado_en    TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -40,6 +40,10 @@ export interface PerfilPc {
   presupuesto_usd: number;
   modelo?: string;
   notas: string;
+  /** Escritura en apps normales: libre (por defecto), nada (solo mirar: WhatsApp en lectura) o solo_lista (solo textos ya aprobados). */
+  escritura?: "libre" | "nada" | "solo_lista";
+  /** En tiempo de sesión (no se guarda): los textos exactos que se pueden escribir con escritura = solo_lista. */
+  textos_permitidos?: string[];
 }
 
 export const TERMINALES_DEFECTO = ["putty", "kitty", "anydesk", "mstsc", "teamviewer", "rustdesk", "vncviewer", "tvnviewer", "mobaxterm", "securecrt", "windowsterminal", "cmd", "powershell", "pwsh", "conhost", "openconsole", "wsl", "bash", "mintty", "winscp"];
@@ -63,13 +67,14 @@ export const PERFIL_HOSPITAL: PerfilPc = {
 };
 
 export function normalizarPerfil(p: Partial<PerfilPc> & { nombre: string }): PerfilPc {
-  const base = p.nombre === PERFIL_HOSPITAL.nombre ? PERFIL_HOSPITAL : PERFIL_GENERAL;
+  const base = p.nombre === PERFIL_HOSPITAL.nombre ? PERFIL_HOSPITAL : p.nombre === PERFIL_WHATSAPP_LECTURA.nombre ? PERFIL_WHATSAPP_LECTURA : p.nombre === PERFIL_WHATSAPP_RESPONDER.nombre ? PERFIL_WHATSAPP_RESPONDER : PERFIL_GENERAL;
   const lista = (x: unknown, d: string[]) => (Array.isArray(x) ? x.map((s) => String(s).toLowerCase().replace(/\.exe$/, "").trim()).filter(Boolean) : d);
   return {
     ...base, ...p,
     apps: lista(p.apps, base.apps), apps_bloqueadas: lista(p.apps_bloqueadas, base.apps_bloqueadas),
     terminales: lista(p.terminales, base.terminales), credenciales: Array.isArray(p.credenciales) ? p.credenciales.map(String) : base.credenciales,
     comandos: (["riesgo", "aprobar_todos", "solo_lectura"] as const).includes(p.comandos as any) ? p.comandos! : base.comandos,
+    escritura: (["libre", "nada", "solo_lista"] as const).includes(p.escritura as any) ? p.escritura : base.escritura,
   };
 }
 
@@ -81,6 +86,23 @@ const si = (motivo = ""): Decision => ({ permitir: true, motivo });
 const no = (motivo: string): Decision => ({ permitir: false, motivo });
 
 /** ¿Se puede actuar sobre esta ventana con este perfil? */
+export const PERFIL_WHATSAPP_LECTURA: PerfilPc = {
+  nombre: "whatsapp_lectura",
+  descripcion: "Tu WhatsApp de escritorio, SOLO para leer: abrir chats y leer. No escribe, no envía, no borra, no sale de grupos.",
+  apps: ["whatsapp"], apps_bloqueadas: [], terminales: [], comandos: "solo_lectura", aprobar_comandos: true, aprobar_texto_remoto: true,
+  enviar_capturas: false, datos_sensibles: false, credenciales: [], aprobar_inicio: false,
+  max_pasos: 90, max_minutos: 12, presupuesto_usd: 1.5, escritura: "nada",
+  notas: "Son chats personales del jefe: lo que leas es solo para su informe. No reacciones, no respondas, no abras enlaces, no descargues archivos, no toques llamadas.",
+};
+export const PERFIL_WHATSAPP_RESPONDER: PerfilPc = {
+  nombre: "whatsapp_responder",
+  descripcion: "Tu WhatsApp de escritorio para mandar UNA respuesta ya aprobada por ti: solo puede escribir el texto aprobado (y el nombre del chat para buscarlo).",
+  apps: ["whatsapp"], apps_bloqueadas: [], terminales: [], comandos: "solo_lectura", aprobar_comandos: true, aprobar_texto_remoto: true,
+  enviar_capturas: false, datos_sensibles: false, credenciales: [], aprobar_inicio: false,
+  max_pasos: 40, max_minutos: 6, presupuesto_usd: 0.8, escritura: "solo_lista",
+  notas: "Verifica en el encabezado del chat que es el chat correcto ANTES de escribir el mensaje. Escribe el mensaje UNA sola vez. No toques nada más.",
+};
+
 export function ventanaPermitida(proceso: string, perfil: PerfilPc): Decision {
   if (!proceso) return no("No sé qué ventana es (¿el escritorio seguro o una ventana de administrador?).");
   if (coincide(proceso, perfil.apps_bloqueadas)) return no(`La app "${proceso}" está bloqueada en el perfil ${perfil.nombre}.`);
@@ -108,6 +130,19 @@ export function decidirAccion(accion: string, input: any, destino: { proceso: st
   if (!destino) return no("No pude saber qué ventana recibiría la acción.");
   const v = ventanaPermitida(destino.proceso, perfil);
   if (!v.permitir) return v;
+  // Perfiles de solo mirar (WhatsApp en lectura) o de escribir solo lo aprobado.
+  if (perfil.escritura === "nada" || perfil.escritura === "solo_lista") {
+    const combo = String(input?.text || "").replace(/\s/g, "");
+    if (accion === "hold_key") return no("En este perfil no se mantienen teclas presionadas.");
+    if (accion === "key" && PEGAR.test(combo)) return no("En este perfil no se pega nada.");
+    if (perfil.escritura === "nada") {
+      if (accion === "type") return no(`El perfil ${perfil.nombre} es SOLO de lectura: no se escribe nada.`);
+      if (accion === "key" && (ENTER.test(combo) || /^.$/.test(combo) || /^shift\+.$/i.test(combo))) return no(`El perfil ${perfil.nombre} es SOLO de lectura: ni Enter ni letras.`);
+    } else if (accion === "type") {
+      const t = String(input?.text ?? "");
+      if (!(perfil.textos_permitidos || []).some((x) => x === t || x === t.replace(/\n$/, ""))) return no("Solo puedes escribir el texto aprobado por el jefe (exacto) o el nombre del chat. Nada más.");
+    }
+  }
   if (esTerminal(destino.proceso, perfil)) {
     const combo = String(input?.text || "").replace(/\s/g, "");
     if (accion === "type") return no(`En terminales y escritorios remotos (${destino.proceso}) no se escribe libre: usa terminal_comando para un comando (se valida y te piden OK) o escribir_texto_remoto para texto sin Enter.`);

@@ -239,6 +239,10 @@ async function procesarEntrante(m: any) {
         const { respuestaRapidaGestion } = await import("../motor/gestiones.js");
         const rg = await respuestaRapidaGestion(texto, convRaiz.id, apPend ? new Date(apPend.creado_en as any) : undefined);
         if (rg !== null) { if (rg) await entregarTexto(conv, rg); return; }
+        // ── atajos sobre el informe de su WhatsApp personal: "responde 2", "ignora 3", "agenda 1" ──
+        const { atajoWhatsappPersonal } = await import("../motor/whatsapp-personal.js");
+        const rw = await atajoWhatsappPersonal(texto, convRaiz.id, apPend ? new Date(apPend.creado_en as any) : undefined);
+        if (rw) { await entregarTexto(conv, rw); return; }
       }
     }
     if (apPend && (apruebaTxt || rechazaTxt)) {

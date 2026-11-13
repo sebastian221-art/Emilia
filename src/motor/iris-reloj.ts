@@ -24,7 +24,8 @@ const tareas: Tarea[] = [
   { nombre: "radar", fn: () => radarSiToca() },               // Soga: la corrida va en segundo plano
   { nombre: "sueno", fn: () => suenoSiToca() },               // Lara: consolidación nocturna de la memoria
   { nombre: "lyra", fn: () => import("./terceros.js").then((t) => t.revisarTerceros()) },
-  { nombre: "gestiones", fn: () => import("./gestiones.js").then((g) => g.revisarGestiones()) },   // avisos de terceros pendientes y seguimientos
+  { nombre: "gestiones", fn: () => import("./gestiones.js").then((g) => g.revisarGestiones()) },
+  { nombre: "wa_personal", fn: () => import("./whatsapp-personal.js").then((w) => w.revisionProgramadaSiToca()) },   // Lyra: revisión programada de tu WhatsApp   // avisos de terceros pendientes y seguimientos
 ];
 /** Otros módulos de Iris (vigilancia, resúmenes, Any) se cuelgan del mismo reloj. */
 export function cadaMinuto(nombre: string, fn: () => Promise<unknown>) { tareas.push({ nombre, fn }); }
