@@ -262,6 +262,13 @@ export async function revectorizar(max = 200): Promise<number> {
   return xs.length;
 }
 
+/** Rehace el vector de un nodo (después de corregir su contenido). */
+export async function revectorizarNodo(id: string) {
+  const [x] = await query<any>(`SELECT titulo, resumen FROM bib_nodos WHERE id = $1`, [id]); if (!x) return;
+  const v = await embedDoc(`${x.titulo}. ${x.resumen}`), version = await versionEmbeddings(), conVec = await hayPgvector();
+  await query(`UPDATE bib_nodos SET embedding = $2, emb_version = $3${conVec ? ", vec = $4::vector" : ""} WHERE id = $1`, [id, v, version, ...(conVec ? [lit(v)] : [])]);
+}
+
 /** Pasa la memoria vieja (memoria_largo_plazo) al cerebro, una sola vez. */
 export async function migrarMemoriaVieja(): Promise<number> {
   const [hecho] = await query(`SELECT 1 FROM iris_config WHERE clave = 'cerebro_migrado'`).catch(() => [] as any[]);

@@ -21,7 +21,7 @@ import { ejecutarTool, ejecutarSkill, crearContexto } from "./ejecutor.js";
 import { herramientasDeAgente, type Invocable } from "./herramientas.js";
 import { iniciarFlujo } from "./flujo.js";
 import { textoAprobacion, detalleAprobacion } from "./aprobacion-texto.js";
-import { historialParaModelo, resumirSiHaceFalta, extraerHechosSiHaceFalta } from "./memoria.js";
+import { historialParaModelo, resumirSiHaceFalta } from "./memoria.js";
 import { dentroDePresupuesto, registrarConsumo } from "./presupuesto.js";
 import { elegirModulos, definicionesActivas, esPseudoToolModulo, moduloDe, resumenModulos } from "./enrutador.js";
 import { cancelada } from "./cancelacion.js";
@@ -159,8 +159,11 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   const r = await bucle(estado, tools, invocables, ctx);
   if (conv && r.estado !== "esperando_aprobacion") {
     resumirSiHaceFalta(conv, ag.memoria).catch(() => {});
-    const esJefe = conv.canal === "panel" || (conv.canal === "whatsapp" && conv.contacto === (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, ""));
-    extraerHechosSiHaceFalta(conv, ag.memoria, esJefe).catch(() => {});
+    // Memoria: Lara guarda lo que vale la pena cuando la conversación hace una pausa (o ya van varios mensajes).
+    if ((ag.memoria?.modo || "por_sesion") !== "ninguna") {
+      import("../tools/memoria.js").then((m) => m.conversacionDelJefe(conv.id))
+        .then(async (esJefe) => (await import("./captura.js")).programarCaptura(conv.id, esJefe)).catch(() => {});
+    }
   }
   return r;
 }
