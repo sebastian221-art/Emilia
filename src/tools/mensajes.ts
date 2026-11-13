@@ -86,4 +86,38 @@ export const mensajeEstado: DefTool = {
   },
 };
 
-export const toolsMensajes: DefTool[] = [mensajeEnviar, mensajeEstado];
+export const mensajeRecibidos: DefTool = {
+  nombre: "mensaje_recibidos", modulo: MODULO,
+  descripcion: "Lo que le han escrito terceros al número de Emilia (últimas horas o de un contacto), con si ya se le avisó al jefe y la respuesta propuesta pendiente.",
+  parametros: { type: "object", properties: { de: { type: "string", description: "Nombre, apodo o número." }, horas: { type: "number", minimum: 1, maximum: 720 } } },
+  riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 15,
+  async ejecutar(a) {
+    let filtro: string | null = null;
+    if (a.de) { const d = await resolverDestino(a.de); filtro = d.tipo === "contacto" ? d.contacto.numero : d.tipo === "numero" ? d.numero : null; if (!filtro) return { ok: false, error: `No sé quién es "${a.de}".` }; }
+    const xs = await query<any>(`SELECT t.*, c.nombre FROM mensajes_terceros t LEFT JOIN contactos c ON c.id = t.contacto_id
+      WHERE t.creado_en > now() - make_interval(hours => $1) AND ($2::text IS NULL OR right(t.numero, 10) = right($2, 10)) ORDER BY t.creado_en DESC LIMIT 40`, [Math.round(a.horas ?? 24), filtro]);
+    const ps = await query<any>(`SELECT p.*, c.nombre FROM lyra_propuestas p LEFT JOIN contactos c ON c.id = p.contacto_id WHERE p.estado = 'pendiente' ORDER BY creado_en DESC`);
+    if (!xs.length && !ps.length) return { ok: true, datos: [], resumen: "Nadie ha escrito en ese tiempo." };
+    const f = (t: string) => new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }).format(new Date(t));
+    return { ok: true, datos: { recibidos: xs, propuestas: ps }, resumen: [...xs.map((m) => `${f(m.creado_en)} ${m.nombre || m.numero}: ${String(m.texto).slice(0, 140)}`), ...ps.map((p) => `💡 Respuesta propuesta para ${p.nombre || p.numero}: «${String(p.borrador).slice(0, 200)}»`)].join("\n") };
+  },
+};
+
+export const mensajeConfigurar: DefTool = {
+  nombre: "mensaje_configurar", modulo: MODULO,
+  descripcion: "Cómo atiende Lyra a los terceros que escriben al número de Emilia: terceros = avisar (te avisa con una respuesta propuesta; por defecto), agente (el agente de WhatsApp les contesta solo, como antes) o ignorar. autorespuesta = lo que se le contesta una vez a un número desconocido (\"\" para no contestar nada).",
+  parametros: { type: "object", properties: { terceros: { type: "string", enum: ["avisar", "agente", "ignorar"] }, autorespuesta: { type: "string", maxLength: 500 } } },
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 15,
+  async ejecutar(a) {
+    const { guardarConfigIris } = await import("../motor/avisos.js");
+    const { configLyra } = await import("../motor/terceros.js");
+    const cambios: any = {};
+    if (a.terceros) cambios.lyra_terceros = a.terceros;
+    if (typeof a.autorespuesta === "string") cambios.lyra_autorespuesta = a.autorespuesta;
+    if (Object.keys(cambios).length) await guardarConfigIris(cambios);
+    const c = await configLyra();
+    return { ok: true, datos: c, resumen: `Terceros: ${c.terceros === "avisar" ? "te aviso con una respuesta propuesta" : c.terceros === "agente" ? "el agente de WhatsApp les contesta" : "se ignoran"}. Desconocidos: ${c.autorespuesta.trim() ? `les respondo «${c.autorespuesta}»` : "no les respondo nada"}.` };
+  },
+};
+
+export const toolsMensajes: DefTool[] = [mensajeEnviar, mensajeEstado, mensajeRecibidos, mensajeConfigurar];

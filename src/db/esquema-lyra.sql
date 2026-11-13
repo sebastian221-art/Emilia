@@ -37,3 +37,25 @@ CREATE TABLE IF NOT EXISTS mensajes_salientes (
   actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_msal_numero ON mensajes_salientes (numero, creado_en DESC);
+
+-- Lo que le escriben al número de Emilia personas que no son el jefe (para avisarle agrupado y proponer respuesta).
+CREATE TABLE IF NOT EXISTS mensajes_terceros (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero        TEXT NOT NULL,
+  contacto_id   UUID REFERENCES contactos(id) ON DELETE SET NULL,
+  texto         TEXT NOT NULL,
+  saliente_id   UUID REFERENCES mensajes_salientes(id) ON DELETE SET NULL,   -- si responde a algo que Lyra mandó
+  avisado_en    TIMESTAMPTZ,
+  creado_en     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mter_pend ON mensajes_terceros (numero, creado_en) WHERE avisado_en IS NULL;
+
+-- Respuesta que Lyra le propuso al jefe: "envíalo" la manda tal cual (él vio el texto exacto y a quién va).
+CREATE TABLE IF NOT EXISTS lyra_propuestas (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero        TEXT NOT NULL,
+  contacto_id   UUID REFERENCES contactos(id) ON DELETE SET NULL,
+  borrador      TEXT NOT NULL,
+  estado        TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','enviada','ignorada','vencida')),
+  creado_en     TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -87,7 +87,7 @@ export const describir = (c: Contacto) => `${c.nombre}${c.relacion ? ` (${c.rela
 
 export interface Envio { ok: boolean; id?: string; error?: string; viaPlantilla?: boolean; salienteId?: string }
 /** Manda de verdad (el permiso ya se resolvió antes: OK del jefe o contacto libre) y lo registra. */
-export async function enviarA(numero: string, contenido: { texto?: string; archivoId?: string; audio?: { buffer: Buffer; mime: string } }, op: { contacto?: Contacto | null; conversacionId?: string | null; gestionId?: string | null; seguimientoHoras?: number; seguimiento?: "recordarle" | "avisarme" } = {}): Promise<Envio> {
+export async function enviarA(numero: string, contenido: { texto?: string; archivoId?: string; audio?: { buffer: Buffer; mime: string } }, op: { contacto?: Contacto | null; conversacionId?: string | null; gestionId?: string | null; seguimientoHoras?: number; seguimiento?: "recordarle" | "avisarme"; tipo?: string } = {}): Promise<Envio> {
   const W = await import("../whatsapp/enviar.js");
   const plantilla = process.env.WHATSAPP_PLANTILLA_TERCEROS || process.env.WHATSAPP_PLANTILLA_AVISO || "recordatorio_emilia";
   let r: { ok: boolean; id?: string; error?: string; viaPlantilla?: boolean } = { ok: false, error: "Nada que enviar." };
@@ -103,7 +103,7 @@ export async function enviarA(numero: string, contenido: { texto?: string; archi
   } else if (contenido.texto) r = await W.enviarTextoWhatsapp(numero, contenido.texto, { plantilla });
   if (!r.ok) return { ok: false, error: r.error };
   const [s] = await query<{ id: string }>(`INSERT INTO mensajes_salientes (contacto_id, numero, tipo, texto, wamid, conversacion_id, gestion_id, seguimiento_en, seguimiento) VALUES ($1,$2,$3,$4,$5,$6,$7, CASE WHEN $8::float > 0 THEN now() + make_interval(secs => $8::float * 3600) END, $9) RETURNING id`,
-    [op.contacto?.id ?? null, numero, r.viaPlantilla ? "plantilla" : tipo, contenido.texto ?? null, r.id ?? null, op.conversacionId ?? null, op.gestionId ?? null, op.seguimientoHoras ?? 0, op.seguimientoHoras ? op.seguimiento || "avisarme" : null]);
+    [op.contacto?.id ?? null, numero, op.tipo || (r.viaPlantilla ? "plantilla" : tipo), contenido.texto ?? null, r.id ?? null, op.conversacionId ?? null, op.gestionId ?? null, op.seguimientoHoras ?? 0, op.seguimientoHoras ? op.seguimiento || "avisarme" : null]);
   if (op.contacto) await query(`UPDATE contactos SET ultimo_contacto = now() WHERE id = $1`, [op.contacto.id]);
   return { ok: true, id: r.id, viaPlantilla: r.viaPlantilla, salienteId: s.id };
 }
