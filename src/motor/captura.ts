@@ -88,14 +88,21 @@ Hoy es ${hoy}. Convierte fechas relativas ("el jueves", "mañana") a AAAA-MM-DD.
       const g = await guardarRecuerdo({ titulo: String(m.titulo).slice(0, 120), contenido: String(m.contenido), clase, espacio: carpeta, importancia: Math.max(0, Math.min(1, Number(m.importancia) || 0.5)),
         ocurrioEn: m.cuando || null, vigenteHasta: m.vigente_hasta || null, confianza: 0.85, origenRef: `conversacion:${convId}`, agenteId: conv.agente_id, etiquetas: ["captura"] });
       res.guardados.push({ titulo: g.nodo.titulo, clase, carpeta, accion: g.accion });
+      const { conectarPersonas } = await import("./cerebro.js");
+      await conectarPersonas(g.nodo.id, `${m.titulo} ${m.contenido}`).catch(() => 0);
     } catch (e: any) { console.warn("[captura] no pude guardar:", e?.message || e); }
   }
   for (const c of r?.correcciones || []) {
-    const [n] = await query<any>(`SELECT id, titulo, resumen, ficha, espacio FROM bib_nodos WHERE slug = $1 AND borrado_en IS NULL`, [c.ref]);
+    const [n] = await query<any>(`SELECT id, titulo, resumen, cifrado, ficha, espacio, privado FROM bib_nodos WHERE slug = $1 AND borrado_en IS NULL`, [c.ref]);
     if (!n || (n.espacio === "personal" && !esJefe)) continue;
-    const historial = [...(n.ficha?.historial || []), { antes: n.resumen, hasta: hoy, origen: `conversacion:${convId}` }].slice(-10);
-    await query(`UPDATE bib_nodos SET resumen = $2, ficha = ficha || $3::jsonb, actualizado_en = now(), estado = 'probable' WHERE id = $1`, [n.id, String(c.nuevo).slice(0, 4000), JSON.stringify({ historial })]);
-    const { revectorizarNodo } = await import("./cerebro.js"); await revectorizarNodo(n.id).catch(() => {});
+    // El historial guarda cómo era antes (cifrado también si el recuerdo es privado).
+    const antes = await abrirResumen(n);
+    const { sellar } = await import("./cifrado.js");
+    const entrada = n.privado ? { antes_cifrado: (await sellar(antes)).cifrado?.toString("base64") ?? antes, hasta: hoy } : { antes, hasta: hoy };
+    const historial = [...(n.ficha?.historial || []), { ...entrada, origen: `conversacion:${convId}` }].slice(-10);
+    const { escribirContenido } = await import("./cerebro.js");
+    await escribirContenido(n.id, String(c.nuevo), { historial });
+    await query(`UPDATE bib_nodos SET estado = 'probable' WHERE id = $1`, [n.id]);
     res.corregidos.push(n.titulo);
   }
   await query(`UPDATE conversaciones SET memoria_extraida_hasta = $2 WHERE id = $1`, [convId, nuevos[nuevos.length - 1].creado_en]);

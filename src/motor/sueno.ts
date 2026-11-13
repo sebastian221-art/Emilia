@@ -46,7 +46,7 @@ async function integrarBandeja(max = 60): Promise<number> {
 
 // ── 2. Igual / complementa / contradice ──────────────────────────────────────
 async function revisarRelaciones(inf: InformeSueno, max = 40) {
-  const nuevos = await query<any>(`SELECT id, slug, titulo, resumen, clase, espacio, privado FROM bib_nodos WHERE borrado_en IS NULL AND actualizado_en > now() - interval '30 hours' AND clase NOT IN ('resumen') ORDER BY actualizado_en DESC LIMIT $1`, [max]);
+  const nuevos = await query<any>(`SELECT id, slug, titulo, resumen, cifrado, clase, espacio, privado FROM bib_nodos WHERE borrado_en IS NULL AND actualizado_en > now() - interval '30 hours' AND clase NOT IN ('resumen') ORDER BY actualizado_en DESC LIMIT $1`, [max]);
   const pares: { a: any; b: any; sim: number }[] = [];
   const vistos = new Set<string>();
   for (const n of nuevos) {
@@ -73,9 +73,10 @@ async function revisarRelaciones(inf: InformeSueno, max = 40) {
       if (x.relacion === "igual" || (x.relacion === "complementa" && p.a.clase === p.b.clase && p.sim > 0)) {
         if (x.relacion === "igual") {
           // Se une en el más viejo/fuerte (B) y A va a la papelera (recuperable): no se pierde nada.
-          const texto = x.fusion && x.fusion.length > 20 ? x.fusion : `${p.b.resumen}\n${p.a.resumen}`;
-          await query(`UPDATE bib_nodos SET resumen = $2, fuerza = LEAST(3, fuerza + 0.3), actualizado_en = now() WHERE id = $1`, [p.b.id, texto.slice(0, 4000)]);
-          await revectorizarNodo(p.b.id).catch(() => {});
+          const texto = x.fusion && x.fusion.length > 20 ? x.fusion : `${await abrirResumen(p.b as any)}\n${await abrirResumen(p.a)}`;
+          const { escribirContenido } = await import("./cerebro.js");
+          await escribirContenido(p.b.id, texto);
+          await query(`UPDATE bib_nodos SET fuerza = LEAST(3, fuerza + 0.3) WHERE id = $1`, [p.b.id]);
           await query(`UPDATE bib_conexiones SET origen_id = $1 WHERE origen_id = $2 AND destino_id <> $1 AND NOT EXISTS (SELECT 1 FROM bib_conexiones c2 WHERE c2.origen_id = $1 AND c2.destino_id = bib_conexiones.destino_id AND c2.relacion = bib_conexiones.relacion)`, [p.b.id, p.a.id]);
           await query(`UPDATE bib_conexiones SET destino_id = $1 WHERE destino_id = $2 AND origen_id <> $1 AND NOT EXISTS (SELECT 1 FROM bib_conexiones c2 WHERE c2.destino_id = $1 AND c2.origen_id = bib_conexiones.origen_id AND c2.relacion = bib_conexiones.relacion)`, [p.b.id, p.a.id]);
           await query(`UPDATE bib_evidencias SET nodo_id = $1 WHERE nodo_id = $2`, [p.b.id, p.a.id]);
@@ -196,6 +197,7 @@ export async function dormir(op: { cosechar?: boolean } = {}): Promise<InformeSu
   const inf: InformeSueno = { bandeja: 0, unidos: 0, conectados: 0, contradicciones: 0, lecciones: 0, resumenes: 0, vencidos: 0, debilitados: 0, reverificados: 0, vectores: 0, cosecha: 0, preguntas: [], errores: [], duracion_ms: 0 };
   const paso = async (nombre: string, f: () => Promise<unknown>) => { try { await f(); } catch (e: any) { inf.errores.push(`${nombre}: ${e?.message || e}`); } };
   await paso("vectores", async () => { inf.vectores = await revectorizar(500); });
+  await paso("cifrar", async () => { const { cifrarPendientes } = await import("./cerebro.js"); await cifrarPendientes(); });
   if (op.cosechar) await paso("cosecha", async () => { inf.cosecha = await cosechar(7); });
   await paso("bandeja", async () => { inf.bandeja = await integrarBandeja(); });
   await paso("relaciones", () => revisarRelaciones(inf));

@@ -92,4 +92,46 @@ export const memoriaOlvidar: DefTool = {
   },
 };
 
-export const toolsMemoria: DefTool[] = [memoriaRecordar, memoriaGuardar, memoriaOlvidar];
+
+
+export const memoriaPersona: DefTool = {
+  nombre: "memoria_persona", modulo: MODULO,
+  descripcion: "Todo lo que se sabe de una persona de la vida del jefe (familia, amigos, jefa, clientes, equipo): quién es, su relación con él, fechas, acuerdos y lo que ha pasado con ella. Solo atendiendo al jefe.",
+  parametros: { type: "object", properties: { nombre: { type: "string", minLength: 2 } }, required: ["nombre"] },
+  riesgo: "lectura", requiereAprobacion: false,
+  async ejecutar(a, ctx) {
+    if (!(await conversacionDelJefe(ctx?.conversacionId))) return { ok: false, error: "Lo de las personas del jefe solo se consulta con él." };
+    const { abrirResumen } = await import("../motor/cifrado.js");
+    const ps = await query<any>(`SELECT * FROM bib_nodos WHERE clase = 'persona' AND borrado_en IS NULL AND titulo ILIKE '%' || $1 || '%' ORDER BY importancia DESC LIMIT 3`, [a.nombre]);
+    const relacionados = ps.length ? await query<any>(`SELECT DISTINCT n.* FROM bib_conexiones c JOIN bib_nodos n ON n.id = c.origen_id WHERE c.destino_id = ANY($1) AND n.borrado_en IS NULL
+      UNION SELECT DISTINCT n.* FROM bib_conexiones c JOIN bib_nodos n ON n.id = c.destino_id WHERE c.origen_id = ANY($1) AND n.borrado_en IS NULL AND n.clase <> 'capacidad'`, [ps.map((p) => p.id)]) : [];
+    const extra = await recordar(a.nombre, { espacios: ["personal"], max: 8, incluirPrivado: true, reforzar: false });
+    const todos = [...new Map([...relacionados, ...extra].filter((x) => !ps.some((p) => p.id === x.id)).map((x) => [x.id, x])).values()]
+      .sort((x: any, y: any) => +new Date(y.ocurrio_en || y.actualizado_en) - +new Date(x.ocurrio_en || x.actualizado_en)).slice(0, 15);
+    if (!ps.length && !todos.length) return { ok: true, resumen: `No tengo nada guardado de "${a.nombre}".` };
+    const lineas: string[] = [];
+    for (const p of ps) lineas.push(`👤 ${p.titulo}: ${await abrirResumen(p)}`);
+    for (const x of todos) lineas.push(`• [${x.clase}${x.clase === "episodio" ? ` ${fecha(x.ocurrio_en || x.actualizado_en)}` : ""}] ${x.titulo}: ${(await abrirResumen(x)).slice(0, 260)}`);
+    return { ok: true, resumen: lineas.join("\n") };
+  },
+};
+
+export const memoriaSobreMi: DefTool = {
+  nombre: "memoria_sobre_mi", modulo: MODULO,
+  descripcion: "Lo que el equipo sabe del jefe: quién es, metas, logros, problemas, cosas que quiere mejorar, preferencias y lo que le ha pasado últimamente. Para '¿qué sabes de mí?', '¿cuáles son mis metas?', 'qué he logrado'. Solo atendiendo al jefe.",
+  parametros: { type: "object", properties: { tema: { type: "string", description: "Opcional: metas, logros, problemas, mejorar, preferencias, salud, trabajo…" } } },
+  riesgo: "lectura", requiereAprobacion: false,
+  async ejecutar(a, ctx) {
+    if (!(await conversacionDelJefe(ctx?.conversacionId))) return { ok: false, error: "Eso solo se consulta con el jefe." };
+    const { abrirResumen } = await import("../motor/cifrado.js");
+    const xs = a.tema
+      ? await recordar(`${a.tema} de Sebastián`, { espacios: ["personal"], clases: ["perfil", "episodio", "hecho", "leccion"], max: 15, incluirPrivado: true, reforzar: false })
+      : await query<any>(`SELECT * FROM bib_nodos WHERE espacio = 'personal' AND clase IN ('perfil','episodio') AND borrado_en IS NULL AND estado <> 'obsoleto'
+          ORDER BY (clase = 'perfil') DESC, importancia DESC, COALESCE(ocurrio_en, actualizado_en) DESC LIMIT 25`);
+    if (!xs.length) return { ok: true, resumen: "Todavía sé poco de ti; lo voy aprendiendo con lo que me cuentas." };
+    const perfil: string[] = [], vida: string[] = [];
+    for (const x of xs) (x.clase === "perfil" ? perfil : vida).push(`• ${x.titulo}: ${(await abrirResumen(x)).slice(0, 240)}${x.clase === "episodio" ? ` (${fecha(x.ocurrio_en || x.actualizado_en)})` : ""}`);
+    return { ok: true, resumen: [perfil.length ? `*Quién eres y lo que te importa*\n${perfil.join("\n")}` : "", vida.length ? `*Lo que te ha pasado*\n${vida.join("\n")}` : ""].filter(Boolean).join("\n\n") };
+  },
+};
+export const toolsMemoria: DefTool[] = [memoriaRecordar, memoriaGuardar, memoriaOlvidar, memoriaPersona, memoriaSobreMi];

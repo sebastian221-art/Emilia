@@ -10,7 +10,8 @@
         "setup": "tsx src/db/crear-base.ts && tsx src/db/migrar.ts",
         "lab:preparar": "tsx src/scripts/preparar-laboratorio.ts",
         "pc:probar": "tsx src/scripts/probar-pantalla.ts",
-        "google:conectar": "tsx src/scripts/conectar-google.ts"
+        "google:conectar": "tsx src/scripts/conectar-google.ts",
+        "cerebro:llave": "tsx src/scripts/cerebro-llave.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.131.0",

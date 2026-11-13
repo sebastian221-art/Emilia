@@ -55,13 +55,13 @@ export interface NuevoRecuerdo {
 export interface ResultadoGuardar { nodo: Recuerdo; accion: "creado" | "actualizado" | "reforzado"; parecido?: { slug: string; titulo: string; sim: number } }
 
 /** Vecinos por significado dentro de la misma carpeta (para no duplicar y para conectar). */
-async function masParecidos(vec: number[], espacio: string, clase: string | null, n = 3, excluirId?: string): Promise<{ id: string; slug: string; titulo: string; resumen: string; clase: string; sim: number }[]> {
+async function masParecidos(vec: number[], espacio: string, clase: string | null, n = 3, excluirId?: string): Promise<{ id: string; slug: string; titulo: string; resumen: string; cifrado?: Buffer | null; clase: string; sim: number }[]> {
   if (await hayPgvector()) {
-    return query<any>(`SELECT id, slug, titulo, resumen, clase, 1 - (vec <=> $1::vector) AS sim FROM bib_nodos
+    return query<any>(`SELECT id, slug, titulo, resumen, cifrado, clase, 1 - (vec <=> $1::vector) AS sim FROM bib_nodos
       WHERE borrado_en IS NULL AND vec IS NOT NULL AND espacio = $2 AND ($3::text IS NULL OR clase = $3) AND ($5::uuid IS NULL OR id <> $5)
       ORDER BY vec <=> $1::vector LIMIT $4`, [lit(vec), espacio, clase, n, excluirId || null]);
   }
-  const xs = await query<any>(`SELECT id, slug, titulo, resumen, clase, embedding FROM bib_nodos WHERE borrado_en IS NULL AND embedding IS NOT NULL AND espacio = $1 AND ($2::text IS NULL OR clase = $2) AND ($3::uuid IS NULL OR id <> $3)`, [espacio, clase, excluirId || null]);
+  const xs = await query<any>(`SELECT id, slug, titulo, resumen, cifrado, clase, embedding FROM bib_nodos WHERE borrado_en IS NULL AND embedding IS NOT NULL AND espacio = $1 AND ($2::text IS NULL OR clase = $2) AND ($3::uuid IS NULL OR id <> $3)`, [espacio, clase, excluirId || null]);
   return xs.map((x) => ({ ...x, sim: coseno(vec, x.embedding), embedding: undefined })).sort((a, b) => b.sim - a.sim).slice(0, n);
 }
 
@@ -81,7 +81,9 @@ export async function guardarRecuerdo(p: NuevoRecuerdo): Promise<ResultadoGuarda
     const umbral = version.startsWith("hashing") ? 0.9 : 0.93;
     if (c && (c.sim >= umbral || norm(c.titulo) === norm(p.titulo))) {
       parecido = { slug: c.slug, titulo: c.titulo, sim: +c.sim.toFixed(3) };
-      const viejo = norm(c.resumen), nuevo = norm(p.contenido);
+      const { abrirResumen } = await import("./cifrado.js");
+      const abierto = await abrirResumen(c);
+      const viejo = norm(abierto), nuevo = norm(p.contenido);
       // ¿Lo nuevo ya está dicho? (todas sus frases aparecen en lo que sabíamos)
       const frases = nuevo.split(/(?<=[.;:!?])\s+|\n+/).map((f) => f.replace(/[.;:!?\s]+$/, "").trim()).filter((f) => f.length > 8);
       const yaDicho = viejo.includes(nuevo.replace(/[.;:!?\s]+$/, "")) || (frases.length > 0 && frases.every((f) => viejo.includes(f)));
@@ -91,7 +93,7 @@ export async function guardarRecuerdo(p: NuevoRecuerdo): Promise<ResultadoGuarda
         return { nodo: n, accion: "reforzado", parecido };
       }
       slug = c.slug;   // mismo tema con datos nuevos: se SUMAN al mismo nodo (nunca se pierde lo que ya sabíamos)
-      contenido = `${c.resumen.trim()}\n${p.contenido.trim()}`;
+      contenido = `${abierto.trim()}\n${p.contenido.trim()}`;
     } else slug = `${clase === "conocimiento" ? "" : `${clase}-`}${slugDe(p.titulo).slice(0, 60)}`;
     // slug libre en otra carpeta
     const [ocupado] = await query<{ espacio: string }>(`SELECT espacio FROM bib_nodos WHERE slug = $1`, [slug]);
@@ -99,18 +101,22 @@ export async function guardarRecuerdo(p: NuevoRecuerdo): Promise<ResultadoGuarda
   }
   const existia = (await query(`SELECT 1 FROM bib_nodos WHERE slug = $1`, [slug])).length > 0;
   const vecFinal = contenido === p.contenido ? vec : await embedDoc(`${p.titulo}. ${contenido}`);
+  // Lo privado se guarda cifrado (el vector se calcula antes, con el texto real).
+  const privado = p.privado ?? (espacio === "personal");
+  const { sellar } = await import("./cifrado.js");
+  const sello = privado ? await sellar(contenido.slice(-4000)) : { resumen: contenido.slice(-4000), cifrado: null };
   const conVec = await hayPgvector();
-  const [n] = await query<Recuerdo>(`INSERT INTO bib_nodos (slug, titulo, tipo, resumen, ficha, estado, confianza, etiquetas, aprendido_por, embedding, espacio, clase, importancia, ocurrio_en, vigente_hasta, origen_ref, emb_version, privado${conVec ? ", vec" : ""})
-    VALUES ($1,$2,COALESCE($3,'concepto'),$4,$5,COALESCE($6,'probable'),COALESCE($7,0.7),$8,$9,$10,$11,$12,COALESCE($13,0.5),$14,$15,$16,$17,COALESCE($18,false)${conVec ? ",$19::vector" : ""})
+  const [n] = await query<Recuerdo>(`INSERT INTO bib_nodos (slug, titulo, tipo, resumen, ficha, estado, confianza, etiquetas, aprendido_por, embedding, espacio, clase, importancia, ocurrio_en, vigente_hasta, origen_ref, emb_version, privado, cifrado${conVec ? ", vec" : ""})
+    VALUES ($1,$2,COALESCE($3,'concepto'),$4,$5,COALESCE($6,'probable'),COALESCE($7,0.7),$8,$9,$10,$11,$12,COALESCE($13,0.5),$14,$15,$16,$17,COALESCE($18,false),$19${conVec ? ",$20::vector" : ""})
     ON CONFLICT (slug) DO UPDATE SET titulo = EXCLUDED.titulo, resumen = EXCLUDED.resumen, ficha = bib_nodos.ficha || EXCLUDED.ficha,
       estado = COALESCE($6, bib_nodos.estado), confianza = GREATEST(bib_nodos.confianza, COALESCE($7, bib_nodos.confianza)),
       etiquetas = (SELECT ARRAY(SELECT DISTINCT unnest(bib_nodos.etiquetas || EXCLUDED.etiquetas))), embedding = EXCLUDED.embedding,
       clase = EXCLUDED.clase, espacio = EXCLUDED.espacio, importancia = GREATEST(bib_nodos.importancia, EXCLUDED.importancia),
       ocurrio_en = COALESCE(EXCLUDED.ocurrio_en, bib_nodos.ocurrio_en), vigente_hasta = EXCLUDED.vigente_hasta, origen_ref = COALESCE(EXCLUDED.origen_ref, bib_nodos.origen_ref),
-      emb_version = EXCLUDED.emb_version, privado = bib_nodos.privado OR EXCLUDED.privado, fuerza = LEAST(3, bib_nodos.fuerza + 0.1), actualizado_en = now(), borrado_en = NULL${conVec ? ", vec = EXCLUDED.vec" : ""}
+      emb_version = EXCLUDED.emb_version, privado = bib_nodos.privado OR EXCLUDED.privado, cifrado = EXCLUDED.cifrado, fuerza = LEAST(3, bib_nodos.fuerza + 0.1), actualizado_en = now(), borrado_en = NULL${conVec ? ", vec = EXCLUDED.vec" : ""}
     RETURNING *`,
-    [slug, p.titulo.slice(0, 200), p.tipo || null, contenido.slice(-4000), JSON.stringify(p.ficha || {}), p.estado ?? null, p.confianza ?? null, p.etiquetas || [], p.agenteId ?? null, vecFinal, espacio, clase,
-     p.importancia ?? null, fechaBogota(p.ocurrioEn), fechaBogota(p.vigenteHasta), p.origenRef ?? null, version, p.privado ?? (espacio === "personal"), ...(conVec ? [lit(vecFinal)] : [])]);
+    [slug, p.titulo.slice(0, 200), p.tipo || null, sello.resumen, JSON.stringify(p.ficha || {}), p.estado ?? null, p.confianza ?? null, p.etiquetas || [], p.agenteId ?? null, vecFinal, espacio, clase,
+     p.importancia ?? null, fechaBogota(p.ocurrioEn), fechaBogota(p.vigenteHasta), p.origenRef ?? null, version, privado, sello.cifrado, ...(conVec ? [lit(vecFinal)] : [])]);
   // Conexiones: las pedidas + "relacionado_con" a lo más parecido (si se parece bastante) para que la red crezca sola.
   for (const c of p.conectarCon || []) {
     const [d] = await query<{ id: string }>(`SELECT id FROM bib_nodos WHERE slug = $1 AND borrado_en IS NULL`, [c.slug]);
@@ -182,7 +188,7 @@ export async function recordar(consulta: string, op: OpcionesRecordar = {}): Pro
     if (e) e.s += act * 0.5; else puntos.set(v.hacia, { s: act, via: `conectado (${v.relacion})`, sim: 0 });
   }
   const candidatos = [...puntos.keys()];
-  const filas = await query<Recuerdo>(`SELECT id, slug, titulo, resumen, clase, espacio, tipo, estado, confianza, fuerza, importancia, etiquetas, ocurrio_en, actualizado_en, privado, ficha, vigente_hasta FROM bib_nodos WHERE id = ANY($1) AND borrado_en IS NULL`, [candidatos]);
+  const filas = await query<Recuerdo>(`SELECT id, slug, titulo, resumen, cifrado, clase, espacio, tipo, estado, confianza, fuerza, importancia, etiquetas, ocurrio_en, actualizado_en, privado, ficha, vigente_hasta FROM bib_nodos WHERE id = ANY($1) AND borrado_en IS NULL`, [candidatos]);
   const ahora = Date.now();
   const res = filas.map((f: any) => {
     const p = puntos.get(f.id)!;
@@ -267,18 +273,54 @@ export async function contextoCerebro(pedido: string, op: OpcionesContexto = {})
 /** Rehace los vectores que faltan o que se hicieron con otro modelo (de a pocos). */
 export async function revectorizar(max = 200): Promise<number> {
   const version = await versionEmbeddings(), conVec = await hayPgvector();
-  const xs = await query<any>(`SELECT id, titulo, resumen, ficha FROM bib_nodos WHERE borrado_en IS NULL AND (emb_version IS DISTINCT FROM $1 OR ${conVec ? "vec IS NULL" : "embedding IS NULL"}) LIMIT $2`, [version, max]);
+  const xs = await query<any>(`SELECT id, titulo, resumen, cifrado, ficha FROM bib_nodos WHERE borrado_en IS NULL AND (emb_version IS DISTINCT FROM $1 OR ${conVec ? "vec IS NULL" : "embedding IS NULL"}) LIMIT $2`, [version, max]);
+  const { abrirResumen } = await import("./cifrado.js");
   for (const x of xs) {
-    const v = await embedDoc(`${x.titulo}. ${x.resumen}. ${Object.values(x.ficha || {}).filter((s) => typeof s === "string").join(" ").slice(0, 1000)}`);
+    const v = await embedDoc(`${x.titulo}. ${await abrirResumen(x)}. ${Object.values(x.ficha || {}).filter((s) => typeof s === "string").join(" ").slice(0, 1000)}`);
     await query(`UPDATE bib_nodos SET embedding = $2, emb_version = $3${conVec ? ", vec = $4::vector" : ""} WHERE id = $1`, [x.id, v, version, ...(conVec ? [lit(v)] : [])]);
   }
   return xs.length;
 }
 
+/** Nombres propios de una persona guardada ("Mamá de Sebastián: Gloria" → ["Gloria"]; "Valentina, su jefa" → ["Valentina"]). */
+export function nombresDePersona(titulo: string): string[] {
+  const NO = new Set(["Sebastián", "Sebastian", "Mamá", "Papá", "Tío", "Tía", "Mi", "Su", "De", "Del", "La", "El", "Los", "Las", "Jefa", "Jefe", "Novia", "Novio", "Hermano", "Hermana", "Amigo", "Amiga", "Cliente", "Rol"]);
+  return [...new Set((titulo.match(/(?<!\p{L})\p{Lu}\p{Ll}{2,}(?!\p{L})/gu) || []).filter((w) => !NO.has(w)))];
+}
+/** Conecta un recuerdo con las personas que menciona (así la historia de cada persona queda junta). */
+export async function conectarPersonas(nodoId: string, texto: string): Promise<number> {
+  const ps = await query<{ id: string; titulo: string }>(`SELECT id, titulo FROM bib_nodos WHERE clase = 'persona' AND borrado_en IS NULL AND id <> $1`, [nodoId]);
+  let n = 0;
+  for (const p of ps) for (const nombre of nombresDePersona(p.titulo)) {
+    if (!new RegExp(`(?<!\\p{L})${nombre}(?!\\p{L})`, "iu").test(texto)) continue;
+    await query(`INSERT INTO bib_conexiones (origen_id, destino_id, relacion, peso) VALUES ($1,$2,'menciona',0.9) ON CONFLICT (origen_id, destino_id, relacion) DO NOTHING`, [nodoId, p.id]); n++; break;
+  }
+  return n;
+}
+
+/** Cambia el contenido de un recuerdo (cifra si es privado) y rehace su vector. */
+export async function escribirContenido(id: string, texto: string, extraFicha: any = null) {
+  const [n] = await query<{ privado: boolean }>(`SELECT privado FROM bib_nodos WHERE id = $1`, [id]); if (!n) return;
+  const { sellar } = await import("./cifrado.js");
+  const sello = n.privado ? await sellar(texto.slice(-4000)) : { resumen: texto.slice(-4000), cifrado: null };
+  await query(`UPDATE bib_nodos SET resumen = $2, cifrado = $3, actualizado_en = now()${extraFicha ? ", ficha = ficha || $4::jsonb" : ""} WHERE id = $1`, [id, sello.resumen, sello.cifrado, ...(extraFicha ? [JSON.stringify(extraFicha)] : [])]);
+  await revectorizarNodo(id).catch(() => {});
+}
+
+/** Cifra lo privado que aún esté en claro (memoria vieja o guardada sin llave). */
+export async function cifrarPendientes(): Promise<number> {
+  const { obtenerLlave, sellar } = await import("./cifrado.js");
+  if (!(await obtenerLlave())) return 0;
+  const xs = await query<any>(`SELECT id, resumen FROM bib_nodos WHERE privado AND cifrado IS NULL AND resumen <> '🔒'`);
+  for (const x of xs) { const s2 = await sellar(x.resumen); await query(`UPDATE bib_nodos SET resumen = $2, cifrado = $3 WHERE id = $1`, [x.id, s2.resumen, s2.cifrado]); }
+  return xs.length;
+}
+
 /** Rehace el vector de un nodo (después de corregir su contenido). */
 export async function revectorizarNodo(id: string) {
-  const [x] = await query<any>(`SELECT titulo, resumen FROM bib_nodos WHERE id = $1`, [id]); if (!x) return;
-  const v = await embedDoc(`${x.titulo}. ${x.resumen}`), version = await versionEmbeddings(), conVec = await hayPgvector();
+  const [x] = await query<any>(`SELECT titulo, resumen, cifrado FROM bib_nodos WHERE id = $1`, [id]); if (!x) return;
+  const { abrirResumen } = await import("./cifrado.js");
+  const v = await embedDoc(`${x.titulo}. ${await abrirResumen(x)}`), version = await versionEmbeddings(), conVec = await hayPgvector();
   await query(`UPDATE bib_nodos SET embedding = $2, emb_version = $3${conVec ? ", vec = $4::vector" : ""} WHERE id = $1`, [id, v, version, ...(conVec ? [lit(v)] : [])]);
 }
 
