@@ -11,6 +11,7 @@ import { vigilar, asegurarMonitoresSistema } from "./vigilancia.js";
 import { revisarAnyEnFondo, informeSemanalSiToca } from "./calidad-any.js";
 import { resumenSiToca } from "./resumen-dia.js";
 import { radarSiToca } from "./radar.js";
+import { suenoSiToca } from "./sueno.js";
 
 type Tarea = { nombre: string; fn: () => Promise<unknown> };
 const tareas: Tarea[] = [
@@ -21,6 +22,7 @@ const tareas: Tarea[] = [
   { nombre: "any_informe", fn: () => informeSemanalSiToca() },
   { nombre: "resumen", fn: () => resumenSiToca() },
   { nombre: "radar", fn: () => radarSiToca() },               // Soga: la corrida va en segundo plano
+  { nombre: "sueno", fn: () => suenoSiToca() },               // Lara: consolidación nocturna de la memoria
 ];
 /** Otros módulos de Iris (vigilancia, resúmenes, Any) se cuelgan del mismo reloj. */
 export function cadaMinuto(nombre: string, fn: () => Promise<unknown>) { tareas.push({ nombre, fn }); }

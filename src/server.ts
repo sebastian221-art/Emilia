@@ -196,8 +196,7 @@ iniciarRegistro()
       podarAprobaciones(); setInterval(podarAprobaciones, 3600 * 1000);
       // Biblioteca: envejecimiento diario (debilita lo que nadie usa, propone refrescar lo muy viejo).
       programarReflexionNocturna(Number(process.env.SYSTEM_NOCTURNO_HORA) || 3);   // System reflexiona a las 3:00 sobre el día
-      const envejecerBiblioteca = () => import("./motor/biblioteca.js").then((B) => B.envejecer(null)).catch(() => {});
-      setInterval(envejecerBiblioteca, 24 * 3600 * 1000);
+      // El envejecimiento de la biblioteca ahora es parte del sueño de Lara (motor/sueno.ts, cada noche).
       limpiarArchivosViejos().catch((e) => console.warn("[archivos] limpieza:", e?.message || e));
       setInterval(() => limpiarArchivosViejos().catch(() => {}), 24 * 3600 * 1000);
       await iniciarTunel(PORT_PUBLICO);   // ngrok publica SOLO la puerta pública, nunca el panel
