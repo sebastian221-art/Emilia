@@ -78,13 +78,14 @@ async function enviar(texto: string, agente = "iris"): Promise<boolean> {
 }
 
 /** Aviso al jefe respetando las horas de silencio (lo crítico sale siempre). */
-export async function avisarJefe(texto: string, nivel: "critico" | "normal" = "normal", origen = "iris"): Promise<"enviado" | "diferido" | "fallo"> {
+/** agente: quién habla (su cuaderno guarda el contexto para que pueda seguir la conversación). */
+export async function avisarJefe(texto: string, nivel: "critico" | "normal" = "normal", origen = "iris", agente = "iris"): Promise<"enviado" | "diferido" | "fallo"> {
   const cfg = await configIris();
   if (nivel !== "critico" && enSilencio(cfg)) {
     await query(`INSERT INTO avisos_diferidos (texto, origen) VALUES ($1, $2)`, [texto, origen]);
     return "diferido";
   }
-  return (await enviar(texto)) ? "enviado" : "fallo";
+  return (await enviar(texto, agente)) ? "enviado" : "fallo";
 }
 
 /** Al terminar el silencio, entrega lo guardado en UN mensaje. Lo llama el reloj cada minuto. */

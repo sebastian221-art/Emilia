@@ -10,6 +10,7 @@ import { entregarDiferidos } from "./avisos.js";
 import { vigilar, asegurarMonitoresSistema } from "./vigilancia.js";
 import { revisarAnyEnFondo, informeSemanalSiToca } from "./calidad-any.js";
 import { resumenSiToca } from "./resumen-dia.js";
+import { radarSiToca } from "./radar.js";
 
 type Tarea = { nombre: string; fn: () => Promise<unknown> };
 const tareas: Tarea[] = [
@@ -19,6 +20,7 @@ const tareas: Tarea[] = [
   { nombre: "any", fn: async () => { revisarAnyEnFondo(); } },   // cada ANY_CADA_MIN (15) por dentro; no frena el reloj
   { nombre: "any_informe", fn: () => informeSemanalSiToca() },
   { nombre: "resumen", fn: () => resumenSiToca() },
+  { nombre: "radar", fn: () => radarSiToca() },               // Soga: la corrida va en segundo plano
 ];
 /** Otros módulos de Iris (vigilancia, resúmenes, Any) se cuelgan del mismo reloj. */
 export function cadaMinuto(nombre: string, fn: () => Promise<unknown>) { tareas.push({ nombre, fn }); }

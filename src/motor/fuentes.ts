@@ -26,8 +26,8 @@ async function getJson<T = any>(url: string, init: RequestInit & { timeoutMs?: n
   if (!r.ok) throw new Error(`${new URL(url).hostname} respondió ${r.status}${r.status === 403 || r.status === 429 ? " (bloqueo o límite de uso)" : ""}`);
   return await r.json() as T;
 }
-async function conCache<T>(clave: string, minutos: number, f: () => Promise<T>): Promise<T> {
-  const c = await cacheLeer<T>(clave); if (c) return c;
+async function conCache<T>(clave: string, minutos: number, f: () => Promise<T>, fresco = false): Promise<T> {
+  const c = fresco ? null : await cacheLeer<T>(clave); if (c) return c;
   const v = await f(); await cacheGuardar(clave, v, minutos); return v;
 }
 const fechaCorta = (d: string | number | Date | null | undefined) => { if (!d) return ""; const x = new Date(typeof d === "number" && d < 1e12 ? d * 1000 : d); return isNaN(+x) ? "" : x.toISOString().slice(0, 10); };
@@ -161,7 +161,7 @@ const gh = <T = any>(ruta: string, accept = "application/vnd.github+json") => ge
 export const nombreRepo = (x: string) => { const m = String(x).trim().replace(/\.git$/, "").match(/(?:github\.com\/)?([\w.-]+)\/([\w.-]+)/); return m ? `${m[1]}/${m[2]}` : null; };
 export interface InfoRepo { repo: string; url: string; descripcion: string; estrellas: number; forks: number; issues_abiertos: number; licencia: string; lenguaje: string; temas: string[]; creado: string; ultimo_push: string; archivado: boolean; commits_30d: number | string; ultima_version: { tag: string; fecha: string; notas: string } | null; salud: string; readme: string; web: string }
 
-export async function infoRepo(x: string, op: { readmeChars?: number } = {}): Promise<InfoRepo> {
+export async function infoRepo(x: string, op: { readmeChars?: number; fresco?: boolean } = {}): Promise<InfoRepo> {
   const repo = nombreRepo(x); if (!repo) throw new Error(`"${x}" no parece un repo de GitHub (dueño/nombre o URL).`);
   return conCache(`gh|${repo}|${op.readmeChars || 6000}`, 6 * 60, async () => {
     const r = await gh(`/repos/${repo}`);
@@ -180,7 +180,7 @@ export async function infoRepo(x: string, op: { readmeChars?: number } = {}): Pr
       ultima_version: rel ? { tag: rel.tag_name, fecha: fechaCorta(rel.published_at), notas: recorta(String(rel.body || ""), 800) } : null,
       salud, readme: recorta(readme, op.readmeChars || 6000), web: r.homepage || "",
     };
-  });
+  }, op.fresco);
 }
 
 export async function buscarRepos(q: string, op: { orden?: "estrellas" | "actualizados"; activosDesde?: string; max?: number } = {}) {
@@ -308,7 +308,7 @@ export async function revisarDependencias(proyecto: string): Promise<RevisionDep
 
 // ══════════════════════════════ MODELOS DE IA ═════════════════════════════════
 export interface ModeloIA { id: string; nombre: string; proveedor: string; entrada_usd_m: number; salida_usd_m: number; contexto: number | null; creado: string; entradas: string[]; salidas: string[]; gratis: boolean; descripcion: string }
-async function catalogoModelos(): Promise<ModeloIA[]> {
+async function catalogoModelos(fresco = false): Promise<ModeloIA[]> {
   return conCache("openrouter|modelos", 6 * 60, async () => {
     const j = await getJson<any>("https://openrouter.ai/api/v1/models", { headers: process.env.OPENROUTER_API_KEY ? { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` } : {} });
     return (j.data || []).map((m: any) => {
@@ -316,10 +316,10 @@ async function catalogoModelos(): Promise<ModeloIA[]> {
       return { id: m.id, nombre: m.name, proveedor: String(m.id).split("/")[0], entrada_usd_m: +pin.toFixed(4), salida_usd_m: +pout.toFixed(4), contexto: m.context_length ?? m.top_provider?.context_length ?? null,
         creado: fechaCorta(m.created), entradas: m.architecture?.input_modalities || [], salidas: m.architecture?.output_modalities || [], gratis: /:free$/.test(m.id) || (pin === 0 && pout === 0), descripcion: String(m.description || "").slice(0, 240) };
     });
-  });
+  }, fresco);
 }
-export async function buscarModelos(op: { buscar?: string; proveedor?: string; orden?: "precio" | "nuevos" | "contexto"; gratis?: boolean; entrada?: "imagen" | "audio" | "video" | "archivo"; max?: number } = {}): Promise<{ total: number; modelos: ModeloIA[] }> {
-  let xs = await catalogoModelos();
+export async function buscarModelos(op: { buscar?: string; proveedor?: string; orden?: "precio" | "nuevos" | "contexto"; gratis?: boolean; entrada?: "imagen" | "audio" | "video" | "archivo"; max?: number; fresco?: boolean } = {}): Promise<{ total: number; modelos: ModeloIA[] }> {
+  let xs = await catalogoModelos(op.fresco);
   if (op.buscar) { const ws = op.buscar.toLowerCase().split(/\s+/).filter(Boolean); xs = xs.filter((m) => ws.every((w) => `${m.id} ${m.nombre}`.toLowerCase().includes(w))); }
   if (op.proveedor) xs = xs.filter((m) => m.proveedor.toLowerCase().includes(op.proveedor!.toLowerCase()));
   if (op.gratis !== undefined) xs = xs.filter((m) => m.gratis === op.gratis);

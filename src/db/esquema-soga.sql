@@ -35,3 +35,30 @@ CREATE TABLE IF NOT EXISTS soga_investigaciones (
   creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS soga_investigaciones_fecha ON soga_investigaciones (creado_en DESC);
+-- ── Radar: la curiosidad de Emilia ──────────────────────────────────────────
+-- Qué vigila Soga en el mundo (temas, repos, modelos, contratos, proyectos).
+CREATE TABLE IF NOT EXISTS radar_temas (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre     TEXT NOT NULL UNIQUE,
+  tipo       TEXT NOT NULL CHECK (tipo IN ('tema','repos','versiones','modelos','secop','proyectos')),
+  config     JSONB NOT NULL DEFAULT '{}',  -- {consultas:[…]} | {repos:[…]} | {textos:[…], departamento} | {modelos:[…]}
+  frecuencia TEXT NOT NULL DEFAULT 'diario' CHECK (frecuencia IN ('diario','semanal')),
+  activo     BOOLEAN NOT NULL DEFAULT true,
+  ultimo     TIMESTAMPTZ,
+  creado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Lo que ya se vio (para no repetir) con su relevancia y qué se hizo.
+CREATE TABLE IF NOT EXISTS radar_vistos (
+  clave      TEXT PRIMARY KEY,             -- url, id de modelo, repo@tag, proceso SECOP…
+  tema       TEXT,
+  titulo     TEXT,
+  url        TEXT,
+  resumen    TEXT,
+  fecha      TEXT,
+  datos      JSONB NOT NULL DEFAULT '{}',  -- p. ej. precio de un modelo (para notar cambios)
+  relevancia INT,                          -- 0..10 según el perfil del jefe
+  porque     TEXT,
+  destino    TEXT,                         -- avisado | resumen | biblioteca | descartado | pendiente
+  visto_en   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS radar_vistos_fecha ON radar_vistos (visto_en DESC);

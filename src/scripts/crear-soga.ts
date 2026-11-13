@@ -37,6 +37,7 @@ FUENTES DIRECTAS (mejor que buscar cuando aplica):
 - Una librería de npm/PyPI → fuente_paquete. "¿mis proyectos tienen librerías con fallos?" → fuente_dependencias(proyecto).
 - Modelos de IA (precios, contexto, nuevos, el más barato que…) → fuente_modelos; el precio OFICIAL se confirma con web_verificar en la página del proveedor.
 - Contratos públicos / licitaciones en Colombia → fuente_secop(texto, departamento). Dólar a pesos → fuente_trm.
+RADAR (tu curiosidad): revisas solo, cada día, el mundo del jefe (IA y agentes, modelos y precios, herramientas, software, sistemas, robótica, WhatsApp API, Railway, versiones de lo que usamos, repos nuevos, contratos SECOP, fallos de seguridad en sus proyectos). Lo importante (≥8/10) llega solo como aviso; lo interesante, en el "Radar de hoy". "qué hay de nuevo / novedades" → radar_novedades. "vigila también X" → radar_agregar. "ya no me mandes de X" → radar_quitar. "revisa ya" → radar_ahora. "qué estás vigilando" → radar_temas. Ajustes (hora, qué tan seguido avisar, sus intereses) → radar_configurar. Si algo del radar le interesa, investígalo a fondo con web_investigar.
 LO DEL JEFE (solo lectura): "busca el correo donde…", "qué me dijo X sobre Y", "el PDF de…", "cuándo hablamos de…" → personal_buscar(consulta, persona, donde, desde/hasta) y personal_ver(ref) para abrirlo completo. Nunca envías, marcas ni cambias nada: si hay que responder un correo, eso es de Iris.
 Si lo que pide es acción sobre un sistema (código, envíos, vigilar, correo), no es tuyo: dile que eso lo hace Sage/Echo/Iris y, si quieres, déjales la investigación de fondo lista.
 Cuando hablas directo con el jefe sigues siendo tú; no lo mandes con Emilia salvo que pida algo que no es investigación.`,
@@ -46,7 +47,7 @@ async function idsDe(tabla: string, nombres: string[]) { if (!nombres.length) re
 
 async function main() {
   await iniciarRegistro();
-  const tools = registro.tools().map((t) => t.nombre).filter((n) => n.startsWith("web_") || n.startsWith("fuente_") || n.startsWith("personal_") || n.startsWith("informe_") || n.startsWith("investigacion_") || n.startsWith("biblioteca_") && !["biblioteca_integrar","biblioteca_proponer","biblioteca_migrar","biblioteca_bandeja"].includes(n) || n.startsWith("archivo_") || ["sistema_ahora", "memoria_recordar", "agente_delegar", "agente_listar"].includes(n));
+  const tools = registro.tools().map((t) => t.nombre).filter((n) => n.startsWith("web_") || n.startsWith("fuente_") || n.startsWith("personal_") || n.startsWith("informe_") || n.startsWith("investigacion_") || n.startsWith("radar_") || n.startsWith("biblioteca_") && !["biblioteca_integrar","biblioteca_proponer","biblioteca_migrar","biblioteca_bandeja"].includes(n) || n.startsWith("archivo_") || ["sistema_ahora", "memoria_recordar", "agente_delegar", "agente_listar"].includes(n));
   // Fuera a propósito: whatsapp_enviar_* (escribir a terceros es de Lyra).
   const skills = registro.skills().map((s) => s.nombre).filter((n) => n === "web_investigar");
   const flujos: string[] = [];
