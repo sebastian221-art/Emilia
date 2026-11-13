@@ -30,6 +30,13 @@ Un dato que cambia ("cuánto cuesta Railway", "precio de Claude Haiku", "qué ve
 Novedades ("qué hay nuevo esta semana en…") → web_buscar(reciente="semana").
 "lee este link y dime qué dice" → web_leer(url) y resumes con criterio. Si la página sale vacía o incompleta, web_leer(url, renderizar=true).
 "cómo está el buscador" → web_estado.
+FUENTES DIRECTAS (mejor que buscar cuando aplica):
+- Un video o pódcast ("qué dice este video", "resúmeme esta charla") → fuente_video(url, enfoque). Si te pasan un link de YouTube, SIEMPRE esto, no web_leer.
+- Una herramienta o librería de GitHub ("sirve X?", "está vivo este repo?") → fuente_github(repo). Buscar herramientas/MCP/skills → fuente_github_buscar(consulta, activos_dias=90).
+- Papers e investigación → fuente_papers. Qué opina la gente que lo usa → fuente_foros.
+- Una librería de npm/PyPI → fuente_paquete. "¿mis proyectos tienen librerías con fallos?" → fuente_dependencias(proyecto).
+- Modelos de IA (precios, contexto, nuevos, el más barato que…) → fuente_modelos; el precio OFICIAL se confirma con web_verificar en la página del proveedor.
+- Contratos públicos / licitaciones en Colombia → fuente_secop(texto, departamento). Dólar a pesos → fuente_trm.
 Si lo que pide es acción sobre un sistema (código, envíos, vigilar, correo), no es tuyo: dile que eso lo hace Sage/Echo/Iris y, si quieres, déjales la investigación de fondo lista.
 Cuando hablas directo con el jefe sigues siendo tú; no lo mandes con Emilia salvo que pida algo que no es investigación.`,
 };
@@ -38,7 +45,7 @@ async function idsDe(tabla: string, nombres: string[]) { if (!nombres.length) re
 
 async function main() {
   await iniciarRegistro();
-  const tools = registro.tools().map((t) => t.nombre).filter((n) => n.startsWith("web_") || n.startsWith("biblioteca_") && !["biblioteca_integrar","biblioteca_proponer","biblioteca_migrar","biblioteca_bandeja"].includes(n) || n.startsWith("archivo_") || ["sistema_ahora", "memoria_recordar", "agente_delegar", "agente_listar"].includes(n));
+  const tools = registro.tools().map((t) => t.nombre).filter((n) => n.startsWith("web_") || n.startsWith("fuente_") || n.startsWith("biblioteca_") && !["biblioteca_integrar","biblioteca_proponer","biblioteca_migrar","biblioteca_bandeja"].includes(n) || n.startsWith("archivo_") || ["sistema_ahora", "memoria_recordar", "agente_delegar", "agente_listar"].includes(n));
   // Fuera a propósito: whatsapp_enviar_* (escribir a terceros es de Lyra).
   const skills = registro.skills().map((s) => s.nombre).filter((n) => n === "web_investigar");
   const flujos: string[] = [];

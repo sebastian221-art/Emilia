@@ -15,6 +15,7 @@ export const MODULOS: ModuloCapacidades[] = [
   { ruta: "tools/sistema.ts",      exporta: "toolsSistema",      tipo: "tools" },
   { ruta: "tools/archivo.ts",      exporta: "toolsArchivo",      tipo: "tools" },
   { ruta: "tools/web.ts",          exporta: "toolsWeb",          tipo: "tools" },
+  { ruta: "tools/fuentes.ts",      exporta: "toolsFuentes",      tipo: "tools" },
   { ruta: "tools/biblioteca.ts",   exporta: "toolsBiblioteca",   tipo: "tools" },
   { ruta: "tools/aprendizaje.ts",  exporta: "toolsAprendizaje",  tipo: "tools" },
   { ruta: "tools/whatsapp.ts",     exporta: "toolsWhatsapp",     tipo: "tools" },

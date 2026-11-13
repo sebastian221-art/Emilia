@@ -19,7 +19,7 @@ function decodificarEntidades(t: string): string {
   return t.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, " ")
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
-function quitarEtiquetas(h: string): string { return decodificarEntidades(h.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim(); }
+export function quitarEtiquetas(h: string): string { return decodificarEntidades(h.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim(); }
 
 async function fetchTexto(url: string, timeoutSeg = 20, extraHeaders: Record<string, string> = {}): Promise<{ ok: boolean; status: number; texto: string; tipo: string; urlFinal: string }> {
   const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), timeoutSeg * 1000);
@@ -170,16 +170,16 @@ async function sumarUso(motor: string, d: { n?: number; fallos?: number; costo?:
     ON CONFLICT (dia, motor) DO UPDATE SET n = web_uso.n + EXCLUDED.n, fallos = web_uso.fallos + EXCLUDED.fallos, costo = web_uso.costo + EXCLUDED.costo`,
     [hoyBogota(), motor, d.n || 0, d.fallos || 0, d.costo || 0]).catch(() => {});
 }
-async function cacheLeer<T>(clave: string): Promise<T | null> {
+export async function cacheLeer<T>(clave: string): Promise<T | null> {
   const [f] = await consulta<{ datos: T }>(`SELECT datos FROM web_cache WHERE clave = $1 AND vence > now()`, [clave]).catch(() => [] as any[]);
   return f?.datos ?? null;
 }
-async function cacheGuardar(clave: string, datos: unknown, minutos: number) {
+export async function cacheGuardar(clave: string, datos: unknown, minutos: number) {
   await consulta(`INSERT INTO web_cache (clave, datos, vence) VALUES ($1, $2, now() + make_interval(mins => $3)) ON CONFLICT (clave) DO UPDATE SET datos = EXCLUDED.datos, vence = EXCLUDED.vence, creado_en = now()`,
     [clave, JSON.stringify(datos), minutos]).catch(() => {});
   if (Math.random() < 0.02) consulta(`DELETE FROM web_cache WHERE vence < now() - interval '1 day'`).catch(() => {});
 }
-const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
+export const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
 
 // ── SearXNG ──────────────────────────────────────────────────────────────────
 const urlSearx = () => (process.env.SEARXNG_URL ?? "http://127.0.0.1:8888").replace(/\/+$/, "");
