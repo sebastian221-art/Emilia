@@ -87,7 +87,7 @@ export const describir = (c: Contacto) => `${c.nombre}${c.relacion ? ` (${c.rela
 
 export interface Envio { ok: boolean; id?: string; error?: string; viaPlantilla?: boolean; salienteId?: string }
 /** Manda de verdad (el permiso ya se resolvió antes: OK del jefe o contacto libre) y lo registra. */
-export async function enviarA(numero: string, contenido: { texto?: string; archivoId?: string; audio?: { buffer: Buffer; mime: string } }, op: { contacto?: Contacto | null; conversacionId?: string | null; gestionId?: string | null; seguimientoHoras?: number; seguimiento?: "recordarle" | "avisarme"; tipo?: string } = {}): Promise<Envio> {
+export async function enviarA(numero: string, contenido: { texto?: string; archivoId?: string; audio?: { buffer: Buffer; mime: string }; enAudio?: boolean }, op: { contacto?: Contacto | null; conversacionId?: string | null; gestionId?: string | null; seguimientoHoras?: number; seguimiento?: "recordarle" | "avisarme"; tipo?: string } = {}): Promise<Envio> {
   const W = await import("../whatsapp/enviar.js");
   const plantilla = process.env.WHATSAPP_PLANTILLA_TERCEROS || process.env.WHATSAPP_PLANTILLA_AVISO || "recordatorio_emilia";
   let r: { ok: boolean; id?: string; error?: string; viaPlantilla?: boolean } = { ok: false, error: "Nada que enviar." };
@@ -98,6 +98,12 @@ export async function enviarA(numero: string, contenido: { texto?: string; archi
     if (!a) return { ok: false, error: "No encuentro ese archivo." };
     if (a.meta.mime.startsWith("image/")) { r = await W.enviarImagenWhatsapp(numero, a.contenido, a.meta.mime, contenido.texto); tipo = "imagen"; }
     else { r = await W.enviarDocumentoWhatsapp(numero, a.contenido, a.meta.nombre, a.meta.mime, contenido.texto); tipo = "documento"; }
+  } else if (contenido.enAudio && contenido.texto) {
+    // Nota de voz: el texto aprobado se convierte en audio (queda registrado el texto).
+    const { sintetizar, prepararTexto } = await import("./voz.js");
+    const v = await sintetizar(prepararTexto(contenido.texto));
+    if (!v.ok || !v.audio) return { ok: false, error: `No pude generar la nota de voz: ${v.error}` };
+    r = await W.enviarAudioWhatsapp(numero, v.audio.contenido, v.audio.mime); tipo = "audio";
   } else if (contenido.audio) {
     r = await W.enviarAudioWhatsapp(numero, contenido.audio.buffer, contenido.audio.mime); tipo = "audio";
   } else if (contenido.texto) r = await W.enviarTextoWhatsapp(numero, contenido.texto, { plantilla });
