@@ -71,14 +71,14 @@ export async function recalcularConfianza(nodoId: string) {
 
 // ── Consulta: por significado + vecinos ──
 export async function buscarSemantico(texto: string, limite = 5, filtro: { tipo?: string; etiqueta?: string } = {}): Promise<(Nodo & { score: number })[]> {
-  // Usa el cerebro (significado + palabras + vecinos); nunca devuelve lo privado.
+  // Usa el cerebro (significado + palabras + vecinos); nunca devuelve lo privado ni las capacidades.
   const { recordar } = await import("./cerebro.js");
-  let xs = await recordar(texto, { max: limite * 3, incluirPrivado: false, reforzar: false });
+  let xs = (await recordar(texto, { max: limite * 3, incluirPrivado: false, reforzar: false })).filter((x) => x.clase !== "capacidad");
   if (filtro.tipo) xs = xs.filter((x) => x.tipo === filtro.tipo);
   if (filtro.etiqueta) xs = xs.filter((x) => x.etiquetas?.includes(filtro.etiqueta!));
-  const top = xs.slice(0, limite);
-  const max = top[0]?.score || 1;
-  return top.map((x) => ({ ...(x as any), score: +(0.4 + 0.6 * (x.score || 0) / max).toFixed(3) }));
+  // Relevancia real: parecido en significado, o que de verdad comparta las palabras (no un puntaje relativo que siempre "pasa").
+  return xs.map((x) => ({ ...(x as any), score: +Math.max(x.sim || 0, x.via === "ambos" ? 0.6 : x.via === "palabras" ? 0.45 : 0, x.via?.startsWith("conectado") ? 0.36 : 0).toFixed(3) }))
+    .filter((x) => x.score > 0.2).sort((a, b) => b.score - a.score).slice(0, limite);
 }
 export async function vecinos(nodoId: string, limite = 12) {
   return query<any>(`SELECT c.relacion, c.peso, c.nota, n.id, n.slug, n.titulo, n.tipo, n.estado, n.confianza, 'sale' AS direccion FROM bib_conexiones c JOIN bib_nodos n ON n.id=c.destino_id WHERE c.origen_id=$1 AND n.borrado_en IS NULL

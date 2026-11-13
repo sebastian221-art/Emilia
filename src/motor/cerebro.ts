@@ -21,7 +21,7 @@ import { slugDe } from "./biblioteca.js";
 
 export type Clase = "conocimiento" | "hecho" | "episodio" | "procedimiento" | "persona" | "perfil" | "leccion" | "capacidad" | "resumen";
 export const CLASES: Clase[] = ["conocimiento", "hecho", "episodio", "procedimiento", "persona", "perfil", "leccion", "capacidad", "resumen"];
-export interface Recuerdo { id: string; slug: string; titulo: string; resumen: string; clase: Clase; espacio: string; tipo: string; estado: string; confianza: number; fuerza: number; importancia: number; etiquetas: string[]; ocurrio_en: string | null; actualizado_en: string; privado: boolean; ficha: any; score?: number; via?: string }
+export interface Recuerdo { id: string; slug: string; titulo: string; resumen: string; clase: Clase; espacio: string; tipo: string; estado: string; confianza: number; fuerza: number; importancia: number; etiquetas: string[]; ocurrio_en: string | null; actualizado_en: string; privado: boolean; ficha: any; score?: number; via?: string; sim?: number }
 
 // ── ¿Hay pgvector? ───────────────────────────────────────────────────────────
 let conVector: boolean | null = null;
@@ -126,17 +126,29 @@ export interface OpcionesRecordar { espacios?: string[]; clases?: Clase[]; max?:
 /** Búsqueda por significado, con pgvector (HNSW con búsqueda iterativa para que el filtro por carpeta no deje huecos). */
 async function porSignificado(vec: number[], esp: string[] | null, clases: string[] | null, privado: boolean, n: number): Promise<{ id: string; sim: number }[]> {
   if (await hayPgvector()) {
+    const q = lit(vec);
+    // Exacto (compara contra todo) cuando el conjunto es acotado: una carpeta, o la personal. Nunca se le escapa un recuerdo.
+    const exacto = (espacios: string[]) => query<any>(`SELECT id, 1 - (vec <=> $1::vector) AS sim FROM bib_nodos WHERE borrado_en IS NULL AND vec IS NOT NULL AND espacio = ANY($2)
+        AND ($3::text[] IS NULL OR clase = ANY($3)) AND ($4 OR NOT privado) ORDER BY (vec <=> $1::vector) + 0 LIMIT $5`, [q, espacios, clases, privado, n]);
+    if (esp) {
+      const [c] = await query<{ n: number }>(`SELECT count(*)::int AS n FROM bib_nodos WHERE borrado_en IS NULL AND espacio = ANY($1)`, [esp]);
+      if (c.n <= Number(process.env.CEREBRO_EXACTO_HASTA || 20000)) return (await exacto(esp)).map((x) => ({ id: x.id, sim: Number(x.sim) }));
+    }
+    // Global y grande: índice HNSW (aproximado, milisegundos) con búsqueda iterativa para que los filtros no dejen huecos.
     const cli = await db.connect();
+    let filas: any[] = [];
     try {
       await cli.query("BEGIN");
       await cli.query("SET LOCAL hnsw.iterative_scan = relaxed_order").catch(() => {});
-      await cli.query("SET LOCAL hnsw.ef_search = 100").catch(() => {});
-      const r = await cli.query(`SELECT id, 1 - (vec <=> $1::vector) AS sim FROM bib_nodos WHERE borrado_en IS NULL AND vec IS NOT NULL
+      await cli.query("SET LOCAL hnsw.ef_search = 200").catch(() => {});
+      filas = (await cli.query(`SELECT id, 1 - (vec <=> $1::vector) AS sim FROM bib_nodos WHERE borrado_en IS NULL AND vec IS NOT NULL
         AND ($2::text[] IS NULL OR espacio = ANY($2)) AND ($3::text[] IS NULL OR clase = ANY($3)) AND ($4 OR NOT privado)
-        ORDER BY vec <=> $1::vector LIMIT $5`, [lit(vec), esp, clases, privado, n]);
+        ORDER BY vec <=> $1::vector LIMIT $5`, [q, esp, clases, privado, n])).rows;
       await cli.query("COMMIT");
-      return r.rows.map((x: any) => ({ id: x.id, sim: Number(x.sim) }));
     } catch (e) { await cli.query("ROLLBACK").catch(() => {}); throw e; } finally { cli.release(); }
+    // Lo personal (cuando aplica) siempre con búsqueda exacta: es lo que nunca se puede olvidar.
+    if (privado && (!esp || esp.includes("personal"))) for (const x of await exacto(["personal"])) if (!filas.some((f) => f.id === x.id)) filas.push(x);
+    return filas.map((x) => ({ id: x.id, sim: Number(x.sim) })).sort((a, b) => b.sim - a.sim).slice(0, n);
   }
   const xs = await query<any>(`SELECT id, embedding FROM bib_nodos WHERE borrado_en IS NULL AND embedding IS NOT NULL AND ($1::text[] IS NULL OR espacio = ANY($1)) AND ($2::text[] IS NULL OR clase = ANY($2)) AND ($3 OR NOT privado)`, [esp, clases, privado]);
   return xs.map((x) => ({ id: x.id, sim: coseno(vec, x.embedding) })).sort((a, b) => b.sim - a.sim).slice(0, n);
@@ -179,7 +191,7 @@ export async function recordar(consulta: string, op: OpcionesRecordar = {}): Pro
     const frescura = f.clase === "episodio" ? 0.6 + 0.4 * Math.exp(-edadDias / 120) : 1;
     const score = p.s * (0.55 + 0.45 * Number(f.confianza)) * (0.75 + 0.25 * Math.min(1, Number(f.fuerza))) * (0.7 + 0.6 * Number(f.importancia)) * frescura
       * (f.estado === "contradicho" ? 0.5 : f.estado === "dudoso" ? 0.75 : 1) * (caducado ? 0.4 : 1);
-    return { ...f, score: +score.toFixed(5), via: p.via };
+    return { ...f, score: +score.toFixed(5), via: p.via, sim: +p.sim.toFixed(3) };
   }).sort((a, b) => b.score - a.score).slice(0, max);
   if (op.reforzar !== false && res.length) reforzar(res.slice(0, 5).map((r) => r.id)).catch(() => {});
   return res;
@@ -228,7 +240,8 @@ export async function contextoCerebro(pedido: string, op: OpcionesContexto = {})
   const rs = await recordar(pedido.slice(0, 800), { espacios: buscarEn || ["*"], max: 14, agenteId: op.agenteId, incluirPrivado: conPersonal });
   // Solo lo que de verdad aporta: nada por debajo de un tercio del mejor, ni lo que ya está en el núcleo.
   const mejor = rs[0]?.score || 0;
-  const rel = rs.filter((r) => (r.score || 0) >= mejor * 0.33 && !enNucleo.has(r.titulo));
+  let caps = 0;   // capacidades ("quién sabe hacer qué"): máximo 2 para no tapar lo demás
+  const rel = rs.filter((r) => (r.score || 0) >= mejor * 0.33 && !enNucleo.has(r.titulo) && (r.clase !== "capacidad" || ++caps <= 2));
   // 3) Resumen de las carpetas que aparecen (de proyectos), una vez cada una.
   const carpetas = [...new Set(rel.map((r) => r.espacio).filter((e) => e.startsWith("proyecto:")))].slice(0, 2);
   if (carpetas.length) {
