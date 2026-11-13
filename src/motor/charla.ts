@@ -16,7 +16,7 @@ import { obtenerConversacion, guardarMensajeEn } from "../dominio/conversaciones
 import { sintetizar, prepararTexto } from "./voz.js";
 
 const MARCA = "[[HERRAMIENTA]]";
-const REGLA_RAPIDA = `RESPUESTA RÁPIDA SIN HERRAMIENTAS: en este turno NO tenés herramientas. Si para contestar bien necesitás datos reales del sistema (estado de un envío, logs, archivos, mandar algo, agendar, recordar algo que no está en tu memoria), respondé EXACTAMENTE ${MARCA} y nada más: el sistema te vuelve a llamar con herramientas. Si es charla, opinión, recuerdo o algo que ya sabés, respondé directo.`;
+const REGLA_RAPIDA = `RESPUESTA RÁPIDA SIN HERRAMIENTAS: en este turno NO tienes herramientas. Si para contestar bien necesitas datos reales del sistema (estado de un envío, logs, archivos, mandar algo, agendar, recordar algo que no está en tu memoria), responde EXACTAMENTE ${MARCA} y nada más: el sistema te vuelve a llamar con herramientas. Si es charla, opinión, recuerdo o algo que ya sabes, responde directo.`;
 
 export interface EventoCharla { tipo: "parcial" | "frase" | "audio" | "herramienta" | "fin" | "error"; texto?: string; audio?: string; mime?: string; indice?: number; ms?: number }
 

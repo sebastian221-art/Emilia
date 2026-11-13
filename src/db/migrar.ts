@@ -8,7 +8,7 @@ import { db } from "./cliente.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Orden de aplicación. Cada archivo es idempotente.
-const ARCHIVOS = ["esquema.sql", "esquema-registro.sql", "esquema-motor.sql", "esquema-flujos.sql", "esquema-archivos.sql", "esquema-codigo.sql", "esquema-runtime.sql", "esquema-empresa.sql", "esquema-memoria.sql", "esquema-eventos.sql", "esquema-evaluacion.sql", "esquema-biblioteca.sql", "esquema-aprendizaje.sql", "esquema-jelcom.sql", "esquema-publicar.sql", "esquema-guardia.sql", "esquema-pc.sql", "esquema-iris.sql", "esquema-soga.sql", "esquema-cerebro.sql", "esquema-lyra.sql", "esquema-system.sql"];
+const ARCHIVOS = ["esquema.sql", "esquema-registro.sql", "esquema-motor.sql", "esquema-flujos.sql", "esquema-archivos.sql", "esquema-codigo.sql", "esquema-runtime.sql", "esquema-empresa.sql", "esquema-memoria.sql", "esquema-eventos.sql", "esquema-evaluacion.sql", "esquema-biblioteca.sql", "esquema-aprendizaje.sql", "esquema-jelcom.sql", "esquema-publicar.sql", "esquema-guardia.sql", "esquema-pc.sql", "esquema-iris.sql", "esquema-soga.sql", "esquema-cerebro.sql", "esquema-lyra.sql", "esquema-system.sql", "esquema-alma.sql"];
 
 async function migrar() {
   for (const archivo of ARCHIVOS) {

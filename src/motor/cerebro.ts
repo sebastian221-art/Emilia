@@ -39,7 +39,7 @@ const palabras = (q: string) => [...new Set(norm(q).split(/[^a-z0-9ñ]+/).filter
 // ── Carpetas ─────────────────────────────────────────────────────────────────
 export const espacioProyecto = (proyecto: string) => `proyecto:${slugDe(proyecto).replace(/-/g, "_")}`;
 export async function asegurarEspacio(slug: string, p: { nombre?: string; descripcion?: string; proyecto?: string } = {}) {
-  const tipo = slug === "general" ? "general" : slug === "personal" ? "personal" : "proyecto";
+  const tipo = slug === "general" ? "general" : slug === "personal" || slug === "emilia" ? "personal" : "proyecto";   // "emilia": la memoria propia de Emilia
   await query(`INSERT INTO bib_espacios (slug, nombre, tipo, descripcion, proyecto) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (slug) DO UPDATE SET descripcion = COALESCE(EXCLUDED.descripcion, bib_espacios.descripcion), proyecto = COALESCE(EXCLUDED.proyecto, bib_espacios.proyecto)`,
     [slug, p.nombre || slug.replace(/^proyecto:/, ""), tipo, p.descripcion || null, p.proyecto || null]);
 }
@@ -208,7 +208,9 @@ export async function recordar(consulta: string, op: OpcionesRecordar = {}): Pro
     if (e) e.s += act * 0.5; else puntos.set(v.hacia, { s: act, via: `conectado (${v.relacion})`, sim: 0 });
   }
   const candidatos = [...puntos.keys()];
-  const filas = await query<Recuerdo>(`SELECT id, slug, titulo, resumen, cifrado, clase, espacio, tipo, estado, confianza, fuerza, importancia, etiquetas, ocurrio_en, actualizado_en, privado, ficha, vigente_hasta FROM bib_nodos WHERE id = ANY($1) AND borrado_en IS NULL`, [candidatos]);
+  // La carpeta "emilia" (su historia y su diario) es solo de ella: no aparece si no se pide explícitamente.
+  const conAlma = !!esp?.includes("emilia");
+  const filas = await query<Recuerdo>(`SELECT id, slug, titulo, resumen, cifrado, clase, espacio, tipo, estado, confianza, fuerza, importancia, etiquetas, ocurrio_en, actualizado_en, privado, ficha, vigente_hasta FROM bib_nodos WHERE id = ANY($1) AND borrado_en IS NULL AND ($2 OR espacio <> 'emilia')`, [candidatos, conAlma]);
   const ahora = Date.now();
   const res = filas.map((f: any) => {
     const p = puntos.get(f.id)!;

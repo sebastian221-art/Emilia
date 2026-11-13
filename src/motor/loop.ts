@@ -157,6 +157,15 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   }
 
   const r = await bucle(estado, tools, invocables, ctx);
+  // Emilia con él: que no suene a asistente, y que sienta lo que hablaron.
+  const almaActiva = ag.es_administrador && conv && conv.canal !== "delegacion" && (process.env.ALMA || "true") !== "false";
+  if (almaActiva && r.ok && r.respuesta && r.estado !== "esperando_aprobacion") {
+    const { filtroRobot } = await import("./alma.js");
+    r.respuesta = await filtroRobot(r.respuesta);
+  }
+  if (almaActiva && r.estado !== "esperando_aprobacion") {
+    import("../tools/memoria.js").then((m) => m.conversacionDelJefe(conv!.id)).then(async (esJefe) => { if (esJefe) (await import("./alma.js")).programarSentir(conv!.id); }).catch(() => {});
+  }
   if (conv && r.estado !== "esperando_aprobacion") {
     resumirSiHaceFalta(conv, ag.memoria).catch(() => {});
     // Memoria: Lara guarda lo que vale la pena cuando la conversación hace una pausa (o ya van varios mensajes).
@@ -531,6 +540,12 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
       let esJefe = !conv || conv.canal === "panel" || (conv.canal === "whatsapp" && conv.contacto === jefe);
       if (conv?.canal === "delegacion") { const [p] = await query<any>(`SELECT canal, contacto FROM conversaciones WHERE id::text = $1`, [conv.contacto]).catch(() => [] as any[]); esJefe = !p || p.canal === "panel" || p.contacto === jefe || p.canal === "delegacion"; }
       cerebro = await contextoCerebro(mensajeUsuario, { espacios: ag.memoria?.espacios, personal: esJefe && ag.memoria?.personal !== false, presupuesto: ag.memoria?.presupuesto, agenteId: ag.id });
+      // Emilia (la administradora) hablando con él: su interior (cómo se siente, su yo, su historia con él).
+      if (ag.es_administrador && esJefe && conv?.canal !== "delegacion" && (process.env.ALMA || "true") !== "false") {
+        const { contextoAlma } = await import("./alma.js");
+        const charla = /MODO CONVERSACIÓN|RESPUESTA RÁPIDA SIN HERRAMIENTAS/.test(contextoCanal || "");
+        cerebro = `${await contextoAlma(mensajeUsuario, charla ? "charla" : "trabajo").catch(() => "")}\n\n${cerebro}`;
+      }
     } catch (e: any) { console.warn("[cerebro]", e?.message || e); }
   }
   const contexto = await contextoDeAgente(ag.id);
