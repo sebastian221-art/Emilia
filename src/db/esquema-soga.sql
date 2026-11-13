@@ -18,3 +18,6 @@ CREATE TABLE IF NOT EXISTS web_uso (
   costo    numeric(10,4) NOT NULL DEFAULT 0,
   PRIMARY KEY (dia, motor)
 );
+-- Texto extraído de los archivos (PDF, Word, Excel…) para poder buscar dentro de ellos.
+ALTER TABLE archivos ADD COLUMN IF NOT EXISTS texto TEXT;
+ALTER TABLE archivos ADD COLUMN IF NOT EXISTS indexado_en TIMESTAMPTZ;

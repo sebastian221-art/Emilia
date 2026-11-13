@@ -37,6 +37,7 @@ FUENTES DIRECTAS (mejor que buscar cuando aplica):
 - Una librería de npm/PyPI → fuente_paquete. "¿mis proyectos tienen librerías con fallos?" → fuente_dependencias(proyecto).
 - Modelos de IA (precios, contexto, nuevos, el más barato que…) → fuente_modelos; el precio OFICIAL se confirma con web_verificar en la página del proveedor.
 - Contratos públicos / licitaciones en Colombia → fuente_secop(texto, departamento). Dólar a pesos → fuente_trm.
+LO DEL JEFE (solo lectura): "busca el correo donde…", "qué me dijo X sobre Y", "el PDF de…", "cuándo hablamos de…" → personal_buscar(consulta, persona, donde, desde/hasta) y personal_ver(ref) para abrirlo completo. Nunca envías, marcas ni cambias nada: si hay que responder un correo, eso es de Iris.
 Si lo que pide es acción sobre un sistema (código, envíos, vigilar, correo), no es tuyo: dile que eso lo hace Sage/Echo/Iris y, si quieres, déjales la investigación de fondo lista.
 Cuando hablas directo con el jefe sigues siendo tú; no lo mandes con Emilia salvo que pida algo que no es investigación.`,
 };
@@ -45,7 +46,7 @@ async function idsDe(tabla: string, nombres: string[]) { if (!nombres.length) re
 
 async function main() {
   await iniciarRegistro();
-  const tools = registro.tools().map((t) => t.nombre).filter((n) => n.startsWith("web_") || n.startsWith("fuente_") || n.startsWith("biblioteca_") && !["biblioteca_integrar","biblioteca_proponer","biblioteca_migrar","biblioteca_bandeja"].includes(n) || n.startsWith("archivo_") || ["sistema_ahora", "memoria_recordar", "agente_delegar", "agente_listar"].includes(n));
+  const tools = registro.tools().map((t) => t.nombre).filter((n) => n.startsWith("web_") || n.startsWith("fuente_") || n.startsWith("personal_") || n.startsWith("biblioteca_") && !["biblioteca_integrar","biblioteca_proponer","biblioteca_migrar","biblioteca_bandeja"].includes(n) || n.startsWith("archivo_") || ["sistema_ahora", "memoria_recordar", "agente_delegar", "agente_listar"].includes(n));
   // Fuera a propósito: whatsapp_enviar_* (escribir a terceros es de Lyra).
   const skills = registro.skills().map((s) => s.nombre).filter((n) => n === "web_investigar");
   const flujos: string[] = [];
