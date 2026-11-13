@@ -25,6 +25,7 @@ const tareas: Tarea[] = [
   { nombre: "sueno", fn: () => suenoSiToca() },               // Lara: consolidación nocturna de la memoria
   { nombre: "lyra", fn: () => import("./terceros.js").then((t) => t.revisarTerceros()) },
   { nombre: "gestiones", fn: () => import("./gestiones.js").then((g) => g.revisarGestiones()) },
+  { nombre: "system", fn: () => import("./evolucion.js").then((e) => e.nocheSiToca()) },   // System: medir, sensores, adaptar (después del sueño de Lara)
   { nombre: "wa_personal", fn: () => import("./whatsapp-personal.js").then((w) => w.revisionProgramadaSiToca()) },   // Lyra: revisión programada de tu WhatsApp   // avisos de terceros pendientes y seguimientos
 ];
 /** Otros módulos de Iris (vigilancia, resúmenes, Any) se cuelgan del mismo reloj. */

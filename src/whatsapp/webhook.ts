@@ -231,6 +231,10 @@ async function procesarEntrante(m: any) {
     const rechazaTxt = RE_RECHAZA.test(texto) || (!!apPend && corto && RE_RECHAZA_TOL.test(texto) && !apruebaTxt);
     // ── "envíalo" / "ignóralo" justo después de una respuesta que Lyra propuso (si es lo último que el jefe vio, gana sobre una aprobación más vieja) ──
     if (esJefe && m.type === "text") {
+      // «aplica C-1a2b», «no C-1a2b», «revierte C-1a2b»: cambios que propuso System (la referencia es explícita)
+      const { atajoCambios } = await import("../motor/evolucion.js");
+      const rc = await atajoCambios(texto);
+      if (rc) { await entregarTexto(conv, rc); return; }
       const { respuestaRapidaDelJefe } = await import("../motor/terceros.js");
       const rr = await respuestaRapidaDelJefe(texto, convRaiz.id, apPend ? new Date(apPend.creado_en as any) : undefined);
       if (rr) { await entregarTexto(conv, rr); return; }

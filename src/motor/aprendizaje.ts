@@ -7,9 +7,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { query } from "../db/cliente.js";
 import { llamarModelo } from "./groq.js";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { exec } from "node:child_process";
 
 // ── Experimentos ──
 export type Caso = { entrada: string; esperado?: string; referencia?: string };
@@ -73,7 +70,8 @@ export async function cerrarExperimento(expId: string, conclusion: string, mejor
   const e = await experimentoPorId(expId); if (!e) throw new Error("No existe el experimento.");
   const mejor = mejorVariante ? e.variantes.find((v: any) => v.id.startsWith(mejorVariante)) : e.variantes.find((v: any) => v.puntaje != null);
   await query(`UPDATE exp_experimentos SET estado='cerrado', conclusion=$1, mejor_variante=$2, cerrado_en=now() WHERE id=$3`, [conclusion, mejor?.id ?? null, e.id]);
-  // Lo aprendido va a la biblioteca como evidencia de tipo experimento (si el experimento alimenta un nodo).
+  // Lo aprendido queda en el cerebro como lección (y como evidencia si el experimento alimenta un nodo).
+  import("./cerebro.js").then((c) => c.guardarRecuerdo({ titulo: `Experimento: ${e.titulo}`.slice(0, 120), contenido: `${e.hipotesis ? `Hipótesis: ${e.hipotesis}. ` : ""}Métrica: ${e.metrica}. ${conclusion}${mejor ? ` Ganó "${mejor.nombre}" (${Number(mejor.puntaje).toFixed(1)}) entre ${e.variantes.length} variantes.` : ""}`, clase: "leccion", espacio: "general", importancia: 0.55, confianza: 0.8, origenRef: `experimento:${e.id}`, etiquetas: ["system", "experimento"] })).catch(() => {});
   if (e.nodo_slug) {
     try {
       const B = await import("./biblioteca.js");
@@ -169,32 +167,8 @@ export async function cosecharVueltas(dias = 1): Promise<string> {
   ].join("\n\n");
 }
 
-// ── Laboratorio: la pista de código. Archivos + comando → carpeta temporal propia → resultado. Una sola llamada. ──
-const LAB_BASE = path.resolve(process.env.LABORATORIO_DIR || path.join("data", "laboratorio"));
-export async function laboratorio(p: { archivos: Record<string, string>; comando: string; timeoutSeg?: number; experimentoId?: string | null; nombre?: string }) {
-  const c = p.comando.toLowerCase();
-  if (/\b(rm\s+-rf?\s+[\/~]|rmdir\s+\/s|del\s+\/[sq]|format\s+[a-z]:|shutdown|reg\s+(add|delete)|diskpart|curl|wget|invoke-webrequest)\b/.test(c) || /[a-z][a-z0-9+.-]*:\/\//i.test(p.comando)) {
-    throw new Error("El laboratorio es local y sin red: nada de borrar fuera, apagar, ni llamar URLs. Si necesitás datos de internet, traelos antes con web_leer y pasalos como archivo.");
-  }
-  const id = `${new Date().toISOString().slice(0, 10)}-${(p.nombre || "exp").replace(/[^a-z0-9_-]/gi, "").slice(0, 30) || "exp"}-${Math.random().toString(36).slice(2, 7)}`;
-  const dir = path.join(LAB_BASE, id);
-  await fs.mkdir(dir, { recursive: true });
-  const escritos: string[] = [];
-  for (const [nombre, contenido] of Object.entries(p.archivos || {})) {
-    const abs = path.resolve(dir, nombre);
-    if (!abs.startsWith(dir)) throw new Error(`Ruta fuera del laboratorio: ${nombre}`);
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, String(contenido ?? ""), "utf-8");
-    escritos.push(nombre);
-  }
-  const timeout = Math.max(5, Math.min(600, p.timeoutSeg || 120)) * 1000;
-  const t0 = Date.now();
-  const r = await new Promise<{ codigo: number; stdout: string; stderr: string; timeout: boolean }>((res) => {
-    const child = exec(p.comando, { cwd: dir, timeout, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, NO_COLOR: "1", CI: "1" }, windowsHide: true }, (err: any, stdout, stderr) => {
-      res({ codigo: err ? (typeof err.code === "number" ? err.code : 1) : 0, stdout: String(stdout || ""), stderr: String(stderr || ""), timeout: !!err?.killed });
-    });
-    void child;
-  });
-  const ms = Date.now() - t0;
-  return { id, dir, archivos: escritos, comando: p.comando, codigo: r.codigo, timeout: r.timeout, ms, stdout: r.stdout.slice(-8000), stderr: r.stderr.slice(-4000) };
+// ── Laboratorio: ahora vive en laboratorio-system.ts (Docker). Se mantiene esta firma para las skills. ──
+export async function laboratorio(p: { archivos: Record<string, string>; comando: string; timeoutSeg?: number; experimentoId?: string | null; nombre?: string; red?: boolean }) {
+  const { correrEnLaboratorio } = await import("./laboratorio-system.js");
+  return correrEnLaboratorio(p);
 }

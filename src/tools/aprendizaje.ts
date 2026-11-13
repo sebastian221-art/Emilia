@@ -141,19 +141,55 @@ export const aprenderVueltas: DefTool = {
 
 export const aprenderLaboratorio: DefTool = {
   nombre: "aprender_laboratorio", modulo: MODULO,
-  descripcion: "La pista de código: le pasás los archivos (nombre → contenido completo) y UN comando (node, python, npx tsx…), los escribe en una carpeta temporal propia (data/laboratorio/<id>) y corre el comando. Devuelve salida, código de salida y milisegundos. Sin red, sin tocar repos reales, sin pelear con la consola: es la forma de probar algoritmos, prototipos y comparar variantes. Para medir, hacé que el programa imprima el número al final (p. ej. 'PUNTAJE=87.5').",
+  descripcion: "Tu laboratorio (Docker): le pasas los archivos (nombre → contenido completo) y UN comando (node, python, npx tsx, pip/npm install…); corre en un contenedor aislado (sin red salvo red=true para instalar, sin root, con límites) que solo ve la carpeta del experimento. Devuelve salida, código y milisegundos. Es para probar algoritmos, herramientas, librerías y variantes sin tocar el PC ni los proyectos. Para medir, haz que el programa imprima 'PUNTAJE=87.5' al final.",
   parametros: { type: "object", properties: {
     nombre: { type: "string", description: "Nombre corto del experimento (va en la carpeta)." },
     archivos: { type: "object", description: "{ 'mcts.js': '…código completo…', 'datos.json': '…' }. Contenido literal, sin escapes raros." },
     comando: { type: "string", minLength: 1, description: "Qué correr dentro de la carpeta: 'node mcts.js', 'python sim.py', 'node --test'." },
-    timeout_seg: { type: "integer", default: 120, minimum: 5, maximum: 600 },
+    timeout_seg: { type: "integer", default: 120, minimum: 5, maximum: 900 },
+    red: { type: "boolean", description: "Dar internet al contenedor (solo para instalar paquetes o descargar lo que vas a probar)." },
   }, required: ["archivos", "comando"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 660,
   async ejecutar(a) {
-    const r = await A.laboratorio({ archivos: a.archivos || {}, comando: a.comando, timeoutSeg: a.timeout_seg, nombre: a.nombre });
+    let r: any;
+    try { r = await A.laboratorio({ archivos: a.archivos || {}, comando: a.comando, timeoutSeg: a.timeout_seg, nombre: a.nombre, red: !!a.red }); }
+    catch (e: any) { return { ok: false, error: e?.message || String(e) }; }
     const puntaje = (r.stdout.match(/PUNTAJE\s*[=:]\s*(-?\d+(?:\.\d+)?)/i) || [])[1];
     return { ok: r.codigo === 0 && !r.timeout, datos: { ...r, puntaje: puntaje != null ? Number(puntaje) : undefined }, resumen: `[${r.id}] $ ${r.comando} → código ${r.codigo}${r.timeout ? " (timeout)" : ""} en ${r.ms} ms${puntaje != null ? ` · PUNTAJE ${puntaje}` : ""}\n${(r.stdout || r.stderr).slice(-1500)}`, error: r.codigo === 0 && !r.timeout ? undefined : `Salió con código ${r.codigo}${r.timeout ? " por timeout" : ""}: ${(r.stderr || r.stdout).slice(-800)}` };
   },
 };
 
-export const toolsAprendizaje: DefTool[] = [aprenderLaboratorio, aprenderCasosReales, aprenderExperimentoCrear, aprenderVarianteAgregar, aprenderVariantePuntuar, aprenderExperimentoEstado, aprenderExperimentoCerrar, aprenderProbarPrompt, aprenderCuriosidad, aprenderVueltas];
+export const aprenderEstudio: DefTool = {
+  nombre: "aprender_estudio", modulo: MODULO,
+  descripcion: "Modo profesor: lleva la cuenta de lo que el jefe está estudiando. 'ver' (qué domina, qué le cuesta, cuándo repasa), 'registrar' (después de una sesión: lo dominado, lo débil, aciertos y preguntas; programa el próximo repaso con intervalos que crecen si le fue bien), 'pendientes' (qué toca repasar hoy).",
+  parametros: { type: "object", properties: {
+    accion: { type: "string", enum: ["ver", "registrar", "pendientes"] }, tema: { type: "string" }, nivel: { type: "string" },
+    dominado: { type: "array", items: { type: "string" } }, debiles: { type: "array", items: { type: "string" } },
+    aciertos: { type: "integer", minimum: 0 }, preguntas: { type: "integer", minimum: 0 },
+  }, required: ["accion"] },
+  riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 15,
+  async ejecutar(a) {
+    const { query } = await import("../db/cliente.js");
+    if (a.accion === "pendientes") {
+      const xs = await query<any>(`SELECT * FROM sys_estudio WHERE proximo_repaso <= (now() AT TIME ZONE 'America/Bogota')::date ORDER BY proximo_repaso LIMIT 10`);
+      return { ok: true, datos: xs, resumen: xs.length ? xs.map((x) => `📚 ${x.tema}${x.debiles.length ? ` — repasar: ${x.debiles.slice(0, 4).join(", ")}` : ""}`).join("\n") : "No hay repasos pendientes hoy." };
+    }
+    if (!a.tema) return { ok: false, error: "Necesito el tema." };
+    if (a.accion === "ver") {
+      const [x] = await query<any>(`SELECT * FROM sys_estudio WHERE lower(tema) = lower($1)`, [a.tema]);
+      return { ok: true, datos: x || null, resumen: x ? `📚 ${x.tema} (${x.nivel || "nivel ?"}): ${x.sesiones} sesiones, ${x.aciertos}/${x.preguntas} aciertos. Domina: ${x.dominado.join(", ") || "—"}. Le cuesta: ${x.debiles.join(", ") || "—"}. Próximo repaso: ${x.proximo_repaso ? new Date(x.proximo_repaso).toLocaleDateString("es-CO") : "—"}.` : `Primera vez con "${a.tema}".` };
+    }
+    const [x] = await query<any>(`SELECT * FROM sys_estudio WHERE lower(tema) = lower($1)`, [a.tema]);
+    const ac = a.aciertos ?? 0, pr = a.preguntas ?? 0, tasa = pr ? ac / pr : 0.6;
+    // Repaso espaciado: si le fue bien, el intervalo crece; si no, vuelve a 1 día.
+    const intervalo = tasa >= 0.8 ? Math.min(30, Number(x?.intervalo_dias || 1) * 2.2) : tasa >= 0.5 ? Math.max(1, Number(x?.intervalo_dias || 1) * 1.3) : 1;
+    const dom = [...new Set([...(x?.dominado || []), ...(a.dominado || [])])].filter((d) => !(a.debiles || []).includes(d));
+    const deb = [...new Set([...(x?.debiles || []).filter((d: string) => !(a.dominado || []).includes(d)), ...(a.debiles || [])])];
+    await query(`INSERT INTO sys_estudio (tema, nivel, dominado, debiles, sesiones, aciertos, preguntas, intervalo_dias, proximo_repaso, ultima_vez) VALUES ($1,$2,$3,$4,1,$5,$6,$7::numeric,(now() AT TIME ZONE 'America/Bogota')::date + ceil($7::numeric)::int, now())
+      ON CONFLICT (tema) DO UPDATE SET nivel = COALESCE($2, sys_estudio.nivel), dominado = $3, debiles = $4, sesiones = sys_estudio.sesiones + 1, aciertos = sys_estudio.aciertos + $5, preguntas = sys_estudio.preguntas + $6, intervalo_dias = $7::numeric, proximo_repaso = (now() AT TIME ZONE 'America/Bogota')::date + ceil($7::numeric)::int, ultima_vez = now()`,
+      [x?.tema || a.tema, a.nivel ?? null, dom, deb, ac, pr, intervalo]);
+    return { ok: true, resumen: `Anotado. Próximo repaso de "${a.tema}" en ${Math.ceil(intervalo)} día(s)${deb.length ? ` (enfocado en: ${deb.slice(0, 3).join(", ")})` : ""}.` };
+  },
+};
+
+export const toolsAprendizaje: DefTool[] = [aprenderEstudio, aprenderLaboratorio, aprenderCasosReales, aprenderExperimentoCrear, aprenderVarianteAgregar, aprenderVariantePuntuar, aprenderExperimentoEstado, aprenderExperimentoCerrar, aprenderProbarPrompt, aprenderCuriosidad, aprenderVueltas];
