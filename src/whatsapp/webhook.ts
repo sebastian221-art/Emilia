@@ -249,6 +249,15 @@ async function procesarEntrante(m: any) {
       const { atajoTope } = await import("../seguridad/gasto.js");
       const rt = await atajoTope(texto);
       if (rt) { await entregarTexto(conv, rt); return; }
+      // «actualiza emilia»: el vigía baja los cambios, prueba y, si fallan, vuelve a la versión anterior
+      if (/^actualiza(r)?\s+(a\s+)?emilia\.?$/i.test(texto.trim())) {
+        if (process.env.EMILIA_VIGIA !== "1") { await entregarTexto(conv, "No estoy corriendo con el vigía (npm run vigia), así que no me puedo actualizar sola. Arca te ayuda a dejarlo así."); return; }
+        const fsp = await import("node:fs/promises"); const pth = await import("node:path");
+        const data = pth.resolve(process.env.DATA_DIR || "data"); await fsp.mkdir(data, { recursive: true });
+        await fsp.writeFile(pth.join(data, "actualizar.pedido"), new Date().toISOString());
+        await entregarTexto(conv, "Va. Bajo los cambios, los pruebo y me reinicio (unos minutos). Si la versión nueva falla, vuelvo sola a la de ahora y te aviso.");
+        return;
+      }
       const { respuestaRapidaDelJefe } = await import("../motor/terceros.js");
       const rr = await respuestaRapidaDelJefe(texto, convRaiz.id, apPend ? new Date(apPend.creado_en as any) : undefined);
       if (rr) { await entregarTexto(conv, rr); return; }

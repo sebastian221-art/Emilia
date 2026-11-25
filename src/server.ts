@@ -60,6 +60,14 @@ app.use(express.static(PUB, { index: false }));
 // three.js para la oficina 3D (local: funciona sin internet).
 app.use("/vendor/three", express.static(path.resolve("node_modules/three"), { index: false, maxAge: "7d" }));
 
+// Salud: la usa el vigía (watchdog) para saber si Emilia sigue viva.
+const INICIO = Date.now();
+app.get("/api/salud", async (_req, res) => {
+  const t = Date.now();
+  const db = await query("SELECT 1").then(() => true).catch(() => false);
+  res.status(db ? 200 : 503).json({ ok: db, db, ms_db: Date.now() - t, arriba_seg: Math.round((Date.now() - INICIO) / 1000), pid: process.pid, version: process.env.EMILIA_VERSION || null });
+});
+
 // ── Rutas de API ──────────────────────────────────────────────────────────
 app.use(rutasCrear);
 app.use(rutasAgentes);

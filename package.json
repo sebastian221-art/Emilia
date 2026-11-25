@@ -5,6 +5,8 @@
     "type": "module",
     "scripts": {
         "dev": "tsx watch src/server.ts",
+        "start": "node --import tsx src/vigia.ts",
+        "vigia": "node --import tsx src/vigia.ts",
         "crear-base": "tsx src/db/crear-base.ts",
         "migrate": "tsx src/db/migrar.ts",
         "setup": "tsx src/db/crear-base.ts && tsx src/db/migrar.ts",
@@ -13,7 +15,11 @@
         "google:conectar": "tsx src/scripts/conectar-google.ts",
         "cerebro:llave": "tsx src/scripts/cerebro-llave.ts",
         "secretos": "tsx src/scripts/escanear-secretos.ts",
-        "seguridad": "tsx src/scripts/seguridad.ts"
+        "seguridad": "tsx src/scripts/seguridad.ts",
+        "respaldo:llaves": "tsx src/scripts/respaldo-llaves.ts",
+        "respaldo:restaurar": "tsx src/scripts/respaldo-llaves.ts restaurar",
+        "inicio:instalar": "powershell -ExecutionPolicy Bypass -File scripts/windows/instalar-inicio.ps1",
+        "inicio:quitar": "powershell -ExecutionPolicy Bypass -File scripts/windows/desinstalar-inicio.ps1"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.131.0",

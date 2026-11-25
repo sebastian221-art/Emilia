@@ -44,6 +44,17 @@ export async function auditarSeguridad(): Promise<Chequeo[]> {
     ? { id: "cerebro_llave", nombre: "Memoria personal cifrada", nivel: "ok", detalle: env.CEREBRO_LLAVE ? "Llave en el .env (CEREBRO_LLAVE)." : "Llave protegida por Windows (DPAPI)." }
     : { id: "cerebro_llave", nombre: "Memoria personal cifrada", nivel: "grave", detalle: "No hay llave del cerebro.", arreglo: "npm run cerebro:llave" });
 
+  // ── Autonomía: vigía y respaldo de llaves ──
+  add(env.EMILIA_VIGIA === "1"
+    ? { id: "vigia", nombre: "Corre con el vigía", nivel: "ok", detalle: "Si se cae o se cuelga, se levanta sola." }
+    : { id: "vigia", nombre: "Corre con el vigía", nivel: "atencion", detalle: "Corre sin vigía: si se cae, se queda caída.", arreglo: "npm run inicio:instalar (arranca con Windows) o npm run vigia." });
+  const { ultimoRespaldo } = await import("./respaldo-llaves.js");
+  const ur = ultimoRespaldo();
+  const dias = ur ? Math.floor((Date.now() - Date.parse(ur.t)) / 86_400_000) : null;
+  add(ur && dias! <= 90
+    ? { id: "respaldo_llaves", nombre: "Respaldo de la llave del cerebro y del .env", nivel: "ok", detalle: `Hace ${dias} día(s).` }
+    : { id: "respaldo_llaves", nombre: "Respaldo de la llave del cerebro y del .env", nivel: "atencion", detalle: ur ? `El último es de hace ${dias} días.` : "Nunca se hizo: si el disco muere, la memoria personal no se puede recuperar.", arreglo: "npm run respaldo:llaves y copia el archivo a OneDrive o una USB." });
+
   // ── Herramientas ──
   const { registro } = await import("../registro/registro.js");
   const sinOk = registro.tools().filter((t) => t.riesgo === "sistema" && !t.requiereAprobacion).map((t) => t.nombre);
