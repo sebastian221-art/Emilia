@@ -96,7 +96,7 @@ async function pgvector(): Promise<Omit<Chequeo, "ms">> {
     if (ext) return { ...base, estado: "ok", detalle: `v${ext.extversion}` };
     const disp = (await c.query(`SELECT default_version FROM pg_available_extensions WHERE name='vector'`)).rows[0];
     return disp ? { ...base, estado: "falta", detalle: "Está instalada pero no activada en la base.", pasos: ["npm run migrate (la activa)"] }
-      : { ...base, estado: "falta", detalle: "No está instalada en PostgreSQL.", pasos: ["Descarga pgvector para Windows (el .zip de la versión de tu PostgreSQL) desde github.com/andreiramani/pgvector_pgsql_windows/releases", "Copia vector.dll a C:\\Program Files\\PostgreSQL\\16\\lib y los vector*.sql/.control a ...\\share\\extension", "npm run migrate"] };
+      : { ...base, estado: "falta", detalle: "No está instalada en PostgreSQL.", pasos: [`Instala Visual Studio Build Tools con «Desarrollo para el escritorio con C++» (visualstudio.microsoft.com/es/visual-cpp-build-tools)`, `Abre «x64 Native Tools Command Prompt for VS» como administrador`, `set "PGROOT=C:\\Program Files\\PostgreSQL\\${String((await c.query("SHOW server_version")).rows[0].server_version).split(".")[0]}"`, "cd %TEMP% && git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git && cd pgvector", "nmake /F Makefile.win && nmake /F Makefile.win install", "Vuelve aquí y elige [m] (guía completa: docs\\pgvector-windows.md)"] };
   } catch (e: any) { return { ...base, estado: "omitido", detalle: "Primero la base." }; }
   finally { await c.end().catch(() => {}); }
 }
