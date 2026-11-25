@@ -33,6 +33,7 @@ import { recibirWebhook } from "./motor/eventos.js";
 import { rutasBiblioteca } from "./rutas/biblioteca.js";
 import { rutasVoz } from "./rutas/voz.js";
 import { rutasOficina } from "./rutas/oficina.js";
+import { rutasArca } from "./rutas/arca.js";
 import { rutasActividad } from "./rutas/actividad.js";
 import { iniciarReloj } from "./motor/eventos.js";
 import { limpiarArchivosViejos } from "./dominio/archivos.js";
@@ -85,6 +86,7 @@ app.use(rutasBiblioteca);
 app.use(rutasVoz);
 app.use(rutasActividad);
 app.use(rutasOficina);
+app.use(rutasArca);
 
 // ── Webhook de WhatsApp ──
 app.get("/webhook/whatsapp", verificarWebhook);
@@ -101,11 +103,13 @@ const MENU: { ruta: string; titulo: string; icono: string; abajo?: boolean }[] =
   { ruta: "/biblioteca", titulo: "Cerebro (Lara)", icono: "cerebro" },
   { ruta: "/codigo", titulo: "Código (Sage)", icono: "codigo" },
   { ruta: "/voz", titulo: "Hablar con Emilia", icono: "voz" },
+  { ruta: "/arca", titulo: "Taller (Arca)", icono: "arca" },
   { ruta: "/flujos", titulo: "Flujos", icono: "flujo", abajo: true },
   { ruta: "/skills", titulo: "Skills", icono: "skill" },
   { ruta: "/tools", titulo: "Herramientas", icono: "tool" },
 ];
 const ICONOS: Record<string, string> = {
+  arca: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
   oficina: '<path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-5h6v5"/>',
   ok: '<path d="M20 6 9 17l-5-5"/><circle cx="12" cy="12" r="10" opacity=".35"/>',
   pulso: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',

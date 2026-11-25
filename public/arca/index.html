@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<!-- ARCHIVO: public/arca/index.html — el taller de Arca: la instalación como un juego -->
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Taller de Arca · Emilia</title>
+<link rel="stylesheet" href="/comun/estilos.css" />
+<style>
+:root { --cobre: #f59e0b; --cobre-2: #d97706; }
+main { max-width: 1180px; margin: 0 auto; padding: 22px 18px 60px; }
+.cab { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; }
+.anillo { --p: 0; width: 86px; height: 86px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: conic-gradient(var(--cobre) calc(var(--p) * 1%), rgba(245,158,11,.12) 0); box-shadow: 0 0 30px rgba(245,158,11,.25); }
+.anillo b { width: 70px; height: 70px; border-radius: 50%; background: var(--h-bg); display: grid; place-items: center; font-size: 20px; font-family: var(--h-mono); }
+.cab h1 { margin: 0; font-size: 26px; } .cab .sub { color: var(--h-text-2); font-size: 13px; margin-top: 4px; }
+.xp { height: 8px; border-radius: 8px; background: rgba(245,158,11,.12); overflow: hidden; margin-top: 8px; width: min(360px, 70vw); }
+.xp i { display: block; height: 100%; background: linear-gradient(90deg, var(--cobre-2), var(--cobre)); box-shadow: 0 0 12px var(--cobre); }
+.acciones { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 13px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--h-line-2); background: rgba(94,231,255,.06); color: var(--h-text); cursor: pointer; }
+.btn:hover { border-color: var(--h-cyan); } .btn.cobre { border-color: rgba(245,158,11,.5); background: rgba(245,158,11,.1); } .btn:disabled { opacity: .5; cursor: wait; }
+.grid { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .acciones { margin-left: 0; } aside { order: -1; } .sig { position: static; } }
+.vidrio { background: var(--h-glass); border: 1px solid var(--h-line); border-radius: 16px; backdrop-filter: blur(14px); }
+.mision { padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: .15s; }
+.mision:hover { border-color: var(--h-line-2); }
+.mision.actual { border-color: rgba(245,158,11,.55); box-shadow: 0 0 24px rgba(245,158,11,.12); }
+.mision.completa { opacity: .8; }
+.mision .fila { display: flex; align-items: center; gap: 10px; }
+.mision .em { font-size: 22px; } .mision .nom { font-weight: 600; } .mision .meta { font-size: 12px; color: var(--h-text-2); margin-top: 2px; }
+.mision .cnt { margin-left: auto; font-family: var(--h-mono); font-size: 12px; color: var(--h-text-2); }
+.mini { height: 4px; border-radius: 4px; background: rgba(255,255,255,.06); margin-top: 10px; overflow: hidden; } .mini i { display: block; height: 100%; background: var(--cobre); }
+.objs { margin-top: 12px; display: none; } .mision.abierta .objs { display: block; }
+.obj { border-top: 1px solid var(--h-line); padding: 10px 0; font-size: 13px; }
+.obj .t { display: flex; gap: 8px; align-items: baseline; } .obj .d { color: var(--h-text-2); font-size: 12px; margin: 3px 0 0 24px; }
+.obj ol { margin: 6px 0 0 24px; padding-left: 16px; color: var(--h-text-2); font-size: 12px; } .obj li { margin: 2px 0; }
+.llave { display: flex; gap: 6px; margin: 8px 0 0 24px; flex-wrap: wrap; } .llave label { width: 100%; font-size: 11px; color: var(--h-muted); }
+.llave input { flex: 1; min-width: 180px; font: inherit; font-size: 12px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--h-line-2); background: rgba(0,0,0,.3); color: var(--h-text); font-family: var(--h-mono); }
+.llave .ok { color: var(--h-ok); font-size: 12px; align-self: center; }
+.sig { padding: 18px; position: sticky; top: 16px; }
+.sig h2 { margin: 0 0 4px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--cobre); }
+.sig .tit { font-size: 18px; font-weight: 600; margin: 6px 0; } .sig .d { color: var(--h-text-2); font-size: 13px; }
+.sig ol { padding-left: 18px; font-size: 13px; line-height: 1.55; }
+.aviso { font-size: 12px; color: var(--h-muted); margin-top: 12px; border-top: 1px dashed var(--h-line); padding-top: 10px; }
+.seccion { padding: 16px; margin-top: 16px; } .seccion h3 { margin: 0 0 10px; font-size: 14px; }
+.nota { display: grid; grid-template-columns: 140px 1fr 44px; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+.nota .b { height: 8px; border-radius: 8px; background: rgba(255,255,255,.06); overflow: hidden; } .nota .b i { display: block; height: 100%; }
+.falla { font-size: 12px; color: var(--h-text-2); margin: -2px 0 6px 150px; }
+@media (max-width: 600px) { .nota { grid-template-columns: 100px 1fr 40px; } .falla { margin-left: 0; } }
+pre.log { white-space: pre-wrap; font-family: var(--h-mono); font-size: 11.5px; color: var(--h-text-2); margin: 0; max-height: 320px; overflow: auto; }
+.fiesta { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); z-index: 99; padding: 12px 20px; border-radius: 14px; background: rgba(245,158,11,.15); border: 1px solid var(--cobre); color: #fde68a; font-weight: 600; box-shadow: 0 0 40px rgba(245,158,11,.35); display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="cab">
+    <div class="anillo" id="anillo"><b id="pct">–</b></div>
+    <div>
+      <h1>Taller de Arca</h1>
+      <div class="sub" id="nivel">Revisando…</div>
+      <div class="xp"><i id="xpbar" style="width:0"></i></div>
+    </div>
+    <div class="acciones">
+      <button class="btn cobre" id="bRevisar">Revisar todo</button>
+      <button class="btn" id="bProbar">Prueba final</button>
+      <button class="btn" id="bMant">Mantenimiento</button>
+    </div>
+  </div>
+  <div class="grid">
+    <div id="misiones"></div>
+    <aside>
+      <div class="vidrio sig" id="sig"></div>
+      <div class="vidrio seccion" id="informe" style="display:none"></div>
+      <div class="vidrio seccion" id="mant" style="display:none"></div>
+    </aside>
+  </div>
+</main>
+<div class="fiesta" id="fiesta"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ICON = { ok: "✅", falta: "⬜", error: "❌", aviso: "⚠️", omitido: "➖" };
+let T = null, abierta = null;
+async function api(ruta, cuerpo) {
+  const r = await fetch(ruta, cuerpo === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.status); return j;
+}
+function fiesta(t) { if (!t) return; const f = $("#fiesta"); f.textContent = t; f.style.display = "block"; setTimeout(() => (f.style.display = "none"), 5000); }
+const listo = (c) => c && (c.estado === "ok" || (c.estado === "omitido" && /^Solo en Windows/.test(c.detalle)));
+
+function formLlaves(c) {
+  const vs = (T.variables || []).filter((v) => v.chequeo === c.id && (!v.puesta || c.estado === "error"));
+  if (!vs.length || listo(c)) return "";
+  return vs.map((v) => `<form class="llave" data-v="${v.nombre}"><label>${esc(v.nombre)} — ${esc(v.pregunta)}${v.puesta ? " (ya hay una; ponla de nuevo para cambiarla)" : ""}</label>
+    <input name="valor" type="${v.secreto ? "password" : "text"}" autocomplete="off" spellcheck="false" placeholder="${v.generable ? "vacío = te genero uno" : "pégala aquí"}" />
+    <button class="btn cobre">Guardar y probar</button><span class="ok"></span></form>`).join("");
+}
+function objetivos(p) {
+  const por = Object.fromEntries(p.pendientes.map((c) => [c.id, c]));
+  return p.mision.chequeos.map((id) => {
+    const c = por[id];
+    if (!c) return `<div class="obj"><div class="t">✅ <span>${esc(id)}</span></div></div>`;
+    return `<div class="obj"><div class="t">${ICON[c.estado] || "⬜"} <b>${esc(c.nombre)}</b></div><div class="d">${esc(c.detalle)}</div>
+      ${c.pasos?.length ? `<ol>${c.pasos.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+      ${c.instalable ? `<div class="llave"><button class="btn" data-instalar="${c.instalable}">Instalar ${esc(c.instalable)} (winget)</button><span class="ok"></span></div>` : ""}
+      ${formLlaves(c)}</div>`;
+  }).join("");
+}
+function pintar() {
+  $("#anillo").style.setProperty("--p", T.porcentaje); $("#pct").textContent = T.porcentaje + "%";
+  $("#nivel").textContent = `Nivel «${T.nivel}» · ${T.xp} / ${T.xpMax} XP`; $("#xpbar").style.width = T.porcentaje + "%";
+  const actualId = T.actual?.mision.id;
+  if (abierta === null) abierta = actualId;
+  $("#misiones").innerHTML = T.misiones.map((p) => `<div class="vidrio mision ${p.completa ? "completa" : ""} ${p.mision.id === actualId ? "actual" : ""} ${p.mision.id === abierta ? "abierta" : ""}" data-m="${p.mision.id}">
+    <div class="fila"><span class="em">${p.completa ? "🏆" : p.mision.emoji}</span><div><div class="nom">Misión ${p.mision.n}: ${esc(p.mision.nombre)}</div><div class="meta">${esc(p.mision.meta)}</div></div>
+    <span class="cnt">${p.total ? `${p.hechos}/${p.total}` : p.completa ? "hecha" : ""}</span></div>
+    ${p.total ? `<div class="mini"><i style="width:${Math.round((p.hechos / p.total) * 100)}%"></i></div>` : ""}
+    <div class="objs">${p.mision.id === "pruebas" ? `<div class="obj"><div class="d" style="margin-left:0">Prueba cada parte de verdad y le pone nota. <button class="btn cobre" data-probar>Correr la prueba final</button></div></div>` : objetivos(p)}</div></div>`).join("");
+  const s = T.siguiente;
+  $("#sig").innerHTML = !T.actual ? `<h2>Todo listo</h2><div class="tit">🎉 Emilia está instalada y probada</div><div class="d">Para que arranque sola: <code>npm run inicio:instalar</code>.</div>`
+    : T.actual.mision.id === "pruebas" ? `<h2>Siguiente paso</h2><div class="tit">🏁 La prueba final</div><div class="d">Pruebo motor, memoria, WhatsApp, seguridad, panel y a cada agente, y les pongo nota.</div><p><button class="btn cobre" data-probar>Correr la prueba final</button></p>`
+    : `<h2>Misión ${T.actual.mision.n} · siguiente paso</h2><div class="tit">${ICON[s?.estado] || ""} ${esc(s?.nombre || "")}</div><div class="d">${esc(s?.detalle || "")}</div>
+       ${s?.pasos?.length ? `<ol>${s.pasos.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+       <div class="aviso">Las llaves se ponen aquí o en la terminal (<code>npm run arca</code>): van directo al .env, nunca por WhatsApp ni por un modelo.</div>`;
+}
+async function cargar(revisar) {
+  $("#bRevisar").disabled = true;
+  try { T = revisar ? await api("/api/arca/revisar", {}) : await api("/api/arca/tutorial"); if (revisar) abierta = null; fiesta(T.celebracion); pintar(); }
+  catch (e) { $("#nivel").textContent = "No pude revisar: " + e.message; }
+  finally { $("#bRevisar").disabled = false; }
+}
+document.addEventListener("click", async (ev) => {
+  const m = ev.target.closest(".mision"), inst = ev.target.closest("[data-instalar]"), prob = ev.target.closest("[data-probar]");
+  if (inst) { ev.stopPropagation(); if (!confirm(`¿Instalo ${inst.dataset.instalar} en este PC?`)) return; inst.disabled = true; inst.textContent = "Instalando…";
+    try { const r = await api("/api/arca/instalar", { programa: inst.dataset.instalar }); inst.nextElementSibling.textContent = r.detalle; } catch (e) { inst.nextElementSibling.textContent = e.message; } inst.disabled = false; inst.textContent = "Instalar " + inst.dataset.instalar; return; }
+  if (prob) { ev.stopPropagation(); return probar(); }
+  if (m && !ev.target.closest("form") && !ev.target.closest("button")) { abierta = abierta === m.dataset.m ? "" : m.dataset.m; pintar(); }
+});
+document.addEventListener("submit", async (ev) => {
+  const f = ev.target.closest(".llave"); if (!f) return; ev.preventDefault();
+  const span = f.querySelector(".ok"), b = f.querySelector("button"); b.disabled = true; span.textContent = "Probando…";
+  try { const r = await api("/api/arca/llave", { nombre: f.dataset.v, valor: f.valor.value }); f.valor.value = "";
+    span.textContent = (r.generado ? `Generé: ${r.generado} · ` : "") + (r.chequeo ? `${ICON[r.chequeo.estado]} ${r.chequeo.detalle}` : "Guardada") + (r.reiniciar ? " · Reinicia Emilia para que la use." : "");
+    setTimeout(() => cargar(false), 1800);
+  } catch (e) { span.textContent = "❌ " + e.message; }
+  b.disabled = false;
+});
+const color = (n) => (n >= 9 ? "var(--h-ok)" : n >= 7 ? "var(--h-warn)" : n >= 5 ? "#fb923c" : "var(--h-bad)");
+async function probar() {
+  const box = $("#informe"); box.style.display = "block"; box.innerHTML = "<h3>🏁 Prueba final</h3><div class='d'>Probando cada parte de verdad… (unos minutos)</div>";
+  $("#bProbar").disabled = true;
+  try { const r = await api("/api/arca/probar", { whatsapp: confirm("¿Te mando también un WhatsApp real de prueba?") }); pintarInforme(r); cargar(false); }
+  catch (e) { box.innerHTML = `<h3>🏁 Prueba final</h3><div>No pude: ${esc(e.message)}</div>`; }
+  $("#bProbar").disabled = false;
+}
+function pintarInforme(r) {
+  $("#informe").style.display = "block";
+  $("#informe").innerHTML = `<h3>🏁 Prueba final — ${r.nota}/10</h3>` + r.componentes.map((c) => `<div class="nota"><span>${esc(c.nombre)}</span><span class="b"><i style="width:${c.nota * 10}%;background:${color(c.nota)}"></i></span><b style="color:${color(c.nota)}">${c.nota}</b></div>
+    ${c.pruebas.filter((p) => !p.ok).map((p) => `<div class="falla">❌ ${esc(p.nombre)}: ${esc(p.detalle)}</div>`).join("")}`).join("");
+}
+$("#bRevisar").onclick = () => cargar(true);
+$("#bProbar").onclick = probar;
+$("#bMant").onclick = async () => {
+  const box = $("#mant"); box.style.display = "block"; box.innerHTML = "<h3>🧰 Mantenimiento</h3><div class='d'>Revisando el PC…</div>";
+  try {
+    const [xs, inf] = await Promise.all([api("/api/arca/mantenimiento"), api("/api/arca/informe")]);
+    const limp = xs.filter((x) => /limpiar/.test(x.accion || "")).map((x) => x.id);
+    box.innerHTML = `<h3>🧰 Mantenimiento</h3>${xs.map((x) => `<div class="obj"><b>${esc(x.nombre)}</b><div class="d" style="margin-left:0">${esc(x.detalle)}</div></div>`).join("")}
+      ${limp.length ? `<p><button class="btn cobre" id="bLimpiar">Limpiar ${limp.join(", ")}</button> <span id="rLimp" class="d"></span></p>` : ""}
+      <h3 style="margin-top:14px">Lo que hice</h3><pre class="log">${esc(inf.acciones)}</pre>`;
+    const bl = $("#bLimpiar"); if (bl) bl.onclick = async () => { if (!confirm(`¿Limpio ${limp.join(", ")}?`)) return; bl.disabled = true; const r = await api("/api/arca/limpiar", { que: limp }).catch((e) => ({ detalle: e.message })); $("#rLimp").textContent = r.detalle; };
+  } catch (e) { box.innerHTML = `<h3>🧰 Mantenimiento</h3><div>${esc(e.message)}</div>`; }
+};
+api("/api/arca/informe").then((r) => { if (r.informe?.datos?.componentes) pintarInforme({ nota: r.informe.nota, componentes: r.informe.datos.componentes }); }).catch(() => {});
+cargar(false);
+</script>
+</body>
+</html>

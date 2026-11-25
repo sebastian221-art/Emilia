@@ -6,6 +6,9 @@ import ngrok from "@ngrok/ngrok";
  * configurado, no hace nada (el sistema funciona igual sin webhook externo).
  * Imprime la URL exacta lista para pegar en Meta.
  */
+/** La URL pública del túnel en esta corrida (la usa Arca para probar el webhook de punta a punta). */
+export let urlTunel: string | null = null;
+
 export async function iniciarTunel(puerto: number): Promise<string | null> {
   const authtoken = process.env.NGROK_AUTHTOKEN;
   if (!authtoken) {
@@ -20,6 +23,7 @@ export async function iniciarTunel(puerto: number): Promise<string | null> {
 
     const listener = await ngrok.forward(opciones);
     const url = listener.url();
+    urlTunel = url ?? null;
     console.log("\n════════════════════════════════════════");
     console.log(" Túnel ngrok activo");
     console.log(`   URL pública:   ${url}`);

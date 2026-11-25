@@ -15,6 +15,7 @@
         "google:conectar": "tsx src/scripts/conectar-google.ts",
         "cerebro:llave": "tsx src/scripts/cerebro-llave.ts",
         "secretos": "tsx src/scripts/escanear-secretos.ts",
+        "arca": "tsx src/scripts/arca.ts",
         "seguridad": "tsx src/scripts/seguridad.ts",
         "respaldo:llaves": "tsx src/scripts/respaldo-llaves.ts",
         "respaldo:restaurar": "tsx src/scripts/respaldo-llaves.ts restaurar",

@@ -5,6 +5,7 @@ const { Pool } = pg;
 
 export const db = new Pool({
   connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: Number(process.env.PG_TIMEOUT_MS || 10_000),   // si la base no está, fallar rápido en vez de colgarse
 });
 
 // Sin esto, un error de conexión (Postgres caído) tumba todo el proceso

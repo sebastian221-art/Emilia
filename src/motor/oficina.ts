@@ -151,6 +151,13 @@ async function extrasDe(nombre: string, admin: boolean): Promise<any> {
     ]);
     return { tipo: "sage", sandboxes: sb, guardia: gu, sesiones: se };
   }
+  if (n === "arca") {
+    const { tutorialGuardado } = await import("../arca/estado.js");
+    const t = await tutorialGuardado().catch(() => null);
+    const [inf] = await query<any>(`SELECT nota, creado_en, datos FROM arca_informes WHERE tipo='pruebas' ORDER BY creado_en DESC LIMIT 1`).catch(() => []);
+    const acc = await query<any>(`SELECT tipo, que, ok, detalle, creado_en FROM arca_acciones ORDER BY creado_en DESC LIMIT 6`).catch(() => []);
+    return { tipo: "arca", porcentaje: t?.porcentaje ?? 0, nivel: t?.nivel, xp: t?.xp, misiones: (t?.misiones || []).map((p) => ({ n: p.mision.n, emoji: p.mision.emoji, nombre: p.mision.nombre, hechos: p.hechos, total: p.total, completa: p.completa })), siguiente: t?.siguiente ? { nombre: t.siguiente.nombre, detalle: t.siguiente.detalle } : null, prueba: inf ? { nota: Number(inf.nota), cuando: inf.creado_en, componentes: (inf.datos?.componentes || []).map((c: any) => ({ nombre: c.nombre, nota: c.nota })) } : null, acciones: acc };
+  }
   if (n === "system") {
     const E = await import("./evolucion.js");
     return { tipo: "system", tablero: await E.tablero(), cambios: (await E.listarCambios()).slice(0, 8).map((c: any) => ({ ref: E.refCambio(c.id), titulo: c.titulo, estado: c.estado, nivel: c.nivel, resultado: c.resultado?.resumen || null })), senales: (await E.senalesAbiertas(6)).map((s: any) => ({ tipo: s.tipo, titulo: s.titulo, prioridad: s.prioridad })) };
