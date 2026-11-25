@@ -65,16 +65,16 @@ export async function ejecutarSkillGuiada(sk: SkillGuiada, args: Record<string, 
     `Procedimiento a seguir:\n${sk.procedimiento.replace(/\{([a-z_]+)\}/g, (m, k) => (k in (args || {}) && args[k] != null && args[k] !== "") ? String(args[k]) : (m === m.toLowerCase() ? "—" : m))}`,
     sk.salida ? `Qué debés devolver al terminar: ${sk.salida}` : "",
     sk.criterioExito ? `Criterio de éxito: ${sk.criterioExito}` : "",
-    sk.siFalta === "pregunta" ? "Si te falta un dato imprescindible, NO lo inventes: terminá y decí exactamente qué falta." : "",
-    sk.siFalta === "falla" ? "Si te falta un dato imprescindible, terminá reportando el fallo." : "",
-    permitidas.length ? `Tools disponibles (solo estas): ${permitidas.join(", ")}.` : "No tenés tools: resolvé con razonamiento y texto.",
+    sk.siFalta === "pregunta" ? "Si te falta un dato imprescindible, NO lo inventes: termina y di exactamente qué falta." : "",
+    sk.siFalta === "falla" ? "Si te falta un dato imprescindible, termina reportando el fallo." : "",
+    permitidas.length ? `Tools disponibles (solo estas): ${permitidas.join(", ")}.` : "No tienes tools: resuelve con razonamiento y texto.",
     faltantes.length ? `(Aviso: las tools ${faltantes.join(", ")} están declaradas pero no existen en el registro; no las uses.)` : "",
     "Cuando termines, tu ÚLTIMO mensaje debe ser el resultado final en texto claro, empezando con 'OK:' si cumpliste el criterio o 'FALLO:' si no.",
   ].filter(Boolean).join("\n");
 
   const mensajes: ChatCompletionMessageParam[] = [
     { role: "system", content: sistema },
-    { role: "user", content: `Argumentos recibidos: ${JSON.stringify(args)}. Ejecutá el procedimiento.` },
+    { role: "user", content: `Argumentos recibidos: ${JSON.stringify(args)}. Ejecuta el procedimiento.` },
   ];
 
   const maxPasos = Math.max(1, Math.min(sk.maxPasos ?? 10, 60));
@@ -102,7 +102,7 @@ export async function ejecutarSkillGuiada(sk: SkillGuiada, args: Record<string, 
       if (yaLlamadas.has(clave)) {
         const previo = yaLlamadas.get(clave)!;
         await ctx.traza("verificacion", `${sk.nombre}: llamada repetida a ${tc.nombre} con los mismos argumentos; se devolvió el resultado anterior.`);
-        mensajes.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ ok: false, error: `Ya llamaste ${tc.nombre} con exactamente esos argumentos en esta skill. No repitas: usá lo que ya tenés (abajo) o cambiá de enfoque.`, resultado_anterior: previo.slice(0, 2500) }) });
+        mensajes.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ ok: false, error: `Ya llamaste ${tc.nombre} con exactamente esos argumentos en esta skill. No repitas: usa lo que ya tienes (abajo) o cambia de enfoque.`, resultado_anterior: previo.slice(0, 2500) }) });
         continue;
       }
       const res = await ctx.ejecutarTool(tc.nombre, tc.argumentos);   // el contexto ya restringe a `permitidas`

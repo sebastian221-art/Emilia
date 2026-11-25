@@ -196,7 +196,7 @@ const ultimos10 = (n: string) => n.replace(/\D/g, "").slice(-10);
 // ═════════════════════════════════════════════════════════════════════════════
 export const jelcomEstadoSistema: DefTool = {
   nombre: "jelcom_estado_sistema", modulo: MODULO,
-  descripcion: "Chequeo general de Jelcom Envíos: si la app responde, estado y saldo de cada proveedor (Háblame, LabsMobile, Brevo, Meta, Twilio, ElevenLabs), cuentas disponibles y tarifas configuradas. Usalo antes de un envío importante o si algo falla.",
+  descripcion: "Chequeo general de Jelcom Envíos: si la app responde, estado y saldo de cada proveedor (Háblame, LabsMobile, Brevo, Meta, Twilio, ElevenLabs), cuentas disponibles y tarifas configuradas. Úsalo antes de un envío importante o si algo falla.",
   parametros: { type: "object", properties: { probar: { type: "boolean", description: "true = probar cada proveedor ahora (consulta saldo real; tarda más).", default: false } }, required: [] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 180,
   async ejecutar(a) {

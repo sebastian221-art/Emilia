@@ -71,7 +71,7 @@ export async function resumirSiHaceFalta(conv: Conversacion, cfg: ConfigMemoria 
   const prompt = [
     conv.resumen ? `Resumen previo:\n${conv.resumen}\n\n` : "",
     `Nuevos mensajes a incorporar:\n${texto}\n\n`,
-    "Escribí UN resumen actualizado (máx. 250 palabras) en español, en tercera persona, con: qué pidió el usuario, qué se hizo, datos concretos (nombres, números, ids, fechas), decisiones tomadas y pendientes. Sin saludos ni relleno. Solo el resumen.",
+    "Escribe UN resumen actualizado (máx. 250 palabras) en español, en tercera persona, con: qué pidió el usuario, qué se hizo, datos concretos (nombres, números, ids, fechas), decisiones tomadas y pendientes. Sin saludos ni relleno. Solo el resumen.",
   ].join("");
 
   try {
@@ -109,12 +109,12 @@ export async function extraerHechosSiHaceFalta(conv: Conversacion, cfg: ConfigMe
 
   const existentes = await listarHechos("jefe", 80);
   const texto = nuevos.map((m) => `${m.rol === "usuario" ? "Jefe" : "Agente"}: ${m.contenido.slice(0, 600)}`).join("\n");
-  const prompt = `Sos el módulo de memoria de largo plazo de un asistente personal. Del siguiente fragmento de conversación, extraé SOLO hechos durables sobre el jefe (Sebastián) o su mundo: datos personales que él dijo, preferencias (cómo quiere las cosas), su trabajo, proyectos, personas, decisiones tomadas. NO extraigas tareas puntuales, estados momentáneos, ni cosas que ya están en la lista de hechos conocidos (salvo que cambien).
+  const prompt = `Eres el módulo de memoria de largo plazo de un asistente personal. Del siguiente fragmento de conversación, extraé SOLO hechos durables sobre el jefe (Sebastián) o su mundo: datos personales que él dijo, preferencias (cómo quiere las cosas), su trabajo, proyectos, personas, decisiones tomadas. NO extraigas tareas puntuales, estados momentáneos, ni cosas que ya están en la lista de hechos conocidos (salvo que cambien).
 Hechos ya conocidos:\n${existentes.map((h) => `- [${h.clave}] ${h.contenido}`).join("\n") || "(ninguno)"}
 
 Fragmento:\n${texto}
 
-Respondé SOLO con JSON: {"hechos":[{"sujeto":"jefe","clave":"slug_corto","contenido":"frase concreta","categoria":"personal|preferencia|trabajo|proyecto|persona|decision","fuente":"dicho|inferido","confianza":0.0-1.0}]}. Si no hay nada nuevo: {"hechos":[]}. Usá la misma clave que un hecho conocido si lo actualiza.`;
+Responde SOLO con JSON: {"hechos":[{"sujeto":"jefe","clave":"slug_corto","contenido":"frase concreta","categoria":"personal|preferencia|trabajo|proyecto|persona|decision","fuente":"dicho|inferido","confianza":0.0-1.0}]}. Si no hay nada nuevo: {"hechos":[]}. Usa la misma clave que un hecho conocido si lo actualiza.`;
   try {
     const r = await llamarModelo([{ role: "user", content: prompt }], []);
     const parsed = JSON.parse(r.texto.replace(/```json|```/g, "").trim());

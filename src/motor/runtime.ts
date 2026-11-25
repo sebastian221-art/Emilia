@@ -102,7 +102,7 @@ export async function estadoProceso(proyecto: Proyecto): Promise<Proceso> {
 
 export async function iniciarProceso(proyecto: Proyecto, op: { sandboxId?: string } = {}): Promise<{ ok: boolean; pid?: number; error?: string; ruta_log?: string; zombis?: number[] }> {
   const actual = await estadoProceso(proyecto);
-  if (actual.estado === "corriendo") return { ok: false, error: `${proyecto.nombre} ya está corriendo (pid ${actual.pid}). Usá reiniciar si querés relanzarlo.` };
+  if (actual.estado === "corriendo") return { ok: false, error: `${proyecto.nombre} ya está corriendo (pid ${actual.pid}). Usa reiniciar si quieres relanzarlo.` };
   const comando = proyecto.cmd_start;   // solo el comando registrado (registrar un proyecto pide aprobación)
   if (!comando) return { ok: false, error: `El proyecto ${proyecto.nombre} no tiene cmd_start configurado (ej. "npm run dev"). Registralo con codigo_registrar_proyecto.` };
 
@@ -163,7 +163,7 @@ export async function detenerProceso(proyecto: Proyecto): Promise<{ ok: boolean;
   if (proyecto.puerto && (await puertoEnUso(proyecto.puerto))) {
     const extra = await liberarPuerto(proyecto.puerto);
     if (extra.length && f.ruta_log) await fs.appendFile(f.ruta_log, `\n===== ${new Date().toISOString()} · procesos huérfanos en :${proyecto.puerto} matados: ${extra.join(", ")} =====\n`).catch(() => {});
-    if (await puertoEnUso(proyecto.puerto)) return { ok: false, error: `Maté el pid ${f.pid} pero el puerto ${proyecto.puerto} sigue ocupado. Revisá con netstat -ano | findstr :${proyecto.puerto}.` };
+    if (await puertoEnUso(proyecto.puerto)) return { ok: false, error: `Maté el pid ${f.pid} pero el puerto ${proyecto.puerto} sigue ocupado. Revisa con netstat -ano | findstr :${proyecto.puerto}.` };
   }
   await query(`UPDATE procesos SET estado='detenido', fin=now(), actualizado_en=now() WHERE proyecto_id=$1`, [proyecto.id]);
   if (f.ruta_log) await fs.appendFile(f.ruta_log, `\n===== ${new Date().toISOString()} · detenido por Emilia =====\n`).catch(() => {});

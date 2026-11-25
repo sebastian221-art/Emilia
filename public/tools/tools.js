@@ -154,14 +154,14 @@ async function guardarTool(){
 }
 
 async function analizar(){
-  if(!toolId){ alert("Guardá la tool primero para poder explorarla."); return; }
+  if(!toolId){ alert("Guarda la tool primero para poder explorarla."); return; }
   const box=document.getElementById("analisisBox");
   box.innerHTML=`<div class="analisis-box"><p style="font-size:12px;color:var(--e-text-muted)">Explorando…</p></div>`;
   try{
     const r=await(await fetch(`/api/tools/${toolId}/analizar`,{method:"POST"})).json();
     let caps="";
-    if(r.puede?.length) caps+=`<p style="font-size:12px;font-weight:500;margin:8px 0 2px">✓ Podés:</p>`+r.puede.map(c=>`<div class="cap">${c}</div>`).join("");
-    if(r.no_puede?.length) caps+=`<p style="font-size:12px;font-weight:500;margin:8px 0 2px">✗ No podés:</p>`+r.no_puede.map(c=>`<div class="cap">${c}</div>`).join("");
+    if(r.puede?.length) caps+=`<p style="font-size:12px;font-weight:500;margin:8px 0 2px">✓ Puedes:</p>`+r.puede.map(c=>`<div class="cap">${c}</div>`).join("");
+    if(r.no_puede?.length) caps+=`<p style="font-size:12px;font-weight:500;margin:8px 0 2px">✗ No puedes:</p>`+r.no_puede.map(c=>`<div class="cap">${c}</div>`).join("");
     box.innerHTML=`<div class="analisis-box">
       <div style="display:flex;justify-content:space-between"><h3 style="margin:0;font-size:14px">${r.estado==="ok"?"✓ Conectado":"⚠ "+(r.estado||"")}</h3><span onclick="document.getElementById('analisisBox').innerHTML=''" style="cursor:pointer;color:var(--e-text-muted)">✕</span></div>
       <p style="font-size:13px;line-height:1.5;margin-top:6px">${r.resumen||""}</p>${caps}

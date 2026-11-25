@@ -28,7 +28,7 @@ function valor(v: unknown): string {
 /** Texto de la pausa para el jefe. */
 export function textoAprobacion(nombre: string, args: Record<string, unknown>, extra?: string): string {
   const lineas = Object.entries(args || {}).map(([k, v]) => [k, valor(v)]).filter(([, v]) => v).map(([k, v]) => `• ${k.replace(/_/g, " ")}: ${v}`);
-  return [`⏸ *Necesito tu OK*`, etiqueta(nombre), ...lineas, extra || "", `Respondé *ok* para aprobar o *no* para rechazar.`].filter(Boolean).join("\n");
+  return [`⏸ *Necesito tu OK*`, etiqueta(nombre), ...lineas, extra || "", `Responde *ok* para aprobar o *no* para rechazar.`].filter(Boolean).join("\n");
 }
 
 /** Detalle corto para la tabla de aprobaciones (panel). */

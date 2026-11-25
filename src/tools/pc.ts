@@ -38,7 +38,7 @@ export const pcListar: DefTool = {
     if ((a.orden || "fecha") === "fecha") filas.sort((x, y) => y.modificado.localeCompare(x.modificado));
     else filas.sort((x, y) => (x.tipo === y.tipo ? x.nombre.localeCompare(y.nombre) : x.tipo === "carpeta" ? -1 : 1));
     const max = a.max || 40;
-    return { ok: true, datos: { ruta, total: filas.length, mostrando: Math.min(max, filas.length), orden: a.orden || "fecha", items: filas.slice(0, max) }, resumen: `${ruta} — ${filas.length} elementos, mostrando ${Math.min(max, filas.length)} (${(a.orden || "fecha") === "fecha" ? "más recientes primero" : "por nombre"}):\n` + filas.slice(0, max).map((f) => `${f.tipo === "carpeta" ? "📁" : "📄"} ${f.nombre}${f.tipo === "archivo" ? ` (${f.kb} KB)` : ""} · ${f.modificado.slice(0, 16).replace("T", " ")}`).join("\n") + (filas.length > max ? `\n… y ${filas.length - max} más (pedí con patron o max mayor).` : "") };
+    return { ok: true, datos: { ruta, total: filas.length, mostrando: Math.min(max, filas.length), orden: a.orden || "fecha", items: filas.slice(0, max) }, resumen: `${ruta} — ${filas.length} elementos, mostrando ${Math.min(max, filas.length)} (${(a.orden || "fecha") === "fecha" ? "más recientes primero" : "por nombre"}):\n` + filas.slice(0, max).map((f) => `${f.tipo === "carpeta" ? "📁" : "📄"} ${f.nombre}${f.tipo === "archivo" ? ` (${f.kb} KB)` : ""} · ${f.modificado.slice(0, 16).replace("T", " ")}`).join("\n") + (filas.length > max ? `\n… y ${filas.length - max} más (pide con patron o max mayor).` : "") };
   },
 };
 
@@ -49,7 +49,7 @@ export const pcBuscar: DefTool = {
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 120,
   async ejecutar(a) {
     const ruta = await casa(a.ruta || "~");
-    try { await fs.access(ruta); } catch { return { ok: false, error: `La carpeta ${ruta} no existe. Probá con otra ruta (ej. 'descargas', 'escritorio', 'C:\\...').` }; }
+    try { await fs.access(ruta); } catch { return { ok: false, error: `La carpeta ${ruta} no existe. Prueba con otra ruta (ej. 'descargas', 'escritorio', 'C:\\...').` }; }
     const r = await powershell(`Get-ChildItem -Path '${ruta.replace(/'/g, "''")}' -Filter '${String(a.patron).replace(/'/g, "''")}' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First ${a.max || 40} | ForEach-Object { $_.FullName + ' | ' + [math]::Round($_.Length/1KB) + ' KB | ' + $_.LastWriteTime.ToString('s') }`, 100);
     const lineas = r.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
     return { ok: true, datos: { carpeta: ruta, resultados: lineas }, resumen: lineas.length ? `En ${ruta}:\n${lineas.join("\n")}` : `Sin resultados para ${a.patron} en ${ruta} (existe, pero no hay coincidencias).` };
@@ -58,7 +58,7 @@ export const pcBuscar: DefTool = {
 
 export const pcLeerArchivo: DefTool = {
   nombre: "pc_leer_archivo", modulo: MODULO,
-  descripcion: "Lee un archivo de texto del PC (hasta 20k caracteres). Para imágenes usá pc_ver_imagen; para binarios, pc_adjuntar.",
+  descripcion: "Lee un archivo de texto del PC (hasta 20k caracteres). Para imágenes usa pc_ver_imagen; para binarios, pc_adjuntar.",
   parametros: { type: "object", properties: { ruta: { type: "string", minLength: 1 }, desde_linea: { type: "integer", minimum: 1 }, lineas: { type: "integer", default: 300, minimum: 1, maximum: 2000 } }, required: ["ruta"] },
   riesgo: "lectura", requiereAprobacion: false,
   async ejecutar(a) {
@@ -92,7 +92,7 @@ export const pcVerPantalla: DefTool = {
   async ejecutar(a, ctx) {
     const c = await capturarPantalla({ todo: !!a.todos_los_monitores, maxAncho: 1600 });
     const arch = await guardarArchivo({ nombre: path.basename(c.ruta), mime: "image/png", contenido: c.contenido, origen: "generado", conversacionId: ctx.conversacionId ?? null, agenteId: ctx.agenteId });
-    const v = await analizarImagen(c.contenido, "image/png", { pregunta: a.pregunta || "Describí qué hay en esta pantalla: qué programa/ventana está activa, qué texto importante se ve, y si hay errores o diálogos. En español, concreto." });
+    const v = await analizarImagen(c.contenido, "image/png", { pregunta: a.pregunta || "Describe qué hay en esta pantalla: qué programa/ventana está activa, qué texto importante se ve, y si hay errores o diálogos. En español, concreto." });
     return { ok: v.ok, datos: { archivo_id: arch.id, descripcion: v.texto }, resumen: v.ok ? `${v.texto}\n(captura: archivo_id ${arch.id})` : undefined, error: v.ok ? undefined : v.error };
   },
 };
@@ -167,7 +167,7 @@ function app(nombre: string) { const k = nombre.trim().toLowerCase(); return APP
 
 export const pcVentanas: DefTool = {
   nombre: "pc_ventanas", modulo: MODULO,
-  descripcion: "Lista los programas con ventana abierta en el PC (nombre del proceso y título de la ventana). Usalo para saber qué está abierto o el nombre real de un programa antes de cerrarlo.",
+  descripcion: "Lista los programas con ventana abierta en el PC (nombre del proceso y título de la ventana). Úsalo para saber qué está abierto o el nombre real de un programa antes de cerrarlo.",
   parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 30,
   async ejecutar() {
     const r = await powershell(`Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.ProcessName + ' | pid ' + $_.Id + ' | ' + $_.MainWindowTitle }`, 20);
@@ -186,8 +186,8 @@ export const pcCerrarApp: DefTool = {
     const nombres = conocido ? conocido.proceso : [String(a.programa).replace(/\.exe$/i, "")];
     const r = await powershell(`$n=@(${nombres.map((x) => `'${x}'`).join(",")}); $p=Get-Process | Where-Object { $n -contains $_.ProcessName }; if(-not $p){ 'NO_ENCONTRADO'; exit 0 }; $c=0; foreach($x in $p){ if($x.MainWindowHandle -ne 0){ $null=$x.CloseMainWindow(); $c++ } }; Start-Sleep -Milliseconds 1500; $q=Get-Process | Where-Object { $n -contains $_.ProcessName }; if($q){ 'SIGUE:' + ($q | ForEach-Object { $_.ProcessName + ':' + $_.Id }) -join ',' } else { 'CERRADO:' + $c }`, 20);
     const out = r.stdout.trim();
-    if (out.startsWith("NO_ENCONTRADO")) return { ok: false, error: `No encontré "${a.programa}" abierto. Mirá pc_ventanas para ver los nombres reales.` };
-    if (out.startsWith("SIGUE")) return { ok: false, error: `Le pedí cerrar a "${a.programa}" pero sigue abierto (${out.slice(6)}). Puede tener algo sin guardar. Si querés forzarlo: pc_ejecutar con "Stop-Process -Name ${nombres[0]} -Force" (pide aprobación).` };
+    if (out.startsWith("NO_ENCONTRADO")) return { ok: false, error: `No encontré "${a.programa}" abierto. Mira pc_ventanas para ver los nombres reales.` };
+    if (out.startsWith("SIGUE")) return { ok: false, error: `Le pedí cerrar a "${a.programa}" pero sigue abierto (${out.slice(6)}). Puede tener algo sin guardar. Si quieres forzarlo: pc_ejecutar con "Stop-Process -Name ${nombres[0]} -Force" (pide aprobación).` };
     return { ok: true, resumen: `${a.programa} cerrado.` };
   },
 };

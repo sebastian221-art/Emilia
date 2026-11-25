@@ -66,7 +66,7 @@ export function prepararTexto(t: string): string {
 
 async function edge(texto: string): Promise<Audio> {
   let mod: any;
-  try { mod = await import("msedge-tts"); } catch { throw new Error("Falta el paquete msedge-tts: corré `npm install msedge-tts` (o usá VOZ_PROVEEDOR=elevenlabs)."); }
+  try { mod = await import("msedge-tts"); } catch { throw new Error("Falta el paquete msedge-tts: corre `npm install msedge-tts` (o usa VOZ_PROVEEDOR=elevenlabs)."); }
   const { MsEdgeTTS, OUTPUT_FORMAT } = mod;
   const tts = new MsEdgeTTS();
   const voz = process.env.VOZ_EDGE_VOZ || "es-CO-SalomeNeural";

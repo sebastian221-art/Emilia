@@ -57,7 +57,7 @@
   <div class="top">
     <div>
       <h1>Mis agentes</h1>
-      <p class="sub">Arrastrá agentes para acomodarlos. Rueda = zoom · arrastrar el fondo = mover. Tocá "abrir" para entrar.</p>
+      <p class="sub">Arrastra agentes para acomodarlos. Rueda = zoom · arrastrar el fondo = mover. Toca "abrir" para entrar.</p>
     </div>
     <div class="controles">
       <div class="vista-toggle">
@@ -138,7 +138,7 @@ function setVista(v) {
 function renderLienzo() {
   const c = document.getElementById("nodos");
   const hint = document.getElementById("hintLienzo");
-  if (!agentes.length) { c.innerHTML=""; hint.textContent = "No hay agentes. Creá el primero."; return; }
+  if (!agentes.length) { c.innerHTML=""; hint.textContent = "No hay agentes. Crea el primero."; return; }
   hint.textContent = "";
   c.innerHTML = agentes.map((a, i) => {
     const est = estadoInfo(a.estado);

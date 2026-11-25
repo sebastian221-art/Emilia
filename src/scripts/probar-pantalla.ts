@@ -69,7 +69,7 @@ async function main() {
     if (!f.ok) mal(`No pude traer el Bloc de notas al frente: ${f.error}`, "Ábrelo a mano y vuelve a probar.");
     else {
       await c.escribir(texto, "teclear"); await c.teclas("Return", 1); await c.escribir("(pegado) " + texto, "pegar");
-      console.log(`  Escribí en el Bloc de notas DOS líneas (tecla por tecla y pegando). Revisa que ambas digan exactamente:\n  ${texto}\n  (ciérralo sin guardar cuando termines)`);
+      console.log(`  Escribe en el Bloc de notas DOS líneas (tecla por tecla y pegando). Revisa que ambas digan exactamente:\n  ${texto}\n  (ciérralo sin guardar cuando termines)`);
     }
   }
 

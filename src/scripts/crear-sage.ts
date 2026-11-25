@@ -73,7 +73,7 @@ async function main() {
   const admin = await administradora();
   await crearPuesto({ nombre: "ingenieria", titulo: "Ingeniero senior (código)", descripcion: "Código e ingeniería de los proyectos de Sebastián", agente_id: id, reporta_a: admin?.id ?? null, responsabilidades: "Analizar, implementar, reparar, auditar, atacar, probar límites y replicar sistemas; crear capacidades nuevas de Emilia. Todo en sandbox, con verificación y aprobación para integrar." });
 
-  console.log(`\n🟣 Sage listo (color ${COLOR}).\n   tools (${tools.length}): ${tools.join(", ")}\n   skills (${skills.length}): ${skills.join(", ")}\n   flujos (${flujos.length}): ${flujos.join(", ")}\n   canal: WhatsApp compartido — "hablar con Sage" para hablarle directo, "volver" para regresar con Emilia.\n\nRecordá tener Claude Code autenticado en esta máquina (corré "claude" y /login una vez).`);
+  console.log(`\n🟣 Sage listo (color ${COLOR}).\n   tools (${tools.length}): ${tools.join(", ")}\n   skills (${skills.length}): ${skills.join(", ")}\n   flujos (${flujos.length}): ${flujos.join(", ")}\n   canal: WhatsApp compartido — "hablar con Sage" para hablarle directo, "volver" para regresar con Emilia.\n\nRecordá tener Claude Code autenticado en esta máquina (corre "claude" y /login una vez).`);
   await db.end();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

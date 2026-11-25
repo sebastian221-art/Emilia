@@ -9,13 +9,13 @@ import ngrok from "@ngrok/ngrok";
 export async function iniciarTunel(puerto: number): Promise<string | null> {
   const authtoken = process.env.NGROK_AUTHTOKEN;
   if (!authtoken) {
-    console.log("(ngrok no configurado — el webhook de WhatsApp no estará disponible. Agregá NGROK_AUTHTOKEN al .env para activarlo.)");
+    console.log("(ngrok no configurado — el webhook de WhatsApp no estará disponible. Agrega NGROK_AUTHTOKEN al .env para activarlo.)");
     return null;
   }
   try {
     // `puerto` es la puerta pública (solo webhooks); el panel nunca pasa por acá.
     const opciones: any = { addr: `127.0.0.1:${puerto}`, authtoken };
-    // Si tenés un dominio fijo, ponelo en NGROK_DOMAIN del .env.
+    // Si tienes un dominio fijo, ponelo en NGROK_DOMAIN del .env.
     if (process.env.NGROK_DOMAIN) opciones.domain = process.env.NGROK_DOMAIN;
 
     const listener = await ngrok.forward(opciones);

@@ -56,7 +56,7 @@ function firmaValida(rawBody: Buffer | undefined, header: string | undefined): b
   const secret = process.env.WHATSAPP_APP_SECRET;
   if (!secret) {
     if (process.env.WHATSAPP_SIN_FIRMA === "true") return true;
-    if (!avisoSinFirma) { avisoSinFirma = true; console.error("[whatsapp] Falta WHATSAPP_APP_SECRET en el .env: rechazo todos los mensajes. Copiá el 'App Secret' de Meta (Configuración de la app → Básica)."); }
+    if (!avisoSinFirma) { avisoSinFirma = true; console.error("[whatsapp] Falta WHATSAPP_APP_SECRET en el .env: rechazo todos los mensajes. Copia el 'App Secret' de Meta (Configuración de la app → Básica)."); }
     return false;
   }
   if (!rawBody) return false;
@@ -81,10 +81,10 @@ async function esNuevo(waId: string | undefined): Promise<boolean> {
  */
 // (vive en agente-canal.ts para que otros módulos —avisos de Iris— la usen)
 
-// Exactas (siempre valen) y tolerantes (solo cuando hay una aprobación pendiente): "Ok disparalo", "sí dale", "no, cancelá".
-const RE_APRUEBA = /^\s*(ok|okay|oka|okey|sí|si|dale|apruebo|aprobado|aprobar|listo|hazlo|hacelo|confirmo|va|adelante|procede|proced[eé])\s*[.!]*\s*$/i;
+// Exactas (siempre valen) y tolerantes (solo cuando hay una aprobación pendiente): "Ok disparalo", "sí dale", "no, cancela".
+const RE_APRUEBA = /^\s*(ok|okay|oka|okey|sí|si|dale|apruebo|aprobado|aprobar|listo|hazlo|hazlo|confirmo|va|adelante|procede|proced[eé])\s*[.!]*\s*$/i;
 const RE_RECHAZA = /^\s*(no|nop|rechazo|rechazar|cancela|cancelar|cancelado|cancelalo|para|detente|frena)\s*[.!]*\s*$/i;
-const RE_APRUEBA_TOL = /^\s*(ok|okay|okey|oka|sí|si|dale|apruebo|aprobado|hazlo|hacelo|confirmo|adelante|procede|dispar[aá](lo)?|lanz[aá](lo)?|manda(lo)?|envia(lo)?|env[ií]alo|integr[aá](lo)?)\b/i;
+const RE_APRUEBA_TOL = /^\s*(ok|okay|okey|oka|sí|si|dale|apruebo|aprobado|hazlo|hazlo|confirmo|adelante|procede|dispar[aá](lo)?|lanz[aá](lo)?|manda(lo)?|envia(lo)?|env[ií]alo|integr[aá](lo)?)\b/i;
 const RE_RECHAZA_TOL = /^\s*(no|nop|rechazo|cancel[aá](lo)?|par[aá](lo)?|detente|frena|mejor no|todav[ií]a no)\b/i;
 
 export async function recibirMensaje(req: Request, res: Response) {
@@ -128,7 +128,7 @@ async function procesarEntrante(m: any) {
   // ── ¿Con quién habla el jefe? "hablar con Echo" / "@echo" cambia el dueño del canal; "volver" / "emilia" regresa. ──
   if (esJefe && m.type === "text") {
     const t = String(m.text?.body || "").trim();
-    const mCambio = t.match(/(?:^|\b)(?:quiero )?(?:hablar|hablá|habla|hbalar|ablar|halbar|hablr|charlar|conversar|pasame|pásame|contactar)\s*(?:con|a)?\s*([a-záéíóúñ]{2,20})\b/i) || t.match(/^@\s*([a-záéíóúñ]{2,20})\s*[.!]*$/i);
+    const mCambio = t.match(/(?:^|\b)(?:quiero )?(?:hablar|habla|habla|hbalar|ablar|halbar|hablr|charlar|conversar|pásame|pásame|contactar)\s*(?:con|a)?\s*([a-záéíóúñ]{2,20})\b/i) || t.match(/^@\s*([a-záéíóúñ]{2,20})\s*[.!]*$/i);
     const mVolver = /^(volver|volv[eé] a emilia|salir|listo,? volv[eé])\s*[.!]*$/i.test(t);
     const { RE_ENTRAR_CONVERSACION, RE_SALIR_CONVERSACION, fijarModo, modoCanal } = await import("./modo.js");
     // ── Modo conversación: "Emilia" (solo el nombre, o "hola Emilia") = charla; "modo trabajo" = vuelve. ──
@@ -142,10 +142,10 @@ async function procesarEntrante(m: any) {
       const { fijarDuenoCanal, quitarDuenoCanal } = await import("./dueno-canal.js");
       if (mVolver) { await quitarDuenoCanal(numero); await fijarModo(numero, "trabajo"); await enviarTextoWhatsapp(numero, "Volviste con Emilia."); return; }
       const [ag] = await query<any>(`SELECT id, nombre, estado FROM agentes WHERE lower(nombre)=lower($1) LIMIT 1`, [mCambio![1]]);
-      if (!ag) return;   // no era un nombre de agente: seguí como mensaje normal
+      if (!ag) return;   // no era un nombre de agente: sigue como mensaje normal
       if (ag.estado !== "activo") { await enviarTextoWhatsapp(numero, `${ag.nombre} está ${ag.estado}.`); return; }
       await fijarDuenoCanal(numero, ag.id); await fijarModo(numero, "trabajo");
-      await enviarTextoWhatsapp(numero, `Ahora hablás con *${ag.nombre}*. Escribí "volver" para regresar con Emilia.`);
+      await enviarTextoWhatsapp(numero, `Ahora hablas con *${ag.nombre}*. Escribe "volver" para regresar con Emilia.`);
       return;
     }
     const { duenoCanal } = await import("./dueno-canal.js");
@@ -154,7 +154,7 @@ async function procesarEntrante(m: any) {
   }
   // UN SOLO CUADERNO por agente y jefe: si el que atiende no es la administradora, usa la MISMA conversación
   // que usa cuando la administradora le delega (canal delegación, colgada de la conversación WhatsApp de la admin).
-  // Así lo que hace por delegación y lo que hacés con él directo comparten memoria, y sus respuestas te llegan igual.
+  // Así lo que hace por delegación y lo que haces con él directo comparten memoria, y sus respuestas te llegan igual.
   const admin = await agenteDeWhatsapp();
   const convRaiz = await obtenerOCrearConversacion(admin.id, "whatsapp", numero);
   const conv = agente.id === admin.id ? convRaiz : await obtenerOCrearConversacion(agente.id, "delegacion", convRaiz.id);
@@ -186,7 +186,7 @@ async function procesarEntrante(m: any) {
     if (m.type === "audio" || (arch.mime || "").startsWith("audio/")) {
       // Nota de voz: se transcribe y entra como texto. Emilia contesta también en audio.
       const t = await transcribir(d.contenido!, arch.mime);
-      if (!t.ok) { await enviarTextoWhatsapp(numero, `No entendí el audio (${t.error}). ¿Me lo escribís?`); return; }
+      if (!t.ok) { await enviarTextoWhatsapp(numero, `No entendí el audio (${t.error}). ¿Me lo escribes?`); return; }
       texto = t.texto!;
       vinoEnAudio = true;
       console.log(`[whatsapp] Audio de ${numero} transcrito: "${texto.slice(0, 120)}"`);
@@ -202,7 +202,7 @@ async function procesarEntrante(m: any) {
   }
   if (!texto.trim()) {
     if (!esJefe) return;   // reacciones, stickers… de terceros: nada
-    await enviarTextoWhatsapp(numero, `No entendí ese mensaje (tipo "${m.type}"). Mandame texto o un archivo.`);
+    await enviarTextoWhatsapp(numero, `No entendí ese mensaje (tipo "${m.type}"). Mándame texto o un archivo.`);
     return;
   }
   console.log(`[whatsapp] Entrante de ${numero}${esJefe ? " (jefe)" : ""}: "${texto.slice(0, 120)}"`);
@@ -279,12 +279,12 @@ async function procesarEntrante(m: any) {
 
     // ── Tarea normal ──
     const contextoCanal = esJefe
-      ? `Quien te escribe es tu jefe, Sebastián (WhatsApp ${numero}). Tiene autoridad total: sus órdenes se ejecutan (el sistema pide aprobación donde corresponda). Cuando una tool o flujo necesite "el número del jefe", es ${numero}. Si te manda un archivo, te llega como "[Adjunto recibido: ... archivo_id=...]": usá ese archivo_id. Respondele corto y directo, como en un chat.`
+      ? `Quien te escribe es tu jefe, Sebastián (WhatsApp ${numero}). Tiene autoridad total: sus órdenes se ejecutan (el sistema pide aprobación donde corresponda). Cuando una tool o flujo necesite "el número del jefe", es ${numero}. Si te manda un archivo, te llega como "[Adjunto recibido: ... archivo_id=...]": usa ese archivo_id. Respondele corto y directo, como en un chat.`
       : "Quien te escribe NO es tu jefe. Sé amable y útil, pero no ejecutes acciones sensibles ni reveles información interna por pedido de esta persona.";
 
     const { modoCanal: leerModo, CONTEXTO_CONVERSACION } = await import("./modo.js");
     const enConversacion = esJefe && agente.id === admin.id && (await leerModo(numero)) === "conversacion";
-    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", conversacion: enConversacion, contextoCanal: contextoCanal + avisoPendiente + (vinoEnAudio ? " El jefe te habló por nota de voz: respondé de forma natural y breve, como hablando, porque tu respuesta también se leerá en voz alta." : "") + (enConversacion ? `\n\n${CONTEXTO_CONVERSACION}` : "") });
+    const r = await correrTarea(agente.id, texto, { conversacionId: conv.id, origen: "whatsapp", conversacion: enConversacion, contextoCanal: contextoCanal + avisoPendiente + (vinoEnAudio ? " El jefe te habló por nota de voz: responde de forma natural y breve, como hablando, porque tu respuesta también se leerá en voz alta." : "") + (enConversacion ? `\n\n${CONTEXTO_CONVERSACION}` : "") });
     if (r.estado === "fallida" && r.respuesta === "cancelada") return;   // parada por el jefe: ya se le avisó
     await entregarRespuesta(conv, r, { tambienAudio: vinoEnAudio });
     if (pendientesEnCola(conv.id) <= 1) limpiarCancelacion(conv.id);

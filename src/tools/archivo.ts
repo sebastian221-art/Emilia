@@ -19,8 +19,8 @@ async function vistaPrevia(contenido: Buffer, nombre: string, mime: string, maxL
       return { tipo: "excel", columnas: filas[0] || [], lineas: Math.max(0, filas.length - 1), texto: filas.slice(0, maxLineas).map((f) => f.join(" | ")).join("\n") };
     } catch { return { tipo: "excel", texto: "(no pude leer el Excel localmente: falta el paquete 'xlsx')" }; }
   }
-  if (mime.startsWith("image/")) return { tipo: "imagen", texto: "(es una imagen: usá vision_analizar)" };
-  if (mime.startsWith("audio/")) return { tipo: "audio", texto: "(es un audio: usá voz_transcribir)" };
+  if (mime.startsWith("image/")) return { tipo: "imagen", texto: "(es una imagen: usa vision_analizar)" };
+  if (mime.startsWith("audio/")) return { tipo: "audio", texto: "(es un audio: usa voz_transcribir)" };
   if (ext === "pdf") return { tipo: "pdf", texto: "(PDF: no hay lector de texto de PDF todavía)" };
   const texto = contenido.toString("utf-8").replace(/^\uFEFF/, "");
   const lineas = texto.split(/\r?\n/);
@@ -41,7 +41,7 @@ export const archivoLeer: DefTool = {
 
 export const archivoListar: DefTool = {
   nombre: "archivo_listar", modulo: MODULO,
-  descripcion: "Lista archivos disponibles: los de esta conversación (y los que el jefe mandó al administrador si trabajás por delegación) o, si no hay, los recientes del sistema.",
+  descripcion: "Lista archivos disponibles: los de esta conversación (y los que el jefe mandó al administrador si trabajas por delegación) o, si no hay, los recientes del sistema.",
   parametros: { type: "object", properties: { limite: { type: "integer", default: 10, minimum: 1, maximum: 40 }, solo_bases: { type: "boolean", description: "Solo csv/xlsx.", default: false } }, required: [] },
   riesgo: "lectura", requiereAprobacion: false,
   async ejecutar(a, ctx) {
@@ -55,7 +55,7 @@ export const archivoListar: DefTool = {
 export const archivoDesdeDocumento: DefTool = {
   nombre: "archivo_desde_documento", modulo: MODULO,
   descripcion: "Convierte un documento de conocimiento del agente (los que se suben en 'Documentos' del panel) en un archivo adjunto con archivo_id, para poder subirlo a Jelcom, mandarlo por WhatsApp, etc.",
-  parametros: { type: "object", properties: { nombre: { type: "string", description: "Nombre (o parte) del documento.", minLength: 2 }, agente: { type: "string", description: "Agente dueño del documento (por defecto vos)." } }, required: ["nombre"] },
+  parametros: { type: "object", properties: { nombre: { type: "string", description: "Nombre (o parte) del documento.", minLength: 2 }, agente: { type: "string", description: "Agente dueño del documento (por defecto tú)." } }, required: ["nombre"] },
   riesgo: "lectura", requiereAprobacion: false,
   async ejecutar(a, ctx) {
     let agenteId = ctx.agenteId;

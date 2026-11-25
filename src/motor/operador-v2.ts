@@ -31,7 +31,7 @@ const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const PROCESO_DE: Record<string, string> = { calc: "calculatorapp", calculadora: "calculatorapp", notepad: "notepad", "bloc de notas": "notepad", mspaint: "mspaint", paint: "mspaint", explorer: "explorer", cmd: "cmd", powershell: "powershell", wt: "windowsterminal", chrome: "chrome", msedge: "msedge", edge: "msedge", excel: "excel", winword: "winword", word: "winword", powerpnt: "powerpnt", code: "code", spotify: "spotify", outlook: "outlook" };
 
-const PRIMITIVAS = `PRIMITIVAS (elegí la capa MÁS determinista que sirva):
+const PRIMITIVAS = `PRIMITIVAS (elige la capa MÁS determinista que sirva):
 [comando]  abrir_app(nombre_o_ruta_o_url) [abre Y trae al frente] · ejecutar(powershell) · excel_escribir(ruta, celdas:{"A1":"x"}, hoja?) · excel_leer(ruta, rango, hoja?) · word_crear(ruta, texto, titulo?)
 [teclado]  enfocar(proceso_o_titulo) [trae una ventana al frente; OBLIGATORIO antes de teclear en una app que ya estaba abierta] · tecla(combo: "enter","ctrl+s","alt+f4"…) · escribir(texto) · guardar_como(ruta_completa)
 [elemento] leer_ventana() [texto por accesibilidad] · listar_elementos(filtro?) · clic_elemento(nombre, tipo?) · escribir_elemento(nombre_campo, texto) · leer_ocr() [texto en pantalla por OCR] · clic_texto(texto_visible) [clic donde se lee ese texto]
@@ -48,17 +48,17 @@ export async function operarV2(tarea: string, op: { agenteId?: string | null; co
 
   // ── Planificador (texto) ──
   const planificar = async (historial: string, error?: string): Promise<Paso[] | { preguntar: string } | { fallar: string }> => {
-    const prompt = `Sos el planificador de un operador de Windows. Armá el plan para cumplir la TAREA usando SOLO las primitivas, con la capa más determinista posible.
+    const prompt = `Eres el planificador de un operador de Windows. Arma el plan para cumplir la TAREA usando SOLO las primitivas, con la capa más determinista posible.
 ${PRIMITIVAS}
 
 ENTORNO:\n${entorno}\n\nRECETARIO:\n${RECETAS_BASE}${aprendidas ? "\n\nRECETAS APRENDIDAS:\n" + aprendidas : ""}
 
 TAREA: ${tarea}
-${historial ? `PASOS YA EJECUTADOS Y SUS RESULTADOS:\n${historial}` : ""}${error ? `\nÚLTIMO PROBLEMA: ${error}\nRe-planificá desde aquí sin repetir lo que falló (cambiá de capa o de estrategia).` : ""}
+${historial ? `PASOS YA EJECUTADOS Y SUS RESULTADOS:\n${historial}` : ""}${error ? `\nÚLTIMO PROBLEMA: ${error}\nRe-planificá desde aquí sin repetir lo que falló (cambia de capa o de estrategia).` : ""}
 
-Respondé SOLO JSON con el plan RESTANTE (máx 12 pasos), terminando con verificar y terminar:
+Responde SOLO JSON con el plan RESTANTE (máx 12 pasos), terminando con verificar y terminar:
 {"pasos":[{"id":1,"capa":"comando","accion":"abrir_app","args":{"nombre":"notepad"},"motivo":"…"},…,{"id":N,"capa":"vision","accion":"verificar","args":{"criterio":"…"}},{"id":N+1,"capa":"control","accion":"terminar","args":{"resumen":"…"}}]}
-O si necesitás al jefe: {"preguntar":"…"}. O si es imposible: {"fallar":"motivo"}.`;
+O si necesitas al jefe: {"preguntar":"…"}. O si es imposible: {"fallar":"motivo"}.`;
     const r = await llamarModelo([{ role: "user", content: prompt }], [], { temperatura: 0.1 });
     try { const p = JSON.parse(r.texto.replace(/```json|```/g, "").trim()); if (p.preguntar) return { preguntar: p.preguntar }; if (p.fallar) return { fallar: p.fallar }; return Array.isArray(p.pasos) ? p.pasos : []; } catch { return { fallar: `El planificador devolvió algo ilegible: ${r.texto.slice(0, 200)}` }; }
   };
@@ -124,10 +124,10 @@ O si necesitás al jefe: {"preguntar":"…"}. O si es imposible: {"fallar":"moti
       case "escribir_elemento": { const r = await escribirEnElemento(String(a.nombre || a.campo || "*"), String(a.texto ?? "")); if (!r.ok) return { ventana: v, error: r.error }; return { ventana: v, resultado: `escrito en "${r.elemento?.nombre}" (${r.metodo})` }; }
       case "leer_ocr": { const o = await ocrPantalla(); const txt = o.lineas.join("\n").slice(0, 2000); lecturas.push(txt); return { ventana: v, texto: txt, resultado: `${o.palabras.length} palabras` }; }
       case "clic_texto": { const r = await clicTexto(String(a.texto || ""), Number(a.ocurrencia) || 1); if (!r.ok) return { ventana: v, error: `${r.error} Textos visibles: ${(r.vistos || []).slice(0, 15).join(" · ")}` }; await dormir(800); return { ventana: await ventanaActiva().catch(() => ""), resultado: `clic en el texto "${r.caja?.texto}"` }; }
-      case "leer_pantalla": { const c = await capturar(); const r = await analizarImagen(c.contenido, "image/png", { pregunta: String(a.pregunta || "Describí qué se ve.") }); lecturas.push(r.texto || ""); return { ventana: v, texto: r.texto, resultado: "visto", error: r.ok ? undefined : r.error }; }
+      case "leer_pantalla": { const c = await capturar(); const r = await analizarImagen(c.contenido, "image/png", { pregunta: String(a.pregunta || "Describe qué se ve.") }); lecturas.push(r.texto || ""); return { ventana: v, texto: r.texto, resultado: "visto", error: r.ok ? undefined : r.error }; }
       case "clic_visual": {
         const c = await capturar();
-        const r = await analizarImagen(c.contenido, "image/png", { pregunta: `Localizá este elemento en la pantalla: "${a.descripcion || a.elemento}". Rejilla magenta cada 100 px numerada. Respondé SOLO JSON {"x":int,"y":int,"encontrado":true|false} con el CENTRO del elemento en píxeles de la imagen (${c.ancho}x${c.alto}).`, json: true, maxTokens: 120 });
+        const r = await analizarImagen(c.contenido, "image/png", { pregunta: `Localizá este elemento en la pantalla: "${a.descripcion || a.elemento}". Rejilla magenta cada 100 px numerada. Responde SOLO JSON {"x":int,"y":int,"encontrado":true|false} con el CENTRO del elemento en píxeles de la imagen (${c.ancho}x${c.alto}).`, json: true, maxTokens: 120 });
         const j: any = r.json || {}; if (!j.encontrado || j.x == null) return { ventana: v, error: `no encontré visualmente "${a.descripcion || a.elemento}"` };
         await clic(Math.round(j.x * c.escala) + c.origenX, Math.round(j.y * c.escala) + c.origenY); await dormir(800);
         return { ventana: await ventanaActiva().catch(() => ""), resultado: `clic visual en (${j.x},${j.y})` };
@@ -142,7 +142,7 @@ O si necesitás al jefe: {"preguntar":"…"}. O si es imposible: {"fallar":"moti
         const esperado = crit.match(/muestra\s+"?([^"]+?)"?\s*$/i)?.[1];
         if (esperado && acc.texto.toLowerCase().includes(esperado.toLowerCase())) return { ventana: vi.titulo, resultado: `verificado por accesibilidad: "${esperado}" en ${vi.titulo}` };
         const c = await capturar();
-        const r = await analizarImagen(c.contenido, "image/png", { pregunta: `Criterio: "${crit}". Ventana activa: "${vi.titulo}" (${vi.proceso}). Texto accesible de esa ventana (fuente de verdad; si contradice lo que creés ver, respondé false): "${acc.texto.slice(0, 800)}". ¿Se cumple? Respondé SOLO JSON {"cumple":true|false,"motivo":"…"}`, json: true, maxTokens: 150 });
+        const r = await analizarImagen(c.contenido, "image/png", { pregunta: `Criterio: "${crit}". Ventana activa: "${vi.titulo}" (${vi.proceso}). Texto accesible de esa ventana (fuente de verdad; si contradice lo que crees ver, responde false): "${acc.texto.slice(0, 800)}". ¿Se cumple? Responde SOLO JSON {"cumple":true|false,"motivo":"…"}`, json: true, maxTokens: 150 });
         const j: any = r.json || {}; return { ventana: vi.titulo, resultado: j.cumple ? `verificado: ${j.motivo}` : undefined, error: j.cumple ? undefined : `verificación negativa: ${j.motivo || r.texto}` };
       }
       case "scroll": await scroll(Number(a.x) || 640, Number(a.y) || 400, a.direccion === "abajo" ? -(a.cantidad || 3) : (a.cantidad || 3)); return { ventana: v, resultado: "ok" };

@@ -19,7 +19,7 @@ const libre = () => (process.env.PC_CONTROL_LIBRE || "").toLowerCase() === "true
 
 export const pcOperar: DefTool = {
   nombre: "pc_operar", modulo: MODULO,
-  descripcion: "OPERA el computador para cumplir una tarea en lenguaje natural: planifica, usa comandos y teclado cuando alcanza, controles por nombre (accesibilidad) cuando hay que hacer clic, y visión solo como último recurso; verifica el resultado y aprende la receta. Ej: 'en la calculadora hacé 2x2 y decime el resultado', 'abrí el bloc de notas, escribí X y guardalo en el escritorio como y.txt', 'en Excel poné Hola en A1'. Si la tarea requiere contraseñas o pagos, se detiene y pregunta.",
+  descripcion: "OPERA el computador para cumplir una tarea en lenguaje natural: planifica, usa comandos y teclado cuando alcanza, controles por nombre (accesibilidad) cuando hay que hacer clic, y visión solo como último recurso; verifica el resultado y aprende la receta. Ej: 'en la calculadora haz 2x2 y dime el resultado', 'abrí el bloc de notas, escribe X y guárdalo en el escritorio como y.txt', 'en Excel pon Hola en A1'. Si la tarea requiere contraseñas o pagos, se detiene y pregunta.",
   parametros: {
     type: "object",
     properties: {
@@ -78,7 +78,7 @@ export const pcEscribirElemento: DefTool = {
   async ejecutar(a) { exigirPc(); guardaLibre(); const r = await escribirEnElemento(a.nombre, a.texto); return r.ok ? { ok: true, resumen: `Escrito en "${r.elemento?.nombre}" (${r.metodo}).` } : { ok: false, error: r.error }; },
 };
 
-function guardaLibre() { if (!libre()) throw new Error("Las acciones directas de mouse/teclado requieren PC_CONTROL_LIBRE=true en el .env, o usá pc_operar (que pide una aprobación por tarea)."); }
+function guardaLibre() { if (!libre()) throw new Error("Las acciones directas de mouse/teclado requieren PC_CONTROL_LIBRE=true en el .env, o usa pc_operar (que pide una aprobación por tarea)."); }
 
 export const pcClic: DefTool = {
   nombre: "pc_clic", modulo: MODULO,
@@ -89,7 +89,7 @@ export const pcClic: DefTool = {
 };
 export const pcEscribir: DefTool = {
   nombre: "pc_escribir", modulo: MODULO,
-  descripcion: "Teclea texto donde está el foco (hacé clic antes en el campo).",
+  descripcion: "Teclea texto donde está el foco (haz clic antes en el campo).",
   parametros: { type: "object", properties: { texto: { type: "string", minLength: 1 }, enter: { type: "boolean", default: false } }, required: ["texto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 30,
   async ejecutar(a) { exigirPc(); guardaLibre(); await escribirTexto(a.texto); if (a.enter) await tecla("enter"); return { ok: true, resumen: `Escrito: "${String(a.texto).slice(0, 60)}"${a.enter ? " + Enter" : ""}` }; },

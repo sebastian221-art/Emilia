@@ -51,9 +51,9 @@ rutasBiblioteca.post("/api/biblioteca/nodos/:id/pedir", async (req, res, next) =
     const n = await B.nodoPorId(req.params.id); if (!n) return res.status(404).json({ error: "no existe" });
     const accion = String(req.body?.accion || "");
     const tareas: Record<string, [string, string]> = {
-      refrescar: ["Soga", `Refrescá el nodo "${n.titulo}" (slug ${n.slug}) de la biblioteca: buscá si hay información más nueva o que lo contradiga (fecha de hoy), leé al menos 2 fuentes y aportá lo nuevo con biblioteca_aportar indicando que es una actualización de ${n.slug}. Resumen actual: ${n.resumen}`],
-      profundizar: ["System", `Aprendé a fondo "${n.titulo}" (slug ${n.slug} en la biblioteca): desglosalo, investigá lo que falte, probalo si se puede, reflexioná y mejorá la ficha (qué es, cómo funciona, cuándo usar, cuándo no, trampas, fórmula propia). Entregá lo aprendido a la biblioteca.`],
-      verificar: ["Lara", `Verificá el nodo "${n.titulo}" (slug ${n.slug}): revisá sus evidencias, buscá contradicciones con otros nodos, decidí su estado y confianza, y conectalo con lo que corresponda. Si hace falta más evidencia, pedísela a Soga.`],
+      refrescar: ["Soga", `Refrescá el nodo "${n.titulo}" (slug ${n.slug}) de la biblioteca: busca si hay información más nueva o que lo contradiga (fecha de hoy), lee al menos 2 fuentes y aportá lo nuevo con biblioteca_aportar indicando que es una actualización de ${n.slug}. Resumen actual: ${n.resumen}`],
+      profundizar: ["System", `Aprende a fondo "${n.titulo}" (slug ${n.slug} en la biblioteca): desglosalo, investigá lo que falte, pruébalo si se puede, reflexioná y mejorá la ficha (qué es, cómo funciona, cuándo usar, cuándo no, trampas, fórmula propia). Entregá lo aprendido a la biblioteca.`],
+      verificar: ["Lara", `Verificá el nodo "${n.titulo}" (slug ${n.slug}): revisa sus evidencias, busca contradicciones con otros nodos, decide su estado y confianza, y conectalo con lo que corresponda. Si hace falta más evidencia, pedísela a Soga.`],
     };
     const t = tareas[accion]; if (!t) return res.status(400).json({ error: "accion inválida" });
     res.json({ ok: true, agente: await pedirAAgente(t[0], t[1]) });
@@ -65,7 +65,7 @@ rutasBiblioteca.post("/api/biblioteca/pedir", async (req, res, next) => {
     const tareas: Record<string, string> = {
       integrar: "Integrá todo lo que hay en la bandeja de la biblioteca (biblioteca_integrar_bandeja). Fusioná con nodos existentes cuando sea el mismo tema.",
       migrar: "Traé el conocimiento viejo a la bandeja (biblioteca_migrar) y después integralo (biblioteca_integrar_bandeja).",
-      auditar: "Hacé una auditoría de la biblioteca (biblioteca_auditar): duplicados, nodos sin evidencia, contradicciones, cosas viejas. Dejá tus propuestas para que el jefe las apruebe.",
+      auditar: "Haz una auditoría de la biblioteca (biblioteca_auditar): duplicados, nodos sin evidencia, contradicciones, cosas viejas. Deja tus propuestas para que el jefe las apruebe.",
     };
     const t = tareas[accion]; if (!t) return res.status(400).json({ error: "accion inválida" });
     res.json({ ok: true, agente: await pedirAAgente("Lara", t) });

@@ -8,7 +8,7 @@ const DEF_SKILL = [
       { t: "textarea", key: "descripcion", label: "Descripción — qué hace", ph: "Redacta un informe claro a partir del resultado de una tarea." },
       { t: "textarea", key: "cuando_usar", label: "Cuándo usarla (señales que la disparan)", ph: "Cuando el usuario pide un reporte, resumen o informe de algo hecho." },
       { t: "textarea", key: "cuando_no", label: "Cuándo NO usarla", avanzado: true, ph: "No usar para responder preguntas simples o charlar." },
-      { t: "textarea", key: "ejemplos", label: "Ejemplos de uso", avanzado: true, ph: "'armá el reporte de la campaña' → genera informe con resultados reales." },
+      { t: "textarea", key: "ejemplos", label: "Ejemplos de uso", avanzado: true, ph: "'arma el reporte de la campaña' → genera informe con resultados reales." },
       { t: "text", key: "tags", label: "Tags / categoría", avanzado: true, ph: "reportes, comunicación" },
     ]},
   
@@ -22,7 +22,7 @@ const DEF_SKILL = [
     { g: "Esencial", k: "procedimiento", nom: "Procedimiento (el cómo)", campos: [
       { t: "textarea", key: "pasos", label: "Los pasos, en lenguaje natural", ph: "1. Revisar el resultado real. 2. Extraer lo importante. 3. Redactar claro. 4. Devolver." },
       { t: "select", key: "modo", label: "Modo de ejecución", ops: [["libre","Libre (el agente decide el orden)"],["guiado","Guiado (sigue los pasos exactos)"]] },
-      { t: "textarea", key: "condicionales", label: "Pasos condicionales (si pasa X, hacé Y)", avanzado: true, ph: "Si hubo errores en la tarea, incluir una sección de qué falló." },
+      { t: "textarea", key: "condicionales", label: "Pasos condicionales (si pasa X, haz Y)", avanzado: true, ph: "Si hubo errores en la tarea, incluir una sección de qué falló." },
       { t: "textarea", key: "puede_parar", label: "Dónde puede parar y preguntar", avanzado: true, ph: "Antes de dar por final el reporte, mostrarlo para aprobación." },
     ]},
   

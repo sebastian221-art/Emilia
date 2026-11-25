@@ -8,7 +8,7 @@ import { excelEscribir, excelLeer, wordCrear, wordLeer, outlookEnviar } from "..
 import { iniciarGrabacion, detenerGrabacion, grabando } from "../motor/grabadora.js";
 
 const libre = () => (process.env.PC_CONTROL_LIBRE || "").toLowerCase() === "true";
-function guardaLibre() { if (!libre()) throw new Error("Las acciones directas requieren PC_CONTROL_LIBRE=true, o usá pc_operar."); }
+function guardaLibre() { if (!libre()) throw new Error("Las acciones directas requieren PC_CONTROL_LIBRE=true, o usa pc_operar."); }
 
 export const pcOcr: DefTool = {
   nombre: "pc_ocr", modulo: "pc",
@@ -76,9 +76,9 @@ export const officeOutlookEnviar: DefTool = {
 
 export const grabacionIniciar: DefTool = {
   nombre: "grabacion_iniciar", modulo: "grabacion",
-  descripcion: "Empieza a grabar lo que el jefe hace en el PC (clics con el nombre del control, teclas y texto) para convertirlo en una receta que el operador pueda repetir. El jefe hace la tarea y luego dice 'terminá la grabación como X'.",
+  descripcion: "Empieza a grabar lo que el jefe hace en el PC (clics con el nombre del control, teclas y texto) para convertirlo en una receta que el operador pueda repetir. El jefe hace la tarea y luego dice 'termina la grabación como X'.",
   parametros: { type: "object", properties: {}, required: [] }, riesgo: "ejecucion", requiereAprobacion: false,
-  async ejecutar() { const r = await iniciarGrabacion(); return r.ok ? { ok: true, resumen: "Grabando. Hacé la tarea con calma; cuando termines, decime 'terminá la grabación como <nombre>'." } : { ok: false, error: r.error }; },
+  async ejecutar() { const r = await iniciarGrabacion(); return r.ok ? { ok: true, resumen: "Grabando. Haz la tarea con calma; cuando termines, dime 'termina la grabación como <nombre>'." } : { ok: false, error: r.error }; },
 };
 export const grabacionDetener: DefTool = {
   nombre: "grabacion_detener", modulo: "grabacion",

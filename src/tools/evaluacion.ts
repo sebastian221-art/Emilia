@@ -38,7 +38,7 @@ export const evaluacionDesdeConversacion: DefTool = {
     if (!ctx.conversacionId) return { ok: false, error: "Necesito una conversación." };
     const msgs = await query<any>(`SELECT rol, contenido, creado_en FROM mensajes WHERE conversacion_id=$1 ORDER BY creado_en DESC LIMIT $2`, [ctx.conversacionId, (a.ultimos || 8) * 2 + 2]);
     const orden = msgs.reverse(); const casos: Caso[] = [];
-    const trivial = /^\s*(ok|okay|sí|si|no|dale|listo|gracias|hola|bien|por qu[eé]\s*\??|y\?|hazlo|hacelo|probemos.*)\s*[.!?]*\s*$/i;
+    const trivial = /^\s*(ok|okay|sí|si|no|dale|listo|gracias|hola|bien|por qu[eé]\s*\??|y\?|hazlo|hazlo|probemos.*)\s*[.!?]*\s*$/i;
     for (let i = 0; i < orden.length; i++) {
       if (orden[i].rol !== "usuario") continue;
       const texto = String(orden[i].contenido || "").trim();

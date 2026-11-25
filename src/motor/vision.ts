@@ -40,12 +40,12 @@ export async function analizarImagenes(imagenes: { contenido: Buffer; mime: stri
   if (imagenes.length > 3) imagenes = imagenes.slice(0, 3);
 
   const instruccion = op.pregunta?.trim()
-    || "Describí esta imagen en español, en 2 a 5 líneas, con lo que importa: qué es, texto visible (transcribilo literal si es un error, un código o un dato), números, estado. Sin adornos.";
+    || "Describe esta imagen en español, en 2 a 5 líneas, con lo que importa: qué es, texto visible (transcribilo literal si es un error, un código o un dato), números, estado. Sin adornos.";
   const texto = [
     "/no_think",
     instruccion,
     op.contexto ? `Contexto de quien la envía: ${op.contexto}` : "",
-    op.json ? "Respondé ÚNICAMENTE con un objeto JSON válido, sin texto alrededor." : "",
+    op.json ? "Responde ÚNICAMENTE con un objeto JSON válido, sin texto alrededor." : "",
   ].filter(Boolean).join("\n");
 
   const contenido: any[] = [{ type: "text", text: texto }];

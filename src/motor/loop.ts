@@ -49,7 +49,7 @@ export interface OpcionesTarea {
   origen?: "panel" | "whatsapp" | "flujo" | "api" | "evaluacion";
   /** Modo simulado (evaluaciones): las tools que no son de lectura NO se ejecutan; se devuelve un resultado ficticio. */
   simulado?: boolean;
-  /** Texto extra para el system prompt (ej. "hablás con tu jefe por WhatsApp"). */
+  /** Texto extra para el system prompt (ej. "hablas con tu jefe por WhatsApp"). */
   contextoCanal?: string;
   /** Modo conversación: cada turno lo lleva el planificador (el cerebro bueno), temperatura más alta, sin empujones de "actuá". */
   conversacion?: boolean;
@@ -109,7 +109,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   const ag = await obtenerAgente(agenteId);
   if (!ag) throw new Error("Agente no encontrado");
   if (ag.estado !== "activo") throw new Error(`El agente está en estado '${ag.estado}'. Activalo para que trabaje.`);
-  if (!process.env.GROQ_API_KEY) throw new Error("Falta GROQ_API_KEY en el .env de emilia. Agregala y reiniciá el servidor.");
+  if (!process.env.GROQ_API_KEY) throw new Error("Falta GROQ_API_KEY en el .env de emilia. Agregala y reinicia el servidor.");
 
   if (cancelada(op.conversacionId)) {
     const [ej0] = await query<{ id: string }>(`INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen, respuesta, fin) VALUES ($1,'fallida',$2,$3,'cancelada',now()) RETURNING id`, [agenteId, op.conversacionId ?? null, op.origen || "panel"]);
@@ -118,7 +118,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   const pres = await dentroDePresupuesto(ag);
   if (!pres.ok) {
     const [ej0] = await query<{ id: string }>(`INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen, respuesta, fin) VALUES ($1,'fallida',$2,$3,$4,now()) RETURNING id`, [agenteId, op.conversacionId ?? null, op.origen || "panel", "presupuesto agotado"]);
-    return { ok: false, estado: "fallida", respuesta: `Hoy ya gasté ${pres.gastado.toFixed(2)} USD de mi tope de ${pres.tope} USD. Para seguir, subí el presupuesto en mi esqueleto (gobierno → presupuesto diario) o esperá a mañana.`, ejecucionId: ej0.id, conversacionId: op.conversacionId ?? null, turnos: 0, toolCalls: 0, mensajesEnviados: [] };
+    return { ok: false, estado: "fallida", respuesta: `Hoy ya gasté ${pres.gastado.toFixed(2)} USD de mi tope de ${pres.tope} USD. Para seguir, subí el presupuesto en mi esqueleto (gobierno → presupuesto diario) o espera a mañana.`, ejecucionId: ej0.id, conversacionId: op.conversacionId ?? null, turnos: 0, toolCalls: 0, mensajesEnviados: [] };
   }
   const conv = op.conversacionId ? await obtenerConversacion(op.conversacionId) : undefined;
   const { invocables } = await herramientasDeAgente(agenteId);
@@ -152,7 +152,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
       await query(`UPDATE ejecuciones SET plan=$1 WHERE id=$2`, [rp.texto, ej.id]);
       if (rp.razonamiento && ag.pensar_voz_alta?.visible) await ctx.traza("pensamiento", rp.razonamiento);
       mensajes.push({ role: "assistant", content: `Mi plan:\n${rp.texto}` });
-      mensajes.push({ role: "user", content: "Dale, ejecutá el plan usando tus herramientas de verdad." });
+      mensajes.push({ role: "user", content: "Dale, ejecuta el plan usando tus herramientas de verdad." });
     } catch (e: any) { await ctx.traza("error", `No se pudo planear: ${e?.message || e}`); }
   }
 
@@ -254,7 +254,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
 
       // 2. Presupuesto.
       if (e.turnos >= e.maxTurnos) {
-        respuestaFinal = "Me quedé sin presupuesto de turnos para esta tarea. Contame si querés que siga con más.";
+        respuestaFinal = "Me quedé sin presupuesto de turnos para esta tarea. Cuéntame si quieres que siga con más.";
         await ctx.traza("verificacion", `Presupuesto de ${e.maxTurnos} turnos agotado.`);
         break;
       }
@@ -269,7 +269,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       const usaPlanificador = !dosCerebros || !!e.escalar || e.soloTexto || !!e.conversacion;   // charlando, siempre el cerebro bueno
       const modeloTurno = usaPlanificador ? (e.planificador || e.modelo) : e.modelo;
       e.escalar = false;
-      if (dosCerebros && !usaPlanificador && e.turnos === 2) e.mensajes.push({ role: "system", content: "Seguí el plan que quedó escrito más arriba, paso a paso, sin cambiarlo. Si un paso falla o algo no cuadra con el plan, no improvises: escribí en una línea qué pasó y terminá el turno (otro cerebro decide)." });
+      if (dosCerebros && !usaPlanificador && e.turnos === 2) e.mensajes.push({ role: "system", content: "Sigue el plan que quedó escrito más arriba, paso a paso, sin cambiarlo. Si un paso falla o algo no cuadra con el plan, no improvises: escribe en una línea qué pasó y termina el turno (otro cerebro decide)." });
       const r = await llamarModelo(e.mensajes, e.soloTexto ? [] : tools, { modelo: modeloTurno, temperatura: e.temperatura });
       if (e.soloTexto) e.soloTexto = false;
       if (dosCerebros) await ctx.traza("pensamiento", `[cerebro: ${usaPlanificador ? "planificador" : "ejecutor"} · ${modeloTurno}]`);
@@ -277,7 +277,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       // Cierre: si el ejecutor cree que terminó (sin más tools) tras haber trabajado, la respuesta final la escribe el planificador.
       if (dosCerebros && !usaPlanificador && !r.toolCalls.length && e.toolCalls > 0 && !e.cierreHecho) {
         e.cierreHecho = true; e.escalar = true;
-        e.mensajes.push({ role: "system", content: `Borrador del ejecutor (no se mostró al jefe): "${(r.texto || "").slice(0, 800)}". Escribí vos la respuesta final para el jefe con lo que realmente pasó, o llamá la herramienta que falte.` });
+        e.mensajes.push({ role: "system", content: `Borrador del ejecutor (no se mostró al jefe): "${(r.texto || "").slice(0, 800)}". Escribe tú la respuesta final para el jefe con lo que realmente pasó, o llama la herramienta que falte.` });
         await ctx.traza("pensamiento", "[cerebro: el ejecutor dio por terminado; el planificador redacta el cierre]");
         continue;
       }
@@ -292,14 +292,14 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       if (!r.toolCalls.length && !r.texto.trim() && !e.empujonDado) {
         // Pensó pero no actuó ni respondió: un empujón, una sola vez.
         e.empujonDado = true;
-        e.mensajes.push({ role: "user", content: "No llegó ninguna acción ni respuesta. Si necesitás una herramienta, llamala ahora; si no, escribí tu respuesta final." });
+        e.mensajes.push({ role: "user", content: "No llegó ninguna acción ni respuesta. Si necesitas una herramienta, llámala ahora; si no, escribe tu respuesta final." });
         continue;
       }
       // Pidió permiso por texto sin llamar nada: no vale. Un empujón (una vez).
       const pidePermiso = /(necesito|requiero) (tu |su )?(ok|aprobaci[oó]n|permiso|autorizaci[oó]n)|¿\s*proced(o|emos)\s*\?|¿\s*(quer[eé]s|deseas|quieres) que (proceda|lo haga|ejecute|abra|integre|cree)|dame (tu )?(ok|aprobaci[oó]n)|respond[eé] \*?ok\*?|⏸/i;
       if (!e.conversacion && !r.toolCalls.length && pidePermiso.test(r.texto) && e.toolCalls === 0 && !e.empujonPermiso && invocables.size) {
         e.empujonPermiso = true;
-        e.mensajes.push({ role: "user", content: "No pidas permiso por texto. Llamá la herramienta que corresponde ahora mismo: si requiere aprobación, el sistema se la pide al jefe automáticamente." });
+        e.mensajes.push({ role: "user", content: "No pidas permiso por texto. Llama la herramienta que corresponde ahora mismo: si requiere aprobación, el sistema se la pide al jefe automáticamente." });
         await ctx.traza("verificacion", "Pidió permiso por texto sin llamar la herramienta; se le exigió actuar.");
         continue;
       }
@@ -313,7 +313,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
           // Una sola vez: exigir que la respuesta coincida con lo que realmente hizo.
           e.empujonHonestidad = true;
           e.soloTexto = true; e.escalar = true;   // la corrección es SOLO de texto: nada de volver a ejecutar herramientas
-          e.mensajes.push({ role: "user", content: `Tu respuesta afirma acciones que no coinciden con las herramientas que usaste en esta tarea (${usadas.length ? usadas.join(", ") : "ninguna"}). Reescribila COMO MENSAJE PARA EL JEFE (no como informe técnico, sin hablar de 'herramientas' ni de 'mi último mensaje'): decile en 2-4 líneas qué hiciste de verdad y qué quedó sin hacer, y si falta algo, preguntale si lo hacés ahora. NO llames herramientas en esta corrección.` });
+          e.mensajes.push({ role: "user", content: `Tu respuesta afirma acciones que no coinciden con las herramientas que usaste en esta tarea (${usadas.length ? usadas.join(", ") : "ninguna"}). Reescribila COMO MENSAJE PARA EL JEFE (no como informe técnico, sin hablar de 'herramientas' ni de 'mi último mensaje'): dile en 2-4 líneas qué hiciste de verdad y qué quedó sin hacer, y si falta algo, preguntale si lo haces ahora. NO llames herramientas en esta corrección.` });
           await ctx.traza("verificacion", `Respuesta rechazada por no coincidir con las acciones reales (${sinTools ? "afirma sin herramientas" : "dice navegador sin usarlo"}); se le exigió corregir.`);
           continue;
         }
@@ -324,7 +324,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
 
       if (e.flujoLanzado) {
         // El flujo ya se encarga: no dejar que el agente duplique el trabajo.
-        for (const tc of r.toolCalls) e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: "No ejecutado: ya lanzaste un flujo que se encarga de esto y te avisará. Respondé al jefe en una línea y terminá." });
+        for (const tc of r.toolCalls) e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: "No ejecutado: ya lanzaste un flujo que se encarga de esto y te avisará. Responde al jefe en una línea y termina." });
         await ctx.traza("verificacion", `Ignoradas ${r.toolCalls.length} tool call(s) posteriores al lanzamiento de un flujo.`);
         continue;
       }
@@ -347,7 +347,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
     await query(`UPDATE ejecuciones SET estado='fallida', turnos_usados=$1, tool_calls=$2, mensajes=NULL, fin=now() WHERE id=$3`, [e.turnos, e.toolCalls, e.ejId]);
     const paraJefe = /tool_use_failed|Failed to parse tool call|output_parse_failed/i.test(detalle)
       ? "Se me trabó en el medio: el modelo generó una llamada inválida (pasa con argumentos muy largos). Pedímelo de nuevo y lo hago en pasos más cortos."
-      : /rate_limit|429/i.test(detalle) ? "El proveedor del modelo me limitó por un momento (rate limit). Probá de nuevo en un minuto."
+      : /rate_limit|429/i.test(detalle) ? "El proveedor del modelo me limitó por un momento (rate limit). Prueba de nuevo en un minuto."
       : /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(detalle) ? `No pude conectarme a un servicio (${detalle.slice(0, 120)}).`
       : `Hubo un error: ${detalle.slice(0, 300)}`;
     return { ok: false, estado: "fallida", respuesta: paraJefe, ejecucionId: e.ejId, conversacionId: e.conversacionId, turnos: e.turnos, toolCalls: e.toolCalls, mensajesEnviados: e.mensajesEnviados };
@@ -367,7 +367,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       const m = String(tc.argumentos.modulo || "").toLowerCase().trim();
       const existe = [...invocables.keys()].some((n) => moduloDe(n) === m);
       if (existe && e.modulosActivos) { e.modulosActivos.add(m); await ctx.traza("tool", `módulo cargado: ${m}`); }
-      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: existe ? `Módulo ${m} cargado: ${[...invocables.keys()].filter((n) => moduloDe(n) === m).join(", ")}. Ya podés llamar esas herramientas.` : `No existe el módulo "${m}". Módulos: ${[...new Set([...invocables.keys()].map(moduloDe))].join(", ")}.` });
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: existe ? `Módulo ${m} cargado: ${[...invocables.keys()].filter((n) => moduloDe(n) === m).join(", ")}. Ya puedes llamar esas herramientas.` : `No existe el módulo "${m}". Módulos: ${[...new Set([...invocables.keys()].map(moduloDe))].join(", ")}.` });
       e.pendientes.shift();
       continue;
     }
@@ -389,7 +389,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       }
       const parecidas = masParecidas(tc.nombre, nombres, 3);
       e.escalar = true;
-      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `La herramienta '${tc.nombre}' NO existe.${parecidas.length ? ` ¿Quisiste decir ${parecidas.map((x) => `'${x}'`).join(" o ")}? Usá el nombre exacto.` : ""} Herramientas disponibles: ${nombres.join(", ") || "(ninguna)"}.` });
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `La herramienta '${tc.nombre}' NO existe.${parecidas.length ? ` ¿Quisiste decir ${parecidas.map((x) => `'${x}'`).join(" o ")}? Usa el nombre exacto.` : ""} Herramientas disponibles: ${nombres.join(", ") || "(ninguna)"}.` });
       await ctx.traza("error", `Tool call a nombre inexistente: ${tc.nombre}${parecidas.length ? " (parecidas: " + parecidas.join(", ") + ")" : ""}`);
       e.pendientes.shift();
       continue;
@@ -404,7 +404,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
     e.firmasRecientes.push(firmaTc); if (e.firmasRecientes.length > 20) e.firmasRecientes.shift();
     if (vecesSeguidas >= 2 && inv.riesgo !== "lectura" || vecesSeguidas >= 3) {
       e.escalar = true;
-      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `NO EJECUTADO: es la ${vecesSeguidas}ª vez seguida que llamás ${tc.nombre} con exactamente los mismos argumentos. Repetirlo no cambia el resultado. Cambiá de estrategia o reportale al jefe el error exacto que te devolvió antes.` });
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `NO EJECUTADO: es la ${vecesSeguidas}ª vez seguida que llamas ${tc.nombre} con exactamente los mismos argumentos. Repetirlo no cambia el resultado. Cambia de estrategia o reportale al jefe el error exacto que te devolvió antes.` });
       await ctx.traza("verificacion", `Bloqueada llamada repetida (${vecesSeguidas}x): ${tc.nombre}`);
       e.pendientes.shift();
       continue;
@@ -438,7 +438,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
 
     // ── Límite duro de herramientas por tarea (gobierno.max_tool_calls) ──
     if (e.toolCalls >= e.maxToolCalls) {
-      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `Límite alcanzado: ya usaste ${e.maxToolCalls} llamadas a herramientas en esta tarea. No podés llamar más. Cerrá con lo que tenés y explicá qué quedó pendiente.` });
+      e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: `Límite alcanzado: ya usaste ${e.maxToolCalls} llamadas a herramientas en esta tarea. No puedes llamar más. Cierra con lo que tienes y explica qué quedó pendiente.` });
       await ctx.traza("verificacion", `Límite de ${e.maxToolCalls} tool calls alcanzado; se rechazó ${inv.nombre}.`);
       e.pendientes.shift();
       continue;
@@ -479,7 +479,7 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       try {
         const f = await iniciarFlujo(inv.nombre, tc.argumentos, { agenteId: e.agenteId, conversacionId: e.conversacionId, origen: "agente" });
         const enMarcha = f.estado !== "completado" && f.estado !== "fallido";
-        resultado = { ok: true, datos: { ejecucionId: f.ejecucionId, estado: f.estado }, resumen: `Flujo ${inv.nombre} ${f.estado === "completado" ? "completado" : f.estado === "fallido" ? `falló: ${f.error}` : `EN MARCHA (estado: ${f.estado}). El flujo hace TODO lo que sigue por su cuenta (pedir aprobaciones, integrar, recargar, avisar por este canal). NO hagas nada más al respecto ni llames otras herramientas: respondele al jefe en una línea que ya está en marcha y terminá tu turno.`}` };
+        resultado = { ok: true, datos: { ejecucionId: f.ejecucionId, estado: f.estado }, resumen: `Flujo ${inv.nombre} ${f.estado === "completado" ? "completado" : f.estado === "fallido" ? `falló: ${f.error}` : `EN MARCHA (estado: ${f.estado}). El flujo hace TODO lo que sigue por su cuenta (pedir aprobaciones, integrar, recargar, avisar por este canal). NO hagas nada más al respecto ni llames otras herramientas: respondele al jefe en una línea que ya está en marcha y termina tu turno.`}` };
         if (enMarcha) e.flujoLanzado = true;
       } catch (err: any) { resultado = { ok: false, error: err?.message || String(err) }; }
     } else if (inv.tipo === "skill") {
@@ -505,30 +505,30 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
   const id = ag.identidad || {};
   const nombres = [...invocables.keys()];
   const partes = [
-    id.nombre ? `Sos ${id.nombre}.` : "",
+    id.nombre ? `Eres ${id.nombre}.` : "",
     id.mision ? `Misión: ${id.mision}` : "",
     id.personalidad ? `Personalidad: ${id.personalidad}` : "",
-    id.terminado ? `Considerás una tarea terminada cuando: ${id.terminado}` : "",
-    id.reglas_duras ? `Reglas que NUNCA rompés: ${id.reglas_duras}` : "",
-    id.cuando_preguntar ? `Pedís aclaración en vez de asumir cuando: ${id.cuando_preguntar}` : "",
-    id.ejemplos ? `Ejemplos de cómo resolvés pedidos:\n${id.ejemplos}` : "",
-    conv ? `Canal: ${conv.canal === "panel" ? "chat del panel de control" : `WhatsApp, contacto ${conv.contacto}`}. Tu respuesta final de texto es lo que le llega a la persona por ese canal: escribí directamente para ella, sin reportes técnicos.` : "",
-    conv?.canal === "whatsapp" ? `FORMATO WHATSAPP: sin tablas, sin encabezados con #, sin bloques de código; solo *negrita*, _cursiva_ y listas con guiones. Máximo ~15 líneas por mensaje. Si el resultado de una herramienta es un informe largo, mandá un RESUMEN de lo importante (5-10 líneas con lo accionable) y terminá con una pregunta corta tipo "¿te mando el detalle completo?". Si lo pide, entonces sí mandá el informe completo (podés partirlo en varios mensajes).` : "",
+    id.terminado ? `Consideras una tarea terminada cuando: ${id.terminado}` : "",
+    id.reglas_duras ? `Reglas que NUNCA rompes: ${id.reglas_duras}` : "",
+    id.cuando_preguntar ? `Pides aclaración en vez de asumir cuando: ${id.cuando_preguntar}` : "",
+    id.ejemplos ? `Ejemplos de cómo resuelves pedidos:\n${id.ejemplos}` : "",
+    conv ? `Canal: ${conv.canal === "panel" ? "chat del panel de control" : `WhatsApp, contacto ${conv.contacto}`}. Tu respuesta final de texto es lo que le llega a la persona por ese canal: escribe directamente para ella, sin reportes técnicos.` : "",
+    conv?.canal === "whatsapp" ? `FORMATO WHATSAPP: sin tablas, sin encabezados con #, sin bloques de código; solo *negrita*, _cursiva_ y listas con guiones. Máximo ~15 líneas por mensaje. Si el resultado de una herramienta es un informe largo, manda un RESUMEN de lo importante (5-10 líneas con lo accionable) y termina con una pregunta corta tipo "¿te mando el detalle completo?". Si lo pide, entonces sí manda el informe completo (puedes partirlo en varios mensajes).` : "",
     contextoCanal || "",
     nombres.length
-      ? `Tenés ${nombres.length} herramientas agrupadas en módulos: ${resumenModulos(invocables)}. En cada tarea se te cargan los módulos relevantes; si te falta uno, llamá modulo_cargar(modulo) y sus herramientas aparecen. Usá solo nombres exactos de tu lista, con los parámetros que declaran. Nunca preguntes si podés: llamá la herramienta; cuando algo necesita OK del jefe, el sistema lo pide solo.`
-      : "No tenés herramientas asignadas: solo podés responder con texto.",
-    "Usás tus herramientas de verdad cuando hacen falta. Nunca afirmes haber hecho algo (enviar, consultar) sin haber llamado la herramienta correspondiente. Si una herramienta devuelve error, leelo y corregí los argumentos o explicá el problema. Sé honesto.",
-    "REGLA DE ESTADO ACTUAL: cualquier pregunta sobre cómo están las cosas AHORA (qué hay en pantalla, qué archivos hay, qué campañas/envíos/procesos existen, cómo va algo) se responde llamando la herramienta en ESTE turno. Lo que viste en turnos anteriores ya no vale. Y el resultado es lo que la herramienta DEVUELVE, nunca lo que vos pusiste en sus argumentos: no inventes datos en los argumentos.",
-    "REGLA DE APROBACIONES: no pidas permiso por texto. Si una acción requiere aprobación, llamá la herramienta igual: el sistema pausa y le pide el OK al jefe por su canal. Preguntar '¿procedo?' y no llamar nada deja la tarea a medias.",
-    "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que creés recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
+      ? `Tienes ${nombres.length} herramientas agrupadas en módulos: ${resumenModulos(invocables)}. En cada tarea se te cargan los módulos relevantes; si te falta uno, llama modulo_cargar(modulo) y sus herramientas aparecen. Usa solo nombres exactos de tu lista, con los parámetros que declaran. Nunca preguntes si puedes: llama la herramienta; cuando algo necesita OK del jefe, el sistema lo pide solo.`
+      : "No tienes herramientas asignadas: solo puedes responder con texto.",
+    "Usas tus herramientas de verdad cuando hacen falta. Nunca afirmes haber hecho algo (enviar, consultar) sin haber llamado la herramienta correspondiente. Si una herramienta devuelve error, léelo y corrige los argumentos o explica el problema. Sé honesto.",
+    "REGLA DE ESTADO ACTUAL: cualquier pregunta sobre cómo están las cosas AHORA (qué hay en pantalla, qué archivos hay, qué campañas/envíos/procesos existen, cómo va algo) se responde llamando la herramienta en ESTE turno. Lo que viste en turnos anteriores ya no vale. Y el resultado es lo que la herramienta DEVUELVE, nunca lo que tú pusiste en sus argumentos: no inventes datos en los argumentos.",
+    "REGLA DE APROBACIONES: no pidas permiso por texto. Si una acción requiere aprobación, llama la herramienta igual: el sistema pausa y le pide el OK al jefe por su canal. Preguntar '¿procedo?' y no llamar nada deja la tarea a medias.",
+    "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que crees recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
   ].filter(Boolean).join("\n");
 
   // Hechos recientes: qué herramientas se ejecutaron de verdad en esta conversación (para responder "¿lo hiciste?" con datos).
   let accionesRecientes = "";
   if (conv) {
     const pasos = await query<{ detalle: string; creado_en: string }>(`SELECT p.detalle, p.creado_en FROM pasos p JOIN ejecuciones e ON e.id=p.ejecucion_id WHERE e.conversacion_id=$1 AND p.tipo IN ('tool','aprobacion') AND p.creado_en > now() - interval '6 hours' ORDER BY p.creado_en DESC LIMIT 12`, [conv.id]).catch(() => [] as any);
-    if (pasos.length) accionesRecientes = `=== ACCIONES REALES RECIENTES EN ESTA CONVERSACIÓN (hechos, no recuerdos; si el jefe pregunta "¿lo hiciste?" respondé con esto) ===\n${(pasos as any[]).reverse().map((p) => `${new Date(p.creado_en).toLocaleTimeString("es-CO")} ${String(p.detalle).slice(0, 220)}`).join("\n")}\n=== FIN ===`;
+    if (pasos.length) accionesRecientes = `=== ACCIONES REALES RECIENTES EN ESTA CONVERSACIÓN (hechos, no recuerdos; si el jefe pregunta "¿lo hiciste?" responde con esto) ===\n${(pasos as any[]).reverse().map((p) => `${new Date(p.creado_en).toLocaleTimeString("es-CO")} ${String(p.detalle).slice(0, 220)}`).join("\n")}\n=== FIN ===`;
   }
   // Cerebro compartido: núcleo de quién es el jefe + lo que el equipo sabe y recuerda del pedido (con tope de tamaño).
   let cerebro = "";

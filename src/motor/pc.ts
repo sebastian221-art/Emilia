@@ -13,7 +13,7 @@ import { ejecutarComando, type SalidaComando } from "./sandbox.js";
 export const pcHabilitado = () => (process.env.PC_HABILITADO || "").toLowerCase() === "true";
 export const esWindows = process.platform === "win32";
 
-export function exigirPc() { if (!pcHabilitado()) throw new Error("El control del PC está apagado. Poné PC_HABILITADO=true en el .env y reiniciá Emilia."); }
+export function exigirPc() { if (!pcHabilitado()) throw new Error("El control del PC está apagado. Pon PC_HABILITADO=true en el .env y reinicia Emilia."); }
 
 /** Ejecuta PowerShell (Windows) o sh (otros) con timeout. */
 export async function powershell(script: string, timeoutSeg = 60, cwd = os.homedir()): Promise<SalidaComando> {

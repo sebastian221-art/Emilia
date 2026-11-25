@@ -16,7 +16,7 @@ async function main() {
     return;
   }
   const t0 = Date.now();
-  const v = await sintetizar("Hola Sebastián, soy Emilia. Si escuchás esto, ya tengo voz. ¿En qué te ayudo?");
+  const v = await sintetizar("Hola Sebastián, soy Emilia. Si escuchas esto, ya tengo voz. ¿En qué te ayudo?");
   if (!v.ok || !v.audio) { console.log("✘", v.error); process.exit(1); }
   await fs.writeFile("hola.mp3", v.audio.contenido);
   console.log(`✔ hola.mp3 generado con ${v.proveedor} en ${Date.now() - t0} ms (${Math.round(v.audio.contenido.length / 1024)} KB). Abrilo para escuchar.`);

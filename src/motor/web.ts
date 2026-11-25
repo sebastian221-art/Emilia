@@ -118,7 +118,7 @@ async function buscarRespaldo(consulta: string, max = 8, region = "co-es", recie
     }
   } catch { /* sin resultados */ }
   if (out.length) { cache.set(clave, { t: Date.now(), r: out }); return out; }
-  if (!respondioAlguno) throw new ErrorBuscador("Ningún buscador respondió (bloqueo temporal por muchas consultas seguidas, sin red, o cambió el HTML). No sirve reintentar con otras palabras: esperá unos minutos o configurá BRAVE_SEARCH_API_KEY en .env.");
+  if (!respondioAlguno) throw new ErrorBuscador("Ningún buscador respondió (bloqueo temporal por muchas consultas seguidas, sin red, o cambió el HTML). No sirve reintentar con otras palabras: espera unos minutos o configura BRAVE_SEARCH_API_KEY en .env.");
   return out;
 }
 

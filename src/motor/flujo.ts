@@ -164,7 +164,7 @@ async function avanzar(ejecucionId: string): Promise<EstadoFlujo> {
         }
         case "aprobacion": {
           if (ctx.__aprobados[paso.id]) { actual = siguienteLineal(def, paso.id); break; }
-          const msg = typeof paso.mensaje === "function" ? seguro(() => (paso.mensaje as any)(ctx), "¿Aprobás continuar?") : paso.mensaje;
+          const msg = typeof paso.mensaje === "function" ? seguro(() => (paso.mensaje as any)(ctx), "¿Aprobas continuar?") : paso.mensaje;
           return pausarPorAprobacion(fila, paso.id, msg, paso.textoFinal ? msg : undefined);
         }
         case "esperar": {
@@ -312,7 +312,7 @@ async function resolverDef(nombreOId: string): Promise<{ def: DefFlujo; filaFluj
     def = registro.flujo(filaFlujo.nombre);
     if (!def) throw new Error(`El flujo "${filaFlujo.nombre}" no está cargado en el registro.`);
   }
-  if (!filaFlujo) throw new Error(`El flujo ${def.nombre} no está sincronizado en la base (reiniciá el servidor).`);
+  if (!filaFlujo) throw new Error(`El flujo ${def.nombre} no está sincronizado en la base (reinicia el servidor).`);
   return { def, filaFlujo };
 }
 

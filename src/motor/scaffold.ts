@@ -22,7 +22,7 @@ export async function crearProyectoDesdeCero(p: { nombre: string; descripcion?: 
   try { await fs.access(ruta); existia = true; } catch { /* no existe: bien */ }
   if (existia) {
     const contenido = await fs.readdir(ruta);
-    if (contenido.length && !p.reusarCarpeta) throw new Error(`La carpeta ${ruta} ya existe y tiene archivos. Si es un intento anterior fallido o querés reutilizarla, repetí con reusar_carpeta=true (se sobreescriben los archivos base, el resto se conserva).`);
+    if (contenido.length && !p.reusarCarpeta) throw new Error(`La carpeta ${ruta} ya existe y tiene archivos. Si es un intento anterior fallido o quieres reutilizarla, repetí con reusar_carpeta=true (se sobreescriben los archivos base, el resto se conserva).`);
   } else {
     await fs.mkdir(ruta, { recursive: true });
   }
@@ -39,7 +39,7 @@ export async function crearProyectoDesdeCero(p: { nombre: string; descripcion?: 
     }
     await ejecutarComando(ruta, "git add -A", 30);
     const c = await ejecutarComando(ruta, `git commit -m "Proyecto ${p.nombre} creado por Emilia"`, 60);
-    if (c.codigo !== 0 && !/nothing to commit/i.test(c.stdout + c.stderr)) throw new Error(`git commit falló: ${(c.stderr || c.stdout).slice(-300)}. ¿Tenés configurados git user.name y user.email?`);
+    if (c.codigo !== 0 && !/nothing to commit/i.test(c.stdout + c.stderr)) throw new Error(`git commit falló: ${(c.stderr || c.stdout).slice(-300)}. ¿Tienes configurados git user.name y user.email?`);
 
   const esNode = plantilla !== "vacio";
   const proyecto = await registrarProyecto({

@@ -75,7 +75,7 @@ export async function explorarTool(id: string): Promise<any> {
     return cap;
   }
   if (!endpoint) {
-    const cap = { estado: "error", endpoints: [], resumen: "La tool no tiene un endpoint (URL) configurado. Completá el campo 'URL / endpoint' en la sección Conexión y guardá.", puede: [], no_puede: [], nota: "" };
+    const cap = { estado: "error", endpoints: [], resumen: "La tool no tiene un endpoint (URL) configurado. Completa el campo 'URL / endpoint' en la sección Conexión y guarda.", puede: [], no_puede: [], nota: "" };
     await query(`UPDATE tools SET estado_prueba='error', capacidades=$1 WHERE id=$2`, [JSON.stringify(cap), id]);
     return cap;
   }
@@ -115,7 +115,7 @@ export async function explorarTool(id: string): Promise<any> {
     } catch (e: any) {
       estado = "error";
       const causa = e?.cause?.code || e?.code || e?.name || "";
-      notaSondeo = causa === "ENOTFOUND" ? `No se pudo resolver el dominio "${origen}" — revisá que la URL esté bien escrita o tu conexión a internet.`
+      notaSondeo = causa === "ENOTFOUND" ? `No se pudo resolver el dominio "${origen}" — revisa que la URL esté bien escrita o tu conexión a internet.`
         : causa === "ABORT_ERR" || e?.name === "TimeoutError" ? "El endpoint no respondió a tiempo (timeout). Puede estar caído o ser muy lento."
         : `No se pudo conectar: ${e?.message || causa || String(e)}`;
     }
@@ -124,14 +124,14 @@ export async function explorarTool(id: string): Promise<any> {
   // 3: resumen por IA en lenguaje hablado
   let resumen = "", puede: string[] = [], no_puede: string[] = [];
   try {
-    const prompt = `Sos un asistente que explica en español simple qué se puede hacer con una conexión (API/tool).
+    const prompt = `Eres un asistente que explica en español simple qué se puede hacer con una conexión (API/tool).
 Tool: "${tool.nombre}" — ${tool.descripcion}
 Tipo: ${tool.tipo}. Alcance configurado: ${sec.alcance?.alcance || "lectura"}.
 ${endpoints.length ? `Endpoints descubiertos: ${endpoints.slice(0, 40).join(", ")}` : "No se descubrieron endpoints (sin OpenAPI)."}
 ${specTexto ? `Fragmento del spec: ${specTexto}` : ""}
 ${notaSondeo}
 
-Respondé SOLO JSON: {"resumen":"2-3 frases claras de qué es y qué permite", "puede":["cosa concreta", ...], "no_puede":["cosa concreta", ...]}. Si no hay info suficiente, sé honesto en el resumen.`;
+Responde SOLO JSON: {"resumen":"2-3 frases claras de qué es y qué permite", "puede":["cosa concreta", ...], "no_puede":["cosa concreta", ...]}. Si no hay info suficiente, sé honesto en el resumen.`;
     const r = await llamarModelo([{ role: "user", content: prompt }], []);
     const parsed = JSON.parse(r.texto.replace(/```json|```/g, "").trim());
     resumen = parsed.resumen || "";

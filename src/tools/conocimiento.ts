@@ -13,7 +13,7 @@ const MODULO = "conocimiento";
 
 export const conocimientoGuardar: DefTool = {
   nombre: "conocimiento_guardar", modulo: MODULO,
-  descripcion: "Guarda (o actualiza) una nota durable en tu base de conocimiento: un hallazgo, una decisión de arquitectura, un postmortem, una convención del proyecto. La vas a tener en tu contexto en futuras tareas. Usá nombres con prefijo: 'adr/', 'postmortem/', 'hallazgos/', 'convenciones/'.",
+  descripcion: "Guarda (o actualiza) una nota durable en tu base de conocimiento: un hallazgo, una decisión de arquitectura, un postmortem, una convención del proyecto. La vas a tener en tu contexto en futuras tareas. Usa nombres con prefijo: 'adr/', 'postmortem/', 'hallazgos/', 'convenciones/'.",
   parametros: { type: "object", properties: { nombre: { type: "string", description: "Nombre único, ej. 'postmortem/2026-09-25-webhook-duplicados.md'.", minLength: 3 }, contenido: { type: "string", description: "La nota, concreta y útil para el futuro (qué, por qué, qué hacer).", minLength: 10 } }, required: ["nombre", "contenido"] },
   riesgo: "escritura", requiereAprobacion: false,
   async ejecutar(a, ctx) {
@@ -27,7 +27,7 @@ export const conocimientoGuardar: DefTool = {
 
 export const conocimientoBuscar: DefTool = {
   nombre: "conocimiento_buscar", modulo: MODULO,
-  descripcion: "Busca en tus notas y documentos por texto. Devuelve nombre y fragmentos relevantes. Usalo cuando tu contexto no incluya algo que recordás haber guardado.",
+  descripcion: "Busca en tus notas y documentos por texto. Devuelve nombre y fragmentos relevantes. Úsalo cuando tu contexto no incluya algo que recuerdas haber guardado.",
   parametros: { type: "object", properties: { texto: { type: "string", minLength: 2 }, limite: { type: "integer", default: 5, minimum: 1, maximum: 20 } }, required: ["texto"] },
   riesgo: "lectura", requiereAprobacion: false,
   async ejecutar(a, ctx) {

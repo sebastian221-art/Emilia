@@ -27,7 +27,7 @@ rutasRegistro.post("/api/registro/tools/:nombre/probar", async (req, res, next) 
   try {
     const t = registro.tool(req.params.nombre);
     if (!t) return res.status(404).json({ error: "Tool no registrada" });
-    if (t.requiereAprobacion && req.body?.confirmado !== true) return res.status(409).json({ ok: false, requiereConfirmacion: true, error: `${t.nombre} requiere aprobación (riesgo: ${t.riesgo}). Confirmá para ejecutarla.` });
+    if (t.requiereAprobacion && req.body?.confirmado !== true) return res.status(409).json({ ok: false, requiereConfirmacion: true, error: `${t.nombre} requiere aprobación (riesgo: ${t.riesgo}). Confirma para ejecutarla.` });
     const val = validarArgs(t.parametros, req.body?.args || {});
     if (!val.ok) return res.status(400).json({ ok: false, error: "Argumentos inválidos", errores: val.errores });
     const inicio = Date.now();
@@ -40,7 +40,7 @@ rutasRegistro.post("/api/registro/tools/:nombre/probar", async (req, res, next) 
 rutasRegistro.post("/api/registro/skills/:nombre/probar", async (req, res, next) => {
   try {
     const sk = registro.skill(req.params.nombre);
-    if (sk?.requiereAprobacion && req.body?.confirmado !== true) return res.status(409).json({ ok: false, requiereConfirmacion: true, error: `${sk.nombre} requiere aprobación (riesgo: ${sk.riesgo}). Confirmá para ejecutarla.` });
+    if (sk?.requiereAprobacion && req.body?.confirmado !== true) return res.status(409).json({ ok: false, requiereConfirmacion: true, error: `${sk.nombre} requiere aprobación (riesgo: ${sk.riesgo}). Confirma para ejecutarla.` });
     const inicio = Date.now();
     const r = await ejecutarSkill(req.params.nombre, req.body?.args || {}, crearContexto(null, null));
     res.json({ ...r, duracion_ms: Date.now() - inicio });

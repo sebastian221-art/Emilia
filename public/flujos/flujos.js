@@ -183,7 +183,7 @@ function configurarNodo(id) {
   document.getElementById("modal-nodo").innerHTML = `
     <div style="background:var(--e-surface);border-radius:14px;padding:20px;max-width:440px;width:90%;max-height:80vh;overflow-y:auto">
       <h3 style="margin:0 0 3px">${t.ico} ${t.nom}</h3>
-      <p class="sub">Configurá qué hace este paso.</p>
+      <p class="sub">Configura qué hace este paso.</p>
       <div style="margin-top:10px">${campos}</div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:space-between">
         <button onclick="borrarNodo('${id}')" style="color:#a83232">Borrar nodo</button>
@@ -235,14 +235,14 @@ async function cargarLista() {
   sel.innerHTML = `<option value="">— Nuevo flujo —</option>` + flujos.map(f=>`<option value="${f.id}" ${f.id===flujoId?'selected':''}>${f.nombre}</option>`).join("");
 }
 async function ejecutarFlujo() {
-  if (!flujoId) { alert("Guardá el flujo primero."); return; }
+  if (!flujoId) { alert("Guarda el flujo primero."); return; }
   const agentes = await (await fetch("/api/agentes")).json();
   const activo = agentes.find(a => a.estado === "activo");
   const r = await (await fetch(`/api/flujos/${flujoId}/ejecutar`, {
     method: "POST", headers: {"Content-Type":"application/json"},
     body: JSON.stringify({ agenteId: activo?.id || null })
   })).json();
-  if (r.estado === "esperando_aprobacion") alert("El flujo quedó esperando tu aprobación. Andá a Aprobaciones.");
+  if (r.estado === "esperando_aprobacion") alert("El flujo quedó esperando tu aprobación. Ve a Aprobaciones.");
   else alert(`Flujo ejecutado. Estado: ${r.estado}.`);
 }
 

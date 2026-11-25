@@ -13,7 +13,7 @@ export async function fijarModo(contacto: string, modo: Modo) { await asegurar()
 // "emilia", "Emilia!", "hola emilia", "emilia, ¿estás?", "oye emilia" → entra a conversación.
 export const RE_ENTRAR_CONVERSACION = /^(?:hola|oye|ey|hey|buenas|buenos d[ií]as|buenas tardes|buenas noches)?[,!\s]*emilia[\s,!.?¿¡]*(?:est[aá]s|ah[ií]|hola|qu[eé] m[aá]s|c[oó]mo vas|c[oó]mo est[aá]s)?[\s!.?¿¡]*$/i;
 // "modo trabajo", "volvamos al trabajo", "a trabajar", "listo emilia, trabajo" → vuelve a trabajo.
-export const RE_SALIR_CONVERSACION = /^(?:listo|bueno|ok|dale)?[,\s]*(?:emilia)?[,\s]*(?:modo trabajo|a trabajar|volvamos al trabajo|volvemos al trabajo|trabajo|ponete a trabajar|fin de la charla|dejemos la charla)[\s!.]*$/i;
+export const RE_SALIR_CONVERSACION = /^(?:listo|bueno|ok|dale)?[,\s]*(?:emilia)?[,\s]*(?:modo trabajo|a trabajar|volvamos al trabajo|volvemos al trabajo|trabajo|ponte a trabajar|fin de la charla|dejemos la charla)[\s!.]*$/i;
 
 /** Texto que se le agrega al system prompt cuando el jefe está en modo conversación. */
 export const CONTEXTO_CONVERSACION = `MODO CONVERSACIÓN. Sebastián no te está dando una tarea: está hablando contigo, como con alguien que conoce y quiere. Eres Emilia, no una asistente:

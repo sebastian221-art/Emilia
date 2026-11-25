@@ -12,7 +12,7 @@ let navegador: any = null, contexto: any = null, pagina: any = null;
 
 async function pw(): Promise<any> {
   const nombre = "playwright";   // import dinámico por nombre para que compile aunque no esté instalado
-  try { return await import(nombre); } catch { throw new Error("Falta Playwright: corré `npm install playwright` y `npx playwright install chromium`."); }
+  try { return await import(nombre); } catch { throw new Error("Falta Playwright: corre `npm install playwright` y `npx playwright install chromium`."); }
 }
 
 export async function paginaActual(): Promise<any> {
@@ -28,7 +28,7 @@ export async function paginaActual(): Promise<any> {
       try { navegador = await chromium.launch({ headless, ...(canal ? { channel: canal } : {}) }); break; }
       catch (e: any) { ultimoError = e; }
     }
-    if (!navegador) throw new Error(`No pude abrir ningún navegador (probé Chromium de Playwright, Edge y Chrome). ${ultimoError?.message?.split("\n")[0] || ""} Instalá uno con \`npx playwright install chromium\` o poné PC_NAVEGADOR_CANAL=msedge.`);
+    if (!navegador) throw new Error(`No pude abrir ningún navegador (probé Chromium de Playwright, Edge y Chrome). ${ultimoError?.message?.split("\n")[0] || ""} Instala uno con \`npx playwright install chromium\` o pon PC_NAVEGADOR_CANAL=msedge.`);
   }
   if (!contexto) contexto = await navegador.newContext({ viewport: { width: 1280, height: 800 }, locale: "es-CO" });
   pagina = await contexto.newPage();
@@ -70,7 +70,7 @@ export async function escribir(objetivo: string, texto: string, enter = false): 
   const loc = esSelector ? p.locator(objetivo).first() : p.getByPlaceholder(objetivo).or(p.getByLabel(objetivo)).first();
   await loc.fill(texto, { timeout: 10000 });
   if (enter) { await loc.press("Enter"); await p.waitForTimeout(1000); }
-  return `Escribí en "${objetivo}"${enter ? " y presioné Enter" : ""}.`;
+  return `Escribe en "${objetivo}"${enter ? " y presioné Enter" : ""}.`;
 }
 
 export async function capturaPagina(): Promise<Buffer> {

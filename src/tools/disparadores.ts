@@ -11,7 +11,7 @@ const EVENTOS_SISTEMA = ["proyecto.caido (proyecto)", "flujo.completado / flujo.
 
 export const disparadorCrear: DefTool = {
   nombre: "disparador_crear", modulo: MODULO,
-  descripcion: `Crea una automatización: cuando pasa algo (evento del sistema, webhook externo o un horario), arranca un flujo, una skill o le da una orden a un agente. Requiere aprobación. Eventos del sistema: ${EVENTOS_SISTEMA.join("; ")}. En args/instruccion podés usar {{datos.campo}}, {{evento}}, {{fecha}}.`,
+  descripcion: `Crea una automatización: cuando pasa algo (evento del sistema, webhook externo o un horario), arranca un flujo, una skill o le da una orden a un agente. Requiere aprobación. Eventos del sistema: ${EVENTOS_SISTEMA.join("; ")}. En args/instruccion puedes usar {{datos.campo}}, {{evento}}, {{fecha}}.`,
   parametros: {
     type: "object",
     properties: {
@@ -38,11 +38,11 @@ export const disparadorCrear: DefTool = {
     if (a.accion_tipo === "agente") {
       const [ag] = await query<any>(`SELECT id FROM agentes WHERE lower(nombre)=lower($1)`, [a.accion_nombre]);
       if (!ag) return { ok: false, error: `Agente ${a.accion_nombre} no existe.` }; agenteId = ag.id;
-      if (!a.accion_instruccion) return { ok: false, error: "Para accion_tipo=agente pasá 'accion_instruccion'." };
+      if (!a.accion_instruccion) return { ok: false, error: "Para accion_tipo=agente pasa 'accion_instruccion'." };
     } else if (a.accion_tipo === "flujo" && !registro.flujo(a.accion_nombre)) return { ok: false, error: `Flujo ${a.accion_nombre} no registrado.` };
     else if (a.accion_tipo === "skill" && !registro.skill(a.accion_nombre)) return { ok: false, error: `Skill ${a.accion_nombre} no registrada.` };
     const d = await crearDisparador({ nombre: a.nombre, descripcion: a.descripcion || "", tipo: a.tipo, config, accion: { tipo: a.accion_tipo, nombre: a.accion_nombre, args: a.accion_args, instruccion: a.accion_instruccion }, agente_id: agenteId } as any);
-    const extra = a.tipo === "webhook" ? ` URL: POST ${process.env.URL_PUBLICA || "http://localhost:3000"}/api/eventos/${d.nombre}?token=${config.token} (o firmá con X-Hub-Signature-256 si configurás 'secreto').` : "";
+    const extra = a.tipo === "webhook" ? ` URL: POST ${process.env.URL_PUBLICA || "http://localhost:3000"}/api/eventos/${d.nombre}?token=${config.token} (o firmá con X-Hub-Signature-256 si configuras 'secreto').` : "";
     return { ok: true, datos: { ...d, url_webhook: a.tipo === "webhook" ? `/api/eventos/${d.nombre}?token=${config.token}` : undefined }, resumen: `Disparador ${d.nombre} (${d.tipo}) creado → ${a.accion_tipo} ${a.accion_nombre}.${extra}` };
   },
 };

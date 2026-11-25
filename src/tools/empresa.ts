@@ -101,7 +101,7 @@ export const empresaCrearPuesto: DefTool = {
     const p = await crearPuesto({ nombre: a.nombre, titulo: a.titulo, descripcion: a.descripcion, agente_id: ag.id, reporta_a: admin?.id ?? null, proyecto_id: proy?.id ?? null, campana_jelcom_id: a.campana_jelcom_id, responsabilidades: a.responsabilidades });
     // Las responsabilidades pasan a la identidad del agente para que las tenga siempre presentes.
     const idn = { ...(ag.identidad || {}) };
-    idn.mision = `${idn.mision || ""}\nPuesto: ${a.titulo}${proy ? ` (proyecto ${proy.nombre})` : ""}${a.campana_jelcom_id ? ` (campaña Jelcom #${a.campana_jelcom_id})` : ""}. Responsabilidades: ${a.responsabilidades || a.descripcion || ""}. Reportás a ${admin?.nombre || "la administradora"}, y a través de ella a Sebastián.`.trim();
+    idn.mision = `${idn.mision || ""}\nPuesto: ${a.titulo}${proy ? ` (proyecto ${proy.nombre})` : ""}${a.campana_jelcom_id ? ` (campaña Jelcom #${a.campana_jelcom_id})` : ""}. Responsabilidades: ${a.responsabilidades || a.descripcion || ""}. Reportas a ${admin?.nombre || "la administradora"}, y a través de ella a Sebastián.`.trim();
     await actualizarAgente(ag.id, { identidad: idn });
     await ctx.traza("tool", `puesto ${p.nombre} → ${ag.nombre}`);
     return { ok: true, datos: { puesto_id: p.id, nombre: p.nombre, agente: ag.nombre, reporta_a: admin?.nombre }, resumen: `Puesto ${p.titulo} (${p.nombre}) creado. Encargado: ${ag.nombre}; reporta a ${admin?.nombre || "—"}.${proy ? ` Proyecto: ${proy.nombre}.` : ""}${a.campana_jelcom_id ? ` Campaña Jelcom #${a.campana_jelcom_id}.` : ""}` };

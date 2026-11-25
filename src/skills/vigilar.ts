@@ -17,7 +17,7 @@ type Nivel = "sano" | "caido" | "no_responde" | "errores";
 export const vigilarCiclo: DefSkill = {
   nombre: "vigilar_ciclo", modulo: MODULO,
   descripcion: "Un ciclo de vigilancia de un proyecto: revisa proceso, salud y errores; reinicia si cayó (con tope); si persiste o hay errores nuevos, pide al Senior una reparación en sandbox y devuelve el resultado. Pensada para correr en bucle dentro del flujo vigilar_proyecto.",
-  cuandoUsar: "Dentro del flujo vigilar_proyecto, o cuando el jefe pide 'revisá cómo está X ahora mismo y arreglalo si hace falta'.",
+  cuandoUsar: "Dentro del flujo vigilar_proyecto, o cuando el jefe pide 'revisa cómo está X ahora mismo y arreglalo si hace falta'.",
   parametros: {
     type: "object",
     properties: {

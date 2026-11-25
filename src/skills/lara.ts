@@ -33,7 +33,7 @@ export const bibliotecaAuditar: DefSkill = {
   maxPasos: 25,
   procedimiento: `(El sueño nocturno ya une duplicados obvios, conecta y saca lecciones; esta auditoría es la revisión a fondo.)
 1. cerebro_estado y biblioteca_estado(envejecer) para el panorama.
-2. Busca duplicados: elegí 5-8 temas amplios de la biblioteca (tecnologías, proyectos, lecciones) y biblioteca_consultar cada uno; si dos nodos distintos hablan de lo mismo, biblioteca_proponer tipo "fusionar" (slug el que mejor está, slug2 el que se absorbe) con motivo.
+2. Busca duplicados: elige 5-8 temas amplios de la biblioteca (tecnologías, proyectos, lecciones) y biblioteca_consultar cada uno; si dos nodos distintos hablan de lo mismo, biblioteca_proponer tipo "fusionar" (slug el que mejor está, slug2 el que se absorbe) con motivo.
 3. Nodos huérfanos: si en las consultas ves nodos sin conexiones que claramente se relacionan con otros, biblioteca_conectar directamente (eso no necesita al jefe).
 4. Dudosos/contradichos: para cada uno, decide si proponer "refrescar" (que Soga lo investigue de nuevo) o "borrar" si ya no sirve.
 5. Resume al jefe: salud de la red, qué conectaste, y las propuestas que le dejaste para aprobar.`,

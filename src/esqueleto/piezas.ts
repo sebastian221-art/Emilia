@@ -2,8 +2,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  ESQUELETO DEL AGENTE — definición única
 //  Regla de la Fase 3: NO hay campo acá sin código que lo lea. Al lado de cada
-//  campo dice quién lo usa. Si querés agregar uno, primero hacé que el motor
-//  lo honre, después lo agregás acá. La UI (crear y espacio) se genera de esto.
+//  campo dice quién lo usa. Si quieres agregar uno, primero haz que el motor
+//  lo honre, después lo agregas acá. La UI (crear y espacio) se genera de esto.
 //
 //  Piezas retiradas por no tener motor detrás: descomposicion, autocorreccion,
 //  reflexion, subagentes, escalamiento, disparadores, limites. Sus columnas
@@ -54,7 +54,7 @@ export const PIEZAS: Pieza[] = [
       { t: "textarea", key: "reglas_duras", label: "Reglas que NUNCA debe romper", avanzado: true,
         ph: "Nunca enviar sin aprobación. Nunca inventar resultados. Nunca borrar datos.", usa: "loop: system prompt" },
       { t: "textarea", key: "ejemplos", label: "Ejemplos resueltos (few-shot)", avanzado: true,
-        ph: "Pedido: 'reportá la campaña' → consulta estado real, arma resumen, espera tu OK.", usa: "loop: system prompt" },
+        ph: "Pedido: 'reporta la campaña' → consulta estado real, arma resumen, espera tu OK.", usa: "loop: system prompt" },
     ],
   },
   {
@@ -72,11 +72,11 @@ export const PIEZAS: Pieza[] = [
 
   // ─────────────── CAPACIDADES ───────────────
   { g: "Capacidades", k: "tools", ico: "plug", nom: "Tools", desc: "Operaciones tipadas contra sistemas", lista: true,
-    ayudaLista: "Se definen en código (src/tools/) y se registran solas. Acá elegís cuáles tiene este agente." },
+    ayudaLista: "Se definen en código (src/tools/) y se registran solas. Acá eliges cuáles tiene este agente." },
   { g: "Capacidades", k: "skills", ico: "puzzle", nom: "Skills", desc: "Procedimientos que sabe ejecutar", lista: true,
-    ayudaLista: "En código (src/skills/) o guiadas desde la página Skills. Acá elegís cuáles tiene." },
+    ayudaLista: "En código (src/skills/) o guiadas desde la página Skills. Acá eliges cuáles tiene." },
   { g: "Capacidades", k: "flujos", ico: "guide", nom: "Flujos", desc: "Orquestaciones deterministas", lista: true,
-    ayudaLista: "Se definen en código (src/flujos/). Acá elegís cuáles puede disparar." },
+    ayudaLista: "Se definen en código (src/flujos/). Acá eliges cuáles puede disparar." },
   {
     g: "Capacidades", k: "memoria", ico: "brain", nom: "Memoria",
     desc: "Qué recuerda de cada conversación",
@@ -109,7 +109,7 @@ export const PIEZAS: Pieza[] = [
 
   // ─────────────── GOBIERNO Y OPERACIÓN ───────────────
   { g: "Gobierno y operación", k: "canales", ico: "broadcast", nom: "Canales", desc: "Por dónde se le habla", lista: true,
-    ayudaLista: "Agregá 'whatsapp' para que este agente atienda el webhook de WhatsApp. El chat del panel siempre está." },
+    ayudaLista: "Agrega 'whatsapp' para que este agente atienda el webhook de WhatsApp. El chat del panel siempre está." },
   {
     g: "Gobierno y operación", k: "gobierno", ico: "shield", nom: "Gobierno",
     desc: "Aprobaciones y límites duros",

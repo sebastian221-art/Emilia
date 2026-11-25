@@ -47,7 +47,7 @@ function comandoPeligroso(cmd: string, sandbox: string): string | null {
   const base = path.resolve(sandbox).toLowerCase().replace(/\\/g, "/");
   for (const r of abs) {
     const n = path.resolve(r.replace(/["']/g, "")).toLowerCase().replace(/\\/g, "/");
-    if (!n.startsWith(base)) return `El comando toca una ruta fuera del sandbox (${r}). Dentro del sandbox usá rutas relativas; para el proyecto real usá las tools runtime_* / proyecto_*.`;
+    if (!n.startsWith(base)) return `El comando toca una ruta fuera del sandbox (${r}). Dentro del sandbox usa rutas relativas; para el proyecto real usa las tools runtime_* / proyecto_*.`;
   }
   return null;
 }
@@ -59,7 +59,7 @@ export const codigoListarProyectos: DefTool = {
   parametros: { type: "object", properties: {}, required: [] }, riesgo: "lectura", requiereAprobacion: false,
   async ejecutar() {
     const lista = await listarProyectos();
-    return { ok: true, datos: lista, resumen: lista.length ? lista.map((p) => `${p.nombre} → ${p.ruta} (${p.rama_base})`).join("\n") : "No hay proyectos registrados. Usá codigo_registrar_proyecto." };
+    return { ok: true, datos: lista, resumen: lista.length ? lista.map((p) => `${p.nombre} → ${p.ruta} (${p.rama_base})`).join("\n") : "No hay proyectos registrados. Usa codigo_registrar_proyecto." };
   },
 };
 
@@ -211,7 +211,7 @@ export const codigoListarSesiones: DefTool = {
 // ─── Trabajo en el sandbox ───────────────────────────────────────────────────
 export const codigoEjecutarComando: DefTool = {
   nombre: "codigo_ejecutar_comando", modulo: MODULO,
-  descripcion: `Ejecuta un comando DENTRO del sandbox (tests, build, scripts, git de lectura). Devuelve salida y código de salida. El shell es el del sistema${process.platform === "win32" ? " (Windows cmd: dir, type, mkdir sin -p, del; NO hay ls, cat, printf ni heredocs)" : " (bash)"}. Para crear o cambiar archivos NO uses echo/redirecciones: usá codigo_escribir_archivo.`,
+  descripcion: `Ejecuta un comando DENTRO del sandbox (tests, build, scripts, git de lectura). Devuelve salida y código de salida. El shell es el del sistema${process.platform === "win32" ? " (Windows cmd: dir, type, mkdir sin -p, del; NO hay ls, cat, printf ni heredocs)" : " (bash)"}. Para crear o cambiar archivos NO uses echo/redirecciones: usa codigo_escribir_archivo.`,
   parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID, comando: { type: "string", minLength: 1 }, timeout_seg: { type: "integer", default: 120, minimum: 5, maximum: 1800 } }, required: ["sandbox_id", "comando"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 1900,
   async ejecutar(a) {
@@ -274,7 +274,7 @@ export const codigoLeerArchivo: DefTool = {
 
 export const codigoEscribirArchivo: DefTool = {
   nombre: "codigo_escribir_archivo", modulo: MODULO,
-  descripcion: "Escribe (crea o reemplaza) un archivo dentro del sandbox con el contenido exacto que le pasás. Crea las carpetas que falten. Es LA forma de crear archivos: nada de echo ni heredocs.",
+  descripcion: "Escribe (crea o reemplaza) un archivo dentro del sandbox con el contenido exacto que le pasas. Crea las carpetas que falten. Es LA forma de crear archivos: nada de echo ni heredocs.",
   parametros: { type: "object", properties: { sandbox_id: SANDBOX_ID, ruta: { type: "string", description: "Ruta relativa al sandbox, ej. scripts/mcts.js", minLength: 1 }, contenido: { type: "string" } }, required: ["sandbox_id", "ruta", "contenido"] },
   riesgo: "escritura", requiereAprobacion: false,
   async ejecutar(a) {

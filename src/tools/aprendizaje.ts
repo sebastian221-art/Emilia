@@ -10,7 +10,7 @@ export const aprenderExperimentoCrear: DefTool = {
   nombre: "aprender_experimento_crear", modulo: MODULO,
   descripcion: "Abre un experimento tipo 'pista': una hipótesis clara, una métrica numérica (más alto = mejor) y el nodo de la biblioteca que alimenta. Después se agregan variantes, se corren, se puntúan, se cruzan las mejores y se cierra con una conclusión.",
   parametros: { type: "object", properties: {
-    titulo: { type: "string", minLength: 5 }, hipotesis: { type: "string", minLength: 10, description: "Qué creés que mejora qué y por qué." },
+    titulo: { type: "string", minLength: 5 }, hipotesis: { type: "string", minLength: 10, description: "Qué crees que mejora qué y por qué." },
     metrica: { type: "string", minLength: 5, description: "Cómo se mide: 'puntaje del juez 0-100', 'tests que pasan', 'ms por tarea (negativo)', 'errores por 10 tareas (negativo)'." },
     dominio: { type: "string", enum: ["prompt", "regla", "codigo", "busqueda", "flujo", "general"], default: "general" },
     nodo_slug: { type: "string", description: "Slug del nodo de la biblioteca que este experimento alimenta (opcional)." },
@@ -27,12 +27,12 @@ export const aprenderExperimentoCrear: DefTool = {
       const cr = a.casos_reales || { agente: "Emilia", canal: "whatsapp", dias: 14, limite: 8 };
       const reales = await A.casosReales({ agente: cr.agente || null, canal: cr.canal || null, dias: cr.dias, limite: cr.limite || 8 });
       if (reales.length >= 2) { casos = reales.map(({ entrada, referencia }) => ({ entrada, referencia })); origenCasos = `${reales.length} casos REALES de ${cr.agente || "todos"} (${cr.canal || "todo canal"}, ${cr.dias || 14} días)`; }
-      else if (!casos.length) return { ok: false, error: "No hay suficientes casos reales con ese filtro y no pasaste casos. Ampliá días/quitá el agente en casos_reales, o pasá casos realistas del dominio de Emilia." };
+      else if (!casos.length) return { ok: false, error: "No hay suficientes casos reales con ese filtro y no pasaste casos. Ampliá días/quitá el agente en casos_reales, o pasa casos realistas del dominio de Emilia." };
     }
     // Para prompts/reglas la métrica es SIEMPRE el juez: no se aceptan métricas inventadas (tasa de respuesta, satisfacción…).
     const metrica = esTexto ? `juez local 0-100${a.criterio ? ` · criterio del juez: ${a.criterio}` : " · criterio del juez: forma (brevedad, claridad, tono) con la misma información; nada inventado"}` : (a.criterio ? `${a.metrica} · criterio del juez: ${a.criterio}` : a.metrica);
     const id = await A.crearExperimento({ titulo: a.titulo, hipotesis: a.hipotesis, metrica, dominio: a.dominio, nodoSlug: a.nodo_slug, agenteId: ctx.agenteId, casos });
-    return { ok: true, datos: { experimento_id: id, casos: casos.length, metrica }, resumen: `Experimento abierto [${id.slice(0, 8)}]: ${a.titulo}. Métrica: ${metrica}. Casos fijos: ${casos.length} (${origenCasos || "ninguno"})${casos.length ? " → aprender_probar_prompt(variante_id) los usa solo" : ""}. Ahora agregá 3-5 variantes distintas de verdad (no cosméticas) y corré cada una apenas la agregues.` };
+    return { ok: true, datos: { experimento_id: id, casos: casos.length, metrica }, resumen: `Experimento abierto [${id.slice(0, 8)}]: ${a.titulo}. Métrica: ${metrica}. Casos fijos: ${casos.length} (${origenCasos || "ninguno"})${casos.length ? " → aprender_probar_prompt(variante_id) los usa solo" : ""}. Ahora agrega 3-5 variantes distintas de verdad (no cosméticas) y corre cada una apenas la agregues.` };
   },
 };
 
@@ -58,7 +58,7 @@ export const aprenderVariantePuntuar: DefTool = {
 
 export const aprenderExperimentoEstado: DefTool = {
   nombre: "aprender_experimento_estado", modulo: MODULO,
-  descripcion: "Tabla de posiciones de un experimento (o lista de los abiertos si no pasás id): variantes ordenadas por puntaje, generaciones, cruces.",
+  descripcion: "Tabla de posiciones de un experimento (o lista de los abiertos si no pasas id): variantes ordenadas por puntaje, generaciones, cruces.",
   parametros: { type: "object", properties: { experimento_id: { type: "string" } }, required: [] },
   riesgo: "lectura", requiereAprobacion: false,
   async ejecutar(a) {
@@ -78,7 +78,7 @@ export const aprenderExperimentoCerrar: DefTool = {
 
 export const aprenderProbarPrompt: DefTool = {
   nombre: "aprender_probar_prompt", modulo: MODULO,
-  descripcion: "La pista local para prompts y reglas. Modo normal: pasás variante_id y la tool toma las instrucciones de esa variante (config.instrucciones), los casos FIJOS del experimento, hace que un juez puntúe cada respuesta 0-100 y REGISTRA el puntaje en la variante automáticamente. Rechaza variantes que copian las respuestas esperadas (trampa). Modo suelto: instrucciones + casos, sin registrar.",
+  descripcion: "La pista local para prompts y reglas. Modo normal: pasas variante_id y la tool toma las instrucciones de esa variante (config.instrucciones), los casos FIJOS del experimento, hace que un juez puntúe cada respuesta 0-100 y REGISTRA el puntaje en la variante automáticamente. Rechaza variantes que copian las respuestas esperadas (trampa). Modo suelto: instrucciones + casos, sin registrar.",
   parametros: { type: "object", properties: {
     variante_id: { type: "string", description: "Id (8 chars) de la variante a correr. Recomendado." },
     instrucciones: { type: "string", description: "Solo en modo suelto: el prompt/regla a probar." },
@@ -106,7 +106,7 @@ export const aprenderProbarPrompt: DefTool = {
 
 export const aprenderCasosReales: DefTool = {
   nombre: "aprender_casos_reales", modulo: MODULO,
-  descripcion: "Trae casos REALES para la pista: mensajes que de verdad llegaron a los agentes (del jefe o de terceros) y lo que respondieron. Sirven como casos de un experimento de prompts/reglas: entrada = el mensaje real, referencia = la respuesta real (el juez compara contra ella). Nunca inventes casos si podés usar estos.",
+  descripcion: "Trae casos REALES para la pista: mensajes que de verdad llegaron a los agentes (del jefe o de terceros) y lo que respondieron. Sirven como casos de un experimento de prompts/reglas: entrada = el mensaje real, referencia = la respuesta real (el juez compara contra ella). Nunca inventes casos si puedes usar estos.",
   parametros: { type: "object", properties: { agente: { type: "string", description: "Nombre del agente (Emilia, Echo…); vacío = todos." }, canal: { type: "string", enum: ["whatsapp", "panel"] }, dias: { type: "integer", default: 7, minimum: 1, maximum: 60 }, limite: { type: "integer", default: 10, minimum: 2, maximum: 40 } }, required: [] },
   riesgo: "lectura", requiereAprobacion: false,
   async ejecutar(a) { const xs = await A.casosReales({ agente: a.agente || null, canal: a.canal || null, dias: a.dias, limite: a.limite }); return { ok: true, datos: { casos: xs.map(({ entrada, referencia }) => ({ entrada, referencia })) }, resumen: xs.length ? `${xs.length} casos reales:\n${xs.map((c, i) => `${i + 1}. [${c.agente} · ${c.fecha}] "${c.entrada.slice(0, 100)}" → "${(c.referencia || "").slice(0, 100)}"`).join("\n")}\nPasalos tal cual en 'casos' al crear el experimento.` : "No hay conversaciones recientes con ese filtro; ampliá días o quitá el agente." }; },

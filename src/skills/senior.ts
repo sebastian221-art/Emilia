@@ -28,15 +28,15 @@ async function correrClaude(ctx: ContextoEjecucion, p: { cwd: string; modo: "esc
 const MODULO = "senior";
 
 const PROYECTO = { type: "string" as const, description: "Nombre del proyecto registrado (codigo_listar_proyectos).", minLength: 2 };
-const TAREA = { type: "string" as const, description: "Qué necesitás, en tus palabras. Cuanto más claro, mejor.", minLength: 5 };
+const TAREA = { type: "string" as const, description: "Qué necesitas, en tus palabras. Cuanto más claro, mejor.", minLength: 5 };
 
 // Reglas base que van en TODO encargo a Claude Code.
-const REGLAS = `Sos un ingeniero de software senior de primer nivel trabajando en un sandbox aislado (una copia del repo en su propia rama; el repo real no se ve afectado). Principios:
-- Entendé antes de tocar: leé el código relevante y las convenciones del proyecto.
+const REGLAS = `Eres un ingeniero de software senior de primer nivel trabajando en un sandbox aislado (una copia del repo en su propia rama; el repo real no se ve afectado). Principios:
+- Entiende antes de tocar: lee el código relevante y las convenciones del proyecto.
 - Calidad sobre cantidad: cambios mínimos y precisos, legibles, con el estilo del proyecto. No reescribas de más.
-- Nada de secretos hardcodeados, nada de dependencias nuevas sin necesidad real (si agregás una, justificá).
-- Si algo es ambiguo o riesgoso, explicá el supuesto que tomaste en tu informe final.
-- Terminá SIEMPRE con un informe claro: qué hiciste, qué archivos tocaste, cómo lo verificaste, qué quedó pendiente o qué habría que revisar.
+- Nada de secretos hardcodeados, nada de dependencias nuevas sin necesidad real (si agregas una, justificá).
+- Si algo es ambiguo o riesgoso, explica el supuesto que tomaste en tu informe final.
+- Termina SIEMPRE con un informe claro: qué hiciste, qué archivos tocaste, cómo lo verificaste, qué quedó pendiente o qué habría que revisar.
 - Memoria del proyecto: si aprendiste algo que le sirve a la próxima sesión (cómo se corre, convenciones, trampas, decisiones), agrégalo corto al CLAUDE.md de la raíz del proyecto (créalo si no existe). Nada de secretos ahí.
 - Tienes las herramientas de Emilia (MCP "emilia"): emilia_enviar_archivo para mandarle al jefe un archivo que generes, biblioteca_consultar/aportar para la memoria del equipo.`;
 
@@ -77,7 +77,7 @@ async function ejecutarEncargo(ctx: ContextoEjecucion, p: {
 
   for (let intento = 1; intento <= maxIter; intento++) {
     const encargo = intento === 1 ? p.encargo
-      : `${p.encargo}\n\n(La verificación anterior falló con lo siguiente. Corregilo y dejá el proyecto pasando build/lint/tests:)\n${(ultimo.datos as any)?.verificacion || ultimo.error || ""}`;
+      : `${p.encargo}\n\n(La verificación anterior falló con lo siguiente. Corregilo y deja el proyecto pasando build/lint/tests:)\n${(ultimo.datos as any)?.verificacion || ultimo.error || ""}`;
     const cc = await ctx.ejecutarTool("codigo_ejecutar_claude", {
       sandbox_id, encargo, contexto: p.sistema,
       max_turnos: p.maxTurnos ?? 80, timeout_seg: p.timeoutSeg ?? 1500,
@@ -111,7 +111,7 @@ Eres un REVISOR de código independiente y exigente (no escribiste estos cambios
     await ctx.traza("skill", `revisión cruzada: ${/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "BLOQUEANTE" : "aprobado"}`);
     await avisarProgreso(ctx.conversacionId, /^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision) ? "🔍 El revisor encontró problemas bloqueantes; Claude los corrige…" : "🔍 Revisión cruzada: aprobado.");
     if (/^\s*VEREDICTO:\s*BLOQUEANTE/im.test(revision)) {
-      const fix = await ctx.ejecutarTool("codigo_ejecutar_claude", { sandbox_id, esperar: true, max_turnos: p.maxTurnos ?? 80, timeout_seg: p.timeoutSeg ?? 1500, continuar_sesion: sesionClaude, contexto: p.sistema, encargo: `Un revisor independiente encontró problemas BLOQUEANTES en tu trabajo. Corregilos todos y dejá build/lint/tests en verde:\n${revision.slice(0, 4000)}` });
+      const fix = await ctx.ejecutarTool("codigo_ejecutar_claude", { sandbox_id, esperar: true, max_turnos: p.maxTurnos ?? 80, timeout_seg: p.timeoutSeg ?? 1500, continuar_sesion: sesionClaude, contexto: p.sistema, encargo: `Un revisor independiente encontró problemas BLOQUEANTES en tu trabajo. Corregilos todos y deja build/lint/tests en verde:\n${revision.slice(0, 4000)}` });
       const ver2 = await ctx.ejecutarTool("codigo_verificar", { sandbox_id });
       if (!fix.ok || !ver2.ok) ultimo = { ok: false, error: `Tras la revisión cruzada no quedó en verde: ${fix.error || ver2.error}`, datos: { ...(ultimo.datos as any), verificacion: ver2.resumen } };
       else ultimo = { ok: true, datos: { ...(ultimo.datos as any), informe: `${(ultimo.datos as any)?.informe || ""}\n\n[Corregido tras revisión cruzada]\n${(fix.datos as any)?.resultado || ""}`, verificacion: ver2.resumen } };
@@ -167,14 +167,14 @@ const toolsBase = ["conocimiento_guardar", "conocimiento_buscar", "codigo_abrir_
 export const seniorAnalizar: DefSkill = {
   nombre: "senior_analizar", modulo: MODULO,
   descripcion: "Analiza a fondo un proyecto o una parte de él: arquitectura, flujos, dependencias, deuda técnica y riesgos. Solo lectura; no modifica nada. Devuelve un informe.",
-  cuandoUsar: "Cuando el jefe pide 'analizá X', 'cómo está armado', 'qué problemas tiene', 'explicá la arquitectura'.",
+  cuandoUsar: "Cuando el jefe pide 'analizá X', 'cómo está armado', 'qué problemas tiene', 'explica la arquitectura'.",
   parametros: { type: "object", properties: { proyecto: PROYECTO, foco: { type: "string", description: "Qué analizar en particular (opcional; si se omite, todo el proyecto)." } }, required: ["proyecto"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 3600,
   tools: toolsBase,
   async ejecutar(a, ctx) {
     return ejecutarLectura(ctx, {
       proyecto: a.proyecto, proposito: `analisis ${a.foco || "general"}`, sistema: REGLAS,
-      encargo: `Analizá ${a.foco ? `esto en particular: ${a.foco}` : "este proyecto en su conjunto"}. Recorré el código, entendé cómo funciona y entregá un informe con: (1) arquitectura y componentes principales, (2) flujos clave de datos/control, (3) dependencias y riesgos, (4) deuda técnica y puntos frágiles, (5) 3 a 5 recomendaciones priorizadas. No modifiques ningún archivo.`,
+      encargo: `Analizá ${a.foco ? `esto en particular: ${a.foco}` : "este proyecto en su conjunto"}. Recorré el código, entiende cómo funciona y entregá un informe con: (1) arquitectura y componentes principales, (2) flujos clave de datos/control, (3) dependencias y riesgos, (4) deuda técnica y puntos frágiles, (5) 3 a 5 recomendaciones priorizadas. No modifiques ningún archivo.`,
     });
   },
 };
@@ -183,25 +183,25 @@ export const seniorExplicar: DefSkill = {
   nombre: "senior_explicar", modulo: MODULO,
   descripcion: "Explica cómo funciona algo del código (una función, un módulo, un flujo) en lenguaje claro, con referencias a archivos y líneas. Solo lectura.",
   cuandoUsar: "Cuando el jefe pregunta 'cómo funciona X', 'dónde está Y', 'por qué pasa Z'.",
-  parametros: { type: "object", properties: { proyecto: PROYECTO, pregunta: { type: "string", description: "Qué querés que te explique.", minLength: 3 } }, required: ["proyecto", "pregunta"] },
+  parametros: { type: "object", properties: { proyecto: PROYECTO, pregunta: { type: "string", description: "Qué quieres que te explique.", minLength: 3 } }, required: ["proyecto", "pregunta"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 3600,
   tools: toolsBase,
   async ejecutar(a, ctx) {
-    return ejecutarLectura(ctx, { proyecto: a.proyecto, proposito: "explicar", sistema: REGLAS, encargo: `Respondé esta pregunta sobre el código, leyendo lo que haga falta: "${a.pregunta}". Explicá claro, citando archivos y líneas concretas. No modifiques nada.`, maxTurnos: 40 });
+    return ejecutarLectura(ctx, { proyecto: a.proyecto, proposito: "explicar", sistema: REGLAS, encargo: `Responde esta pregunta sobre el código, leyendo lo que haga falta: "${a.pregunta}". Explica claro, citando archivos y líneas concretas. No modifiques nada.`, maxTurnos: 40 });
   },
 };
 
 export const seniorPlanificar: DefSkill = {
   nombre: "senior_planificar", modulo: MODULO,
   descripcion: "Convierte un pedido en un plan de ingeniería concreto: pasos verificables, archivos a tocar, riesgos y criterio de aceptación. Si la tarea es grande, la descompone en sub-tareas ordenadas. No escribe código.",
-  cuandoUsar: "Antes de implementar algo grande, o cuando el jefe pide 'armá un plan para X'.",
+  cuandoUsar: "Antes de implementar algo grande, o cuando el jefe pide 'arma un plan para X'.",
   parametros: { type: "object", properties: { proyecto: PROYECTO, objetivo: TAREA }, required: ["proyecto", "objetivo"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 3600,
   tools: toolsBase,
   async ejecutar(a, ctx) {
     return ejecutarLectura(ctx, {
       proyecto: a.proyecto, proposito: "plan", sistema: REGLAS,
-      encargo: `Armá un PLAN para lograr: "${a.objetivo}". Leé el código necesario primero. Entregá: (1) enfoque en 2-3 frases, (2) pasos concretos y ordenados, cada uno verificable, (3) archivos que se tocarían, (4) riesgos y cómo mitigarlos, (5) criterio de aceptación (cómo sabremos que quedó bien), (6) si es grande, dividilo en sub-tareas que se puedan hacer y verificar por separado. No escribas código todavía.`,
+      encargo: `Arma un PLAN para lograr: "${a.objetivo}". Lee el código necesario primero. Entregá: (1) enfoque en 2-3 frases, (2) pasos concretos y ordenados, cada uno verificable, (3) archivos que se tocarían, (4) riesgos y cómo mitigarlos, (5) criterio de aceptación (cómo sabremos que quedó bien), (6) si es grande, dividilo en sub-tareas que se puedan hacer y verificar por separado. No escribas código todavía.`,
     });
   },
 };
@@ -209,7 +209,7 @@ export const seniorPlanificar: DefSkill = {
 export const seniorImplementar: DefSkill = {
   nombre: "senior_implementar", modulo: MODULO,
   descripcion: "Implementa una funcionalidad o cambio de calidad en el sandbox, con tests, y no da por terminado hasta que build/lint/tests pasen (itera si fallan). Deja el sandbox listo para que el jefe revise el diff y decida integrarlo.",
-  cuandoUsar: "Cuando el jefe pide 'hacé X', 'agregá Y', 'implementá Z', 'cambiá tal cosa'.",
+  cuandoUsar: "Cuando el jefe pide 'haz X', 'agrega Y', 'implementá Z', 'cambia tal cosa'.",
   parametros: {
     type: "object",
     properties: {
@@ -227,7 +227,7 @@ export const seniorImplementar: DefSkill = {
   async ejecutar(a, ctx) {
     return ejecutarEncargo(ctx, {
       proyecto: a.proyecto, proposito: a.tarea.slice(0, 40), sistema: REGLAS,
-      encargo: `Implementá: "${a.tarea}".${a.con_tests !== false ? " Escribí o actualizá los tests que correspondan." : ""} Dejá el proyecto compilando y con los tests pasando. Cuando termines, corré vos mismo el build y los tests para confirmar, y en tu informe decí qué archivos tocaste y cómo lo verificaste.`,
+      encargo: `Implementá: "${a.tarea}".${a.con_tests !== false ? " Escribe o actualiza los tests que correspondan." : ""} Deja el proyecto compilando y con los tests pasando. Cuando termines, corre tú mismo el build y los tests para confirmar, y en tu informe di qué archivos tocaste y cómo lo verificaste.`,
       verificar: true, maxIteraciones: a.max_iteraciones ?? 3, revisionCruzada: a.revision_cruzada !== false, sandboxId: a.sandbox_id,
     });
   },
@@ -243,7 +243,7 @@ export const seniorReparar: DefSkill = {
   async ejecutar(a, ctx) {
     return ejecutarEncargo(ctx, {
       proyecto: a.proyecto, proposito: `fix ${a.sintoma.slice(0, 30)}`, sistema: REGLAS,
-      encargo: `Hay un problema: "${a.sintoma}". Reproducilo si podés, encontrá la CAUSA RAÍZ (no un parche superficial), arreglalo, y agregá un test que falle sin el fix y pase con él. Dejá build y tests en verde. En tu informe: causa raíz, qué cambiaste y el test que agregaste.`,
+      encargo: `Hay un problema: "${a.sintoma}". Reproducilo si puedes, encuentra la CAUSA RAÍZ (no un parche superficial), arreglalo, y agrega un test que falle sin el fix y pase con él. Deja build y tests en verde. En tu informe: causa raíz, qué cambiaste y el test que agregaste.`,
       verificar: true, maxIteraciones: a.max_iteraciones ?? 4, revisionCruzada: true, sandboxId: a.sandbox_id,
     });
   },
@@ -252,14 +252,14 @@ export const seniorReparar: DefSkill = {
 export const seniorAuditarSeguridad: DefSkill = {
   nombre: "senior_auditar_seguridad", modulo: MODULO,
   descripcion: "Auditoría de seguridad de solo lectura: superficie de ataque, secretos expuestos, inyección, autenticación/permisos, dependencias vulnerables. Devuelve hallazgos priorizados por severidad. No modifica nada.",
-  cuandoUsar: "Cuando el jefe pide 'revisá la seguridad', 'está seguro esto', 'buscá vulnerabilidades'.",
+  cuandoUsar: "Cuando el jefe pide 'revisa la seguridad', 'está seguro esto', 'busca vulnerabilidades'.",
   parametros: { type: "object", properties: { proyecto: PROYECTO, foco: { type: "string", description: "Área a priorizar (opcional)." } }, required: ["proyecto"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 3600,
   tools: toolsBase,
   async ejecutar(a, ctx) {
     return ejecutarLectura(ctx, {
       proyecto: a.proyecto, proposito: "auditoria seguridad", sistema: REGLAS,
-      encargo: `Hacé una auditoría de SEGURIDAD${a.foco ? ` con foco en: ${a.foco}` : ""}. Revisá: secretos/credenciales en el código, validación de entradas e inyección (SQL, comandos, path), autenticación y autorización, manejo de sesiones/tokens, exposición de datos, configuración insegura, y dependencias vulnerables (mirá package.json y, si podés, corré el auditor del gestor). Entregá una lista de hallazgos ORDENADOS por severidad (crítico/alto/medio/bajo), cada uno con: dónde (archivo:línea), por qué es un riesgo, y cómo corregirlo. No modifiques código.`,
+      encargo: `Haz una auditoría de SEGURIDAD${a.foco ? ` con foco en: ${a.foco}` : ""}. Revisa: secretos/credenciales en el código, validación de entradas e inyección (SQL, comandos, path), autenticación y autorización, manejo de sesiones/tokens, exposición de datos, configuración insegura, y dependencias vulnerables (mira package.json y, si puedes, corre el auditor del gestor). Entregá una lista de hallazgos ORDENADOS por severidad (crítico/alto/medio/bajo), cada uno con: dónde (archivo:línea), por qué es un riesgo, y cómo corregirlo. No modifiques código.`,
     });
   },
 };
@@ -267,14 +267,14 @@ export const seniorAuditarSeguridad: DefSkill = {
 export const seniorAtacar: DefSkill = {
   nombre: "senior_atacar", modulo: MODULO,
   descripcion: "Red team en el sandbox (con .env de PRUEBA, nunca credenciales reales): intenta ACTIVAMENTE romper o vulnerar el propio sistema (payloads, casos límite, abuso de endpoints, condiciones de carrera) y reporta qué logró explotar y cómo cerrarlo. Trabaja en el sandbox aislado, nunca contra producción.",
-  cuandoUsar: "Cuando el jefe pide 'intentá romperlo', 'probá si es vulnerable', 'atacá el sistema'.",
+  cuandoUsar: "Cuando el jefe pide 'intenta romperlo', 'prueba si es vulnerable', 'atacá el sistema'.",
   parametros: { type: "object", properties: { proyecto: PROYECTO, objetivo: { type: "string", description: "Qué parte atacar (endpoint, flujo, módulo). Opcional." } }, required: ["proyecto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 5400,
   tools: toolsBase,
   async ejecutar(a, ctx) {
     return ejecutarEncargo(ctx, {
-      proyecto: a.proyecto, proposito: "red team", sistema: `${REGLAS}\nEstás en modo RED TEAM, en un sandbox aislado y desechable. Está EXPLÍCITAMENTE autorizado intentar romper este sistema para descubrir sus debilidades: podés escribir scripts de prueba, mandar payloads maliciosos, forzar casos límite y condiciones de carrera CONTRA el código del sandbox. Nunca contra sistemas externos ni de terceros.`,
-      encargo: `Intentá vulnerar${a.objetivo ? ` esto: ${a.objetivo}` : " este sistema"}. Levantá lo que necesites en el sandbox, escribí pruebas de ataque (inyección, autenticación rota, abuso de límites, entradas maliciosas, concurrencia) y documentá cada intento: qué probaste, si funcionó, y el impacto. Para lo que SÍ lograste explotar, proponé el fix concreto. No integres cambios: esto es diagnóstico. Informe final ordenado por severidad de lo explotable.`,
+      proyecto: a.proyecto, proposito: "red team", sistema: `${REGLAS}\nEstás en modo RED TEAM, en un sandbox aislado y desechable. Está EXPLÍCITAMENTE autorizado intentar romper este sistema para descubrir sus debilidades: puedes escribir scripts de prueba, mandar payloads maliciosos, forzar casos límite y condiciones de carrera CONTRA el código del sandbox. Nunca contra sistemas externos ni de terceros.`,
+      encargo: `Intenta vulnerar${a.objetivo ? ` esto: ${a.objetivo}` : " este sistema"}. Levantá lo que necesites en el sandbox, escribe pruebas de ataque (inyección, autenticación rota, abuso de límites, entradas maliciosas, concurrencia) y documentá cada intento: qué probaste, si funcionó, y el impacto. Para lo que SÍ lograste explotar, proponé el fix concreto. No integres cambios: esto es diagnóstico. Informe final ordenado por severidad de lo explotable.`,
       verificar: false, maxTurnos: 120, timeoutSeg: 2400,
     });
   },
@@ -283,14 +283,14 @@ export const seniorAtacar: DefSkill = {
 export const seniorProbarLimites: DefSkill = {
   nombre: "senior_probar_limites", modulo: MODULO,
   descripcion: "Prueba hasta dónde aguanta el sistema en el sandbox: carga, concurrencia, volumen de datos, y caos (procesos caídos, red lenta/cortada, DB saturada). Reporta dónde y cómo se degrada o cae.",
-  cuandoUsar: "Cuando el jefe pide 'hasta dónde aguanta', 'probá la carga', 'qué pasa si se cae X'.",
+  cuandoUsar: "Cuando el jefe pide 'hasta dónde aguanta', 'prueba la carga', 'qué pasa si se cae X'.",
   parametros: { type: "object", properties: { proyecto: PROYECTO, escenario: { type: "string", description: "Qué estresar en particular (opcional)." } }, required: ["proyecto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 5400,
   tools: toolsBase,
   async ejecutar(a, ctx) {
     return ejecutarEncargo(ctx, {
       proyecto: a.proyecto, proposito: "pruebas de limite", sistema: REGLAS,
-      encargo: `Probá los LÍMITES del sistema${a.escenario ? ` (foco: ${a.escenario})` : ""} en el sandbox. Diseñá y corré pruebas de: carga (muchas peticiones), concurrencia (operaciones en paralelo, condiciones de carrera), volumen (muchos datos), y caos (matar el proceso a mitad, simular red lenta o DB saturada). Medí y reportá: en qué punto se degrada, dónde se cae, qué se corrompe, y qué recomendás para aguantar más. Podés escribir scripts de prueba. No integres cambios de producción.`,
+      encargo: `Prueba los LÍMITES del sistema${a.escenario ? ` (foco: ${a.escenario})` : ""} en el sandbox. Diseñá y corre pruebas de: carga (muchas peticiones), concurrencia (operaciones en paralelo, condiciones de carrera), volumen (muchos datos), y caos (matar el proceso a mitad, simular red lenta o DB saturada). Mide y reporta: en qué punto se degrada, dónde se cae, qué se corrompe, y qué recomendás para aguantar más. Puedes escribir scripts de prueba. No integres cambios de producción.`,
       verificar: false, maxTurnos: 120, timeoutSeg: 2400,
     });
   },
@@ -300,7 +300,7 @@ export const seniorPredecirFallas: DefSkill = {
   nombre: "senior_predecir_fallas", modulo: MODULO,
   descripcion: "Análisis predictivo (solo lectura): qué se va a romper cuando el sistema crezca o cambie el entorno. Cuellos de botella, race conditions latentes, límites de API/DB, supuestos frágiles. Devuelve riesgos futuros ordenados por probabilidad e impacto.",
   cuandoUsar: "Cuando el jefe pregunta 'qué se va a romper', 'aguanta si crece', 'qué riesgos hay a futuro'.",
-  parametros: { type: "object", properties: { proyecto: PROYECTO, escenario_crecimiento: { type: "string", description: "Cómo esperás que crezca (usuarios, datos, tráfico). Opcional." } }, required: ["proyecto"] },
+  parametros: { type: "object", properties: { proyecto: PROYECTO, escenario_crecimiento: { type: "string", description: "Cómo esperas que crezca (usuarios, datos, tráfico). Opcional." } }, required: ["proyecto"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 3600,
   tools: toolsBase,
   async ejecutar(a, ctx) {
@@ -314,7 +314,7 @@ export const seniorPredecirFallas: DefSkill = {
 export const seniorReplicar: DefSkill = {
   nombre: "senior_replicar", modulo: MODULO,
   descripcion: "Analiza cómo funciona algo existente (una herramienta, una librería, un sistema, un endpoint) y diseña un equivalente funcional PROPIO, a su criterio, adaptado a este proyecto. No copia código: entiende el qué y el porqué y lo recrea a su manera. Puede quedar en un informe de diseño o implementarlo en el sandbox.",
-  cuandoUsar: "Cuando el jefe dice 'quiero algo como X pero mío', 'analizá cómo funciona Y y hacé mi versión', 'replicá esa funcionalidad'.",
+  cuandoUsar: "Cuando el jefe dice 'quiero algo como X pero mío', 'analizá cómo funciona Y y haz mi versión', 'replicá esa funcionalidad'.",
   parametros: {
     type: "object",
     properties: {
@@ -327,13 +327,13 @@ export const seniorReplicar: DefSkill = {
   riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 5400,
   tools: toolsBase,
   async ejecutar(a, ctx) {
-    const diseno = `Estudiá cómo funciona esta referencia: "${a.referencia}". Entendé QUÉ hace y POR QUÉ, sus decisiones de diseño y sus límites. Después diseñá un EQUIVALENTE FUNCIONAL propio, adaptado a este proyecto y a su stack, a tu criterio de ingeniero senior. No copies código: recreá la capacidad a tu manera, mejorando lo que se pueda para este contexto.`;
+    const diseno = `Estudiá cómo funciona esta referencia: "${a.referencia}". Entiende QUÉ hace y POR QUÉ, sus decisiones de diseño y sus límites. Después diseñá un EQUIVALENTE FUNCIONAL propio, adaptado a este proyecto y a su stack, a tu criterio de ingeniero senior. No copies código: recreá la capacidad a tu manera, mejorando lo que se pueda para este contexto.`;
     if (!a.implementar) {
       return ejecutarLectura(ctx, { proyecto: a.proyecto, proposito: `diseno equivalente ${a.referencia.slice(0, 25)}`, sistema: REGLAS, encargo: `${diseno} Entregá un informe de diseño: enfoque, componentes, interfaz/API propuesta, cómo encaja en el proyecto, y un plan de implementación. No escribas el código todavía.` });
     }
     return ejecutarEncargo(ctx, {
       proyecto: a.proyecto, proposito: `replica ${a.referencia.slice(0, 25)}`, sistema: REGLAS,
-      encargo: `${diseno} Luego IMPLEMENTALO en el sandbox con tests, siguiendo las convenciones del proyecto. Dejá build y tests en verde. En tu informe: en qué te inspiraste, qué decidiste distinto y por qué, qué archivos creaste/tocaste y cómo lo verificaste.`,
+      encargo: `${diseno} Luego IMPLEMENTALO en el sandbox con tests, siguiendo las convenciones del proyecto. Deja build y tests en verde. En tu informe: en qué te inspiraste, qué decidiste distinto y por qué, qué archivos creaste/tocaste y cómo lo verificaste.`,
       verificar: true, maxIteraciones: 3, maxTurnos: 120, timeoutSeg: 2400, revisionCruzada: true,
     });
   },
@@ -347,13 +347,13 @@ const CONTRATO_CAPACIDAD = `CONTRATO DEL REGISTRO DE EMILIA (src/registro/tipos.
 - Un FLUJO es DefFlujo: { nombre, modulo, descripcion, parametros, riesgo, inicio, pasos: PasoFlujo[] } con pasos tool|skill|condicion|aprobacion|esperar|repetir|subflujo|fin.
 - Cada archivo exporta un array (ej. export const toolsClima: DefTool[] = [...]).
 - Para que se cargue, se agrega UNA línea al manifiesto src/registro/modulos.ts: { ruta: "tools/<archivo>.ts", exporta: "<nombreDelArray>", tipo: "tools" }.
-- Mirá src/tools/sistema.ts y src/tools/jelcom.ts como ejemplos canónicos. Sin dependencias nuevas salvo necesidad real (justificar). Credenciales SIEMPRE por process.env (documentá el nombre de la variable en la descripción del módulo).
+- Mira src/tools/sistema.ts y src/tools/jelcom.ts como ejemplos canónicos. Sin dependencias nuevas salvo necesidad real (justificar). Credenciales SIEMPRE por process.env (documentá el nombre de la variable en la descripción del módulo).
 - Verificación: npx tsc --noEmit -p . debe pasar, y el nombre de la tool debe validar contra el registro (snake_case, prefijo del módulo).`;
 
 export const seniorCrearCapacidad: DefSkill = {
   nombre: "senior_crear_capacidad", modulo: MODULO,
   descripcion: "AUTO-MEJORA (usar preferentemente vía el flujo capacidad_nueva): escribe una capacidad nueva de Emilia (tool, skill o flujo) en un sandbox del proyecto 'emilia', verificada y revisada. IMPORTANTE: una capacidad en sandbox NO existe para el sistema hasta integrar + registro_recargar; no se puede 'probar antes'.",
-  cuandoUsar: "Cuando falta una herramienta que ninguna tool actual cubre (ej. 'consultar el clima', 'leer Google Sheets', 'mandar correo') o el jefe pide 'creá una tool/skill que…'.",
+  cuandoUsar: "Cuando falta una herramienta que ninguna tool actual cubre (ej. 'consultar el clima', 'leer Google Sheets', 'mandar correo') o el jefe pide 'crea una tool/skill que…'.",
   parametros: {
     type: "object",
     properties: {
@@ -371,7 +371,7 @@ export const seniorCrearCapacidad: DefSkill = {
     const exporta = `${carpeta}${a.modulo.charAt(0).toUpperCase()}${a.modulo.slice(1)}`;
     return ejecutarEncargo(ctx, {
       proyecto: "emilia", proposito: `capacidad ${a.nombre}`, sistema: `${REGLAS}\n\n${CONTRATO_CAPACIDAD}`,
-      encargo: `Creá la ${a.tipo} "${a.nombre}" en el módulo "${a.modulo}": archivo src/${carpeta}/${a.modulo}.ts (si ya existe, agregala ahí), exportando el array "${exporta}" (o el existente). Especificación:\n${a.especificacion}\n\nPasos: 1) leé src/registro/tipos.ts y un ejemplo (src/tools/sistema.ts). 2) implementá con manejo de errores y descripción clara para el modelo. 3) registrala en src/registro/modulos.ts (una línea; si el módulo ya estaba, no dupliques). 4) si usa credenciales, leelas de process.env y documentá la variable. 5) corré npx tsc --noEmit -p . y dejalo en verde. 6) en el informe: archivo creado, nombre exacto de la capacidad, parámetros, y qué variable de .env hace falta si aplica.`,
+      encargo: `Crea la ${a.tipo} "${a.nombre}" en el módulo "${a.modulo}": archivo src/${carpeta}/${a.modulo}.ts (si ya existe, agregala ahí), exportando el array "${exporta}" (o el existente). Especificación:\n${a.especificacion}\n\nPasos: 1) lee src/registro/tipos.ts y un ejemplo (src/tools/sistema.ts). 2) implementá con manejo de errores y descripción clara para el modelo. 3) registrala en src/registro/modulos.ts (una línea; si el módulo ya estaba, no dupliques). 4) si usa credenciales, leelas de process.env y documentá la variable. 5) corre npx tsc --noEmit -p . y déjalo en verde. 6) en el informe: archivo creado, nombre exacto de la capacidad, parámetros, y qué variable de .env hace falta si aplica.`,
       verificar: true, maxIteraciones: 3, maxTurnos: 100, timeoutSeg: 2400, revisionCruzada: true,
     });
   },

@@ -16,7 +16,7 @@ export const visionAnalizar: DefTool = {
     type: "object",
     properties: {
       archivo_ids: { type: "array", items: { type: "string" }, description: "Ids de los archivos de imagen (hasta 3). Si se omite, usa la última imagen recibida en esta conversación." },
-      pregunta: { type: "string", description: "Qué querés saber o extraer. Si se omite, describe." },
+      pregunta: { type: "string", description: "Qué quieres saber o extraer. Si se omite, describe." },
       json: { type: "boolean", description: "Pedir respuesta JSON.", default: false },
     },
     required: [],
@@ -27,7 +27,7 @@ export const visionAnalizar: DefTool = {
     if (!ids.length) {
       const recientes = ctx.conversacionId ? await archivosDeConversacion(ctx.conversacionId, 10) : await archivosRecientes(10);
       const ultima = recientes.find((x) => esImagen(x.mime));
-      if (!ultima) return { ok: false, error: "No encontré ninguna imagen reciente. Pedí que la manden o pasá archivo_ids." };
+      if (!ultima) return { ok: false, error: "No encontré ninguna imagen reciente. Pide que la manden o pasa archivo_ids." };
       ids = [ultima.id];
     }
     const imagenes = [];

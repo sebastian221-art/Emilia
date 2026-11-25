@@ -35,7 +35,7 @@ export const agenteListar: DefTool = {
 
 export const agenteDelegar: DefTool = {
   nombre: "agente_delegar", modulo: MODULO,
-  descripcion: "Le encarga una tarea a otro agente (por nombre). Con esperar=false (por defecto) el otro agente trabaja en segundo plano y su respuesta llega a esta misma conversación cuando termine; respondé enseguida que se lo pasaste. Con esperar=true bloquea hasta tener su respuesta (solo para cosas cortas).",
+  descripcion: "Le encarga una tarea a otro agente (por nombre). Con esperar=false (por defecto) el otro agente trabaja en segundo plano y su respuesta llega a esta misma conversación cuando termine; responde enseguida que se lo pasaste. Con esperar=true bloquea hasta tener su respuesta (solo para cosas cortas).",
   parametros: {
     type: "object",
     properties: {
@@ -48,8 +48,8 @@ export const agenteDelegar: DefTool = {
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 7200,
   async ejecutar(a, ctx) {
     const ag = await agentePorNombre(a.agente);
-    if (!ag) return { ok: false, error: `No existe un agente llamado "${a.agente}". Usá agente_listar.` };
-    if (ag.id === ctx.agenteId) return { ok: false, error: "No podés delegarte a vos mismo." };
+    if (!ag) return { ok: false, error: `No existe un agente llamado "${a.agente}". Usa agente_listar.` };
+    if (ag.id === ctx.agenteId) return { ok: false, error: "No puedes delegarte a tú mismo." };
     if (ag.estado !== "activo") return { ok: false, error: `${ag.nombre} está ${ag.estado}; activalo primero.` };
     if (!ctx.conversacionId) return { ok: false, error: "Delegar requiere una conversación (panel o WhatsApp) para devolver la respuesta." };
 
@@ -59,7 +59,7 @@ export const agenteDelegar: DefTool = {
     const jefeNum = (process.env.WHATSAPP_NUMERO_JEFE || "").replace(/\D/g, "");
     const [convPadre] = await query<any>(`SELECT canal FROM conversaciones WHERE id=$1`, [ctx.conversacionId]).catch(() => [] as any);
     const porWhatsapp = convPadre?.canal === "whatsapp";
-    const contextoCanal = `Te delegó esta tarea el agente ${padre?.nombre || "otro agente"} en nombre de Sebastián (el jefe)${jefeNum ? `, cuyo WhatsApp es ${jefeNum} (usalo cuando haya que mandarle algo: no se lo preguntes)` : ""}. Tu respuesta final le llega a Sebastián por ${porWhatsapp ? "WhatsApp" : "el panel"}: escribí para él, claro y completo.${porWhatsapp ? " FORMATO WHATSAPP: sin tablas, sin encabezados con #, sin bloques de código; solo *negrita*, _cursiva_ y listas con guiones; máximo ~15 líneas (si hay más, resumí y ofrecé el detalle)." : ""} Si necesitás aprobación para algo, pedila: el sistema se la muestra a él.`;
+    const contextoCanal = `Te delegó esta tarea el agente ${padre?.nombre || "otro agente"} en nombre de Sebastián (el jefe)${jefeNum ? `, cuyo WhatsApp es ${jefeNum} (úsalo cuando haya que mandarle algo: no se lo preguntes)` : ""}. Tu respuesta final le llega a Sebastián por ${porWhatsapp ? "WhatsApp" : "el panel"}: escribe para él, claro y completo.${porWhatsapp ? " FORMATO WHATSAPP: sin tablas, sin encabezados con #, sin bloques de código; solo *negrita*, _cursiva_ y listas con guiones; máximo ~15 líneas (si hay más, resumí y ofrecé el detalle)." : ""} Si necesitas aprobación para algo, pedila: el sistema se la muestra a él.`;
 
     // El pedido LITERAL del jefe viaja junto con la tarea: así el trabajador no hereda un recorte del administrador.
     const [ultimoJefe] = await query<{ contenido: string }>(`SELECT contenido FROM mensajes WHERE conversacion_id=$1 AND rol='usuario' ORDER BY creado_en DESC LIMIT 1`, [ctx.conversacionId]).catch(() => [] as any);
@@ -90,7 +90,7 @@ export const agenteDelegar: DefTool = {
 
 export const agentePendientes: DefTool = {
   nombre: "agente_pendientes", modulo: MODULO,
-  descripcion: "Lo que el equipo tiene entre manos: encargos en curso, esperando OK del jefe, y lo terminado o fallido en las últimas 24 h; y las misiones abiertas. Para '¿en qué quedó lo de…?', '¿qué tengo abierto?', '¿cómo va lo que le pedí a Sage?'.",
+  descripcion: "Lo que el equipo tiene entre manos: encargos en curso, esperando OK del jefe, y lo terminado o fallido en las últimas 24 h; y las misiones abiertas. Para '¿en qué quedó lo de…?', '¿qué tengo abierto?', '¿cómo va lo que le pide a Sage?'.",
   parametros: { type: "object", properties: { agente: { type: "string" } } },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 15,
   async ejecutar(a) {

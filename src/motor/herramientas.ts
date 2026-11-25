@@ -66,7 +66,7 @@ export async function herramientasDeAgente(agenteId: string): Promise<{ definici
         riesgo: (fila.nivel_riesgo || "lectura") as NivelRiesgo,
         requiereAprobacion: !!sec.riesgo?.aprobacion,
         descripcion: `${fila.descripcion || fila.nombre}${sec.identidad?.cuando_usar ? ` Cuándo usarla: ${sec.identidad.cuando_usar}` : ""}`,
-        parametros: { type: "object", properties: { pedido: { type: "string", description: sec.io?.entradas ? `Datos para la skill: ${sec.io.entradas}` : "Qué querés que haga, con los datos necesarios." } }, required: ["pedido"] },
+        parametros: { type: "object", properties: { pedido: { type: "string", description: sec.io?.entradas ? `Datos para la skill: ${sec.io.entradas}` : "Qué quieres que haga, con los datos necesarios." } }, required: ["pedido"] },
         fila,
       });
     }

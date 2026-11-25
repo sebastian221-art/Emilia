@@ -51,7 +51,7 @@
       <div class="mundo" id="mundo"><svg id="svg"></svg><div id="nodos"></div></div>
       <div class="zoom-ctrl"><button onclick="L.zoomOut()">−</button><span class="zoom-nivel" id="zn">100%</span><button onclick="L.zoomIn()">+</button><button onclick="L.centrar()" title="Centrar">⌂</button></div>
     </div>
-    <div class="panel" id="panel"><div class="vacio">Elegí un puesto o un agente.</div></div>
+    <div class="panel" id="panel"><div class="vacio">Elige un puesto o un agente.</div></div>
   </div>
 </main>
 <script src="/comun/espejo.js"></script>
@@ -98,7 +98,7 @@ function verPuesto(id) { const p = E.puestos.find((x) => x.id === id); sel = "p-
     <h3>Encargado</h3><div style="font-size:13px">${ag ? `<b>${esc(ag.nombre)}</b> <a href="/agentes/${ag.id}" style="color:var(--e-accent);font-size:11px">abrir</a><div style="font-size:12px;color:var(--e-text-sec);margin-top:4px">${esc(ag.mision || "")}</div>` : "sin agente"}</div>
     <h3>Responsabilidades</h3><div style="font-size:12px;color:var(--e-text-sec);white-space:pre-wrap">${esc(p.responsabilidades || p.descripcion || "—")}</div>
     <h3>Flujos permanentes</h3>${(p.flujos || []).length ? p.flujos.map((f) => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--e-border)">${f.activo ? "🟢" : "⚪"} <span style="font-family:monospace">${esc(f.flujo)}</span>${f.nodo ? ` <span style="color:var(--e-text-muted)">@${esc(f.nodo)}</span>` : ""}<div style="color:var(--e-text-muted);font-size:11px">${esc(JSON.stringify(f.args))}</div>${f.ejecucion_id ? `<a href="/flujos" style="font-size:11px;color:var(--e-accent)">ver en Flujos</a>` : ""}</div>`).join("") : `<p style="font-size:12px;color:var(--e-text-muted)">Ninguno. Pedile a la administradora: "que ${esc(ag?.nombre || "el agente")} vigile…".</p>`}`; }
-function verAgente(id) { const a = E.agentes.find((x) => x.id === id); sel = "a-" + id; render(); document.getElementById("panel").innerHTML = `<h2 style="font-family:var(--syne);margin:0;font-size:16px">${esc(a.nombre)}</h2><p class="sub">${esc(a.tipo)} · ${esc(a.estado)} · sin puesto</p><div style="font-size:12px;color:var(--e-text-sec);margin-top:8px">${esc(a.mision || "")}</div><p style="margin-top:12px"><a href="/agentes/${a.id}" style="color:var(--e-accent);font-size:12px">abrir su espacio →</a></p><p style="font-size:12px;color:var(--e-text-muted);margin-top:10px">Para darle un puesto: "creá el puesto X con el agente ${esc(a.nombre)}…".</p>`; }
+function verAgente(id) { const a = E.agentes.find((x) => x.id === id); sel = "a-" + id; render(); document.getElementById("panel").innerHTML = `<h2 style="font-family:var(--syne);margin:0;font-size:16px">${esc(a.nombre)}</h2><p class="sub">${esc(a.tipo)} · ${esc(a.estado)} · sin puesto</p><div style="font-size:12px;color:var(--e-text-sec);margin-top:8px">${esc(a.mision || "")}</div><p style="margin-top:12px"><a href="/agentes/${a.id}" style="color:var(--e-accent);font-size:12px">abrir su espacio →</a></p><p style="font-size:12px;color:var(--e-text-muted);margin-top:10px">Para darle un puesto: "crea el puesto X con el agente ${esc(a.nombre)}…".</p>`; }
 cargar().then(() => L.init());
 setInterval(async () => { const s = sel; await cargar(); sel = s; render(); }, 10000);
 </script>

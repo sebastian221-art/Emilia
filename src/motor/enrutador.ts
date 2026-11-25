@@ -54,7 +54,7 @@ export async function elegirModulos(pedido: string, invocables: Map<string, Invo
   const max = Number(process.env.ENRUTADOR_MAX_MODULOS || 8);
   const lista = candidatos.map((m) => `- ${m}: ${descModulo(m, invocables)}`).join("\n");
   try {
-    const r = await llamarModelo([{ role: "user", content: `Elegí qué módulos de herramientas hacen falta para atender este pedido. Sé generoso con los relacionados (máx ${max}).\nPedido: "${pedido.slice(0, 800)}"${contexto ? `\nContexto: ${contexto.slice(0, 300)}` : ""}\nMódulos:\n${lista}\nRespondé SOLO JSON: {"modulos":["a","b"]}` }], [], { modelo: process.env.ENRUTADOR_MODELO || "llama-3.1-8b-instant", temperatura: 0 });
+    const r = await llamarModelo([{ role: "user", content: `Elige qué módulos de herramientas hacen falta para atender este pedido. Sé generoso con los relacionados (máx ${max}).\nPedido: "${pedido.slice(0, 800)}"${contexto ? `\nContexto: ${contexto.slice(0, 300)}` : ""}\nMódulos:\n${lista}\nRespondé SOLO JSON: {"modulos":["a","b"]}` }], [], { modelo: process.env.ENRUTADOR_MODELO || "llama-3.1-8b-instant", temperatura: 0 });
     const parsed = JSON.parse(r.texto.replace(/```json|```/g, "").trim());
     for (const m of (parsed.modulos || []).slice(0, max)) if (candidatos.includes(m)) activos.add(m);
   } catch { /* heurística abajo */ }
@@ -71,7 +71,7 @@ export function definicionesActivas(invocables: Map<string, Invocable>, activos:
   // Sin "requiere aprobación" en lo que ve el modelo: el sistema la pide solo, y si el modelo lo lee, pregunta por texto y no actúa.
   const defs: ChatCompletionTool[] = lista.map((i) => ({ type: "function", function: { name: i.nombre, description: i.descripcion.replace(/\s*Requiere aprobación[^.]*\.?/gi, "").trim(), parameters: i.parametros as any } }));
   const faltan = [...new Set([...invocables.keys()].map(moduloDe))].filter((m) => !activos.has(m));
-  if (faltan.length) defs.push({ type: "function", function: { name: "modulo_cargar", description: `Carga las herramientas de un módulo que no tenés activo ahora. Módulos disponibles: ${faltan.map((m) => `${m} (${descModulo(m, invocables)})`).join("; ")}. Después de cargarlo, sus herramientas aparecen en tu lista.`, parameters: { type: "object", properties: { modulo: { type: "string", description: "Nombre del módulo." } }, required: ["modulo"] } } });
+  if (faltan.length) defs.push({ type: "function", function: { name: "modulo_cargar", description: `Carga las herramientas de un módulo que no tienes activo ahora. Módulos disponibles: ${faltan.map((m) => `${m} (${descModulo(m, invocables)})`).join("; ")}. Después de cargarlo, sus herramientas aparecen en tu lista.`, parameters: { type: "object", properties: { modulo: { type: "string", description: "Nombre del módulo." } }, required: ["modulo"] } } });
   return defs.slice(0, TOPE_GROQ);
 }
 

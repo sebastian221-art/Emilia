@@ -11,7 +11,7 @@ import { CONTEXTO_CONVERSACION } from "../whatsapp/modo.js";
 export const rutasVoz = Router();
 
 const CONTEXTO_VOZ = `${CONTEXTO_CONVERSACION}
-ADEMÁS ESTÁN HABLANDO POR VOZ, en vivo, desde su computador: lo que escribas se convierte en tu voz y él te oye. Respondé como se habla: frases cortas, 1 a 3 oraciones, sin listas, sin símbolos, sin emojis, sin URLs ni ids. Si él se queda a mitad de una idea, dejalo seguir con una respuesta breve. Si necesitás usar una herramienta, hacelo rápido y contá el resultado en una frase.`;
+ADEMÁS ESTÁN HABLANDO POR VOZ, en vivo, desde su computador: lo que escribas se convierte en tu voz y él te oye. Responde como se habla: frases cortas, 1 a 3 oraciones, sin listas, sin símbolos, sin emojis, sin URLs ni ids. Si él se queda a mitad de una idea, déjalo seguir con una respuesta breve. Si necesitas usar una herramienta, hazlo rápido y cuenta el resultado en una frase.`;
 
 async function emilia() {
   const [a] = await query<any>(`SELECT * FROM agentes WHERE lower(nombre)='emilia' AND estado='activo' ORDER BY creado_en LIMIT 1`);

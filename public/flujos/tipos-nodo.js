@@ -4,7 +4,7 @@ const TIPOS_NODO = {
     inicio: {
       nom: "Inicio", ico: "▶", color: "#6ee7b7", bg: "#16352a",
       campos: [
-        { t: "select", key: "disparador", label: "Cómo arranca", ops: [["manual","Manual (vos lo lanzás)"],["mensaje","Al recibir un mensaje"],["cron","Programado (horario)"],["webhook","Webhook externo"]] },
+        { t: "select", key: "disparador", label: "Cómo arranca", ops: [["manual","Manual (tú lo lanzas)"],["mensaje","Al recibir un mensaje"],["cron","Programado (horario)"],["webhook","Webhook externo"]] },
         { t: "text", key: "cron", label: "Horario (si es programado, formato cron)", ph: "0 9 * * 1 = lunes 9am" },
       ],
     },
@@ -32,7 +32,7 @@ const TIPOS_NODO = {
     aprobacion: {
       nom: "Aprobación", ico: "✋", color: "#f9a8d4", bg: "#3a1528",
       campos: [
-        { t: "textarea", key: "mensaje", label: "Qué te pregunta", ph: "¿Confirmás el envío masivo a 4.850 números?" },
+        { t: "textarea", key: "mensaje", label: "Qué te pregunta", ph: "¿Confirmas el envío masivo a 4.850 números?" },
       ],
     },
     esperar: {

@@ -22,7 +22,7 @@ async function limpiar() {
       tools, skills, flujos
     RESTART IDENTITY CASCADE;
   `);
-  console.log("Base vacía. Arrancá el servidor (npm run dev): el registro vuelve a cargar lo de código.");
+  console.log("Base vacía. Arranca el servidor (npm run dev): el registro vuelve a cargar lo de código.");
   await db.end();
 }
 

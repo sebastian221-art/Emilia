@@ -26,8 +26,8 @@ async function main() {
   console.log("\nLanzando Claude Code (tarea trivial)…");
   const cc = await ejecutarTool("codigo_ejecutar_claude", {
     sandbox_id,
-    encargo: "Creá un archivo llamado HOLA_SENIOR.md en la raíz del proyecto con una sola línea: 'Hola desde el Senior Developer'. No toques nada más. Cuando termines, decí en una línea qué hiciste.",
-    contexto: "Sos un ingeniero senior trabajando en un sandbox aislado. Hacé exactamente lo pedido, sin extras.",
+    encargo: "Crea un archivo llamado HOLA_SENIOR.md en la raíz del proyecto con una sola línea: 'Hola desde el Senior Developer'. No toques nada más. Cuando termines, di en una línea qué hiciste.",
+    contexto: "Eres un ingeniero senior trabajando en un sandbox aislado. Haz exactamente lo pedido, sin extras.",
     max_turnos: 10, esperar: true, timeout_seg: 300,
   }, ctx);
   ok(cc.ok, `claude code: ${(cc.resumen || cc.error || "").slice(0, 300)}`);

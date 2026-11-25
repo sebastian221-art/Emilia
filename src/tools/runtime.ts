@@ -18,7 +18,7 @@ async function proy(nombre: string) {
 
 export const runtimeIniciar: DefTool = {
   nombre: "runtime_iniciar", modulo: MODULO,
-  descripcion: "Arranca el proceso de un proyecto (su cmd_start) en el repo real, o en un sandbox si pasás sandbox_id. Queda corriendo aparte de Emilia, con logs a archivo.",
+  descripcion: "Arranca el proceso de un proyecto (su cmd_start) en el repo real, o en un sandbox si pasas sandbox_id. Queda corriendo aparte de Emilia, con logs a archivo.",
   parametros: { type: "object", properties: { proyecto: PROY, sandbox_id: { type: "string", description: "Correrlo desde un sandbox en vez del repo real (para probar cambios)." } }, required: ["proyecto"] },
   riesgo: "ejecucion", requiereAprobacion: false, timeoutSeg: 60,
   async ejecutar(a) {
@@ -34,7 +34,7 @@ export const runtimeIniciar: DefTool = {
         salud = await saludProceso(p);
         if (salud.ok) break;
         const e = await estadoProceso(p);
-        if (e.estado !== "corriendo") { salud = { ok: false, error: `el proceso murió al arrancar (código ${e.codigo_salida}); mirá runtime_logs` }; break; }
+        if (e.estado !== "corriendo") { salud = { ok: false, error: `el proceso murió al arrancar (código ${e.codigo_salida}); mira runtime_logs` }; break; }
       }
     }
     const cola = await leerLogs(p, { ultimas: 8 });

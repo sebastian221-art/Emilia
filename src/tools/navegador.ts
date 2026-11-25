@@ -8,7 +8,7 @@ const MODULO = "navegador";
 
 export const navegadorIr: DefTool = {
   nombre: "navegador_ir", modulo: MODULO,
-  descripcion: "Abre una URL en el navegador controlado por Emilia y devuelve título y URL final. Después usá navegador_leer para ver el contenido.",
+  descripcion: "Abre una URL en el navegador controlado por Emilia y devuelve título y URL final. Después usa navegador_leer para ver el contenido.",
   parametros: { type: "object", properties: { url: { type: "string", minLength: 3 } }, required: ["url"] },
   riesgo: "lectura", requiereAprobacion: false, timeoutSeg: 150,
   async ejecutar(a) { const r = await irA(a.url); return { ok: true, datos: r, resumen: `${r.titulo} — ${r.url}` }; },
@@ -42,7 +42,7 @@ export const navegadorVer: DefTool = {
   async ejecutar(a, ctx) {
     const png = await capturaPagina();
     const arch = await guardarArchivo({ nombre: `pagina_${Date.now()}.png`, mime: "image/png", contenido: png, origen: "generado", conversacionId: ctx.conversacionId ?? null, agenteId: ctx.agenteId });
-    const v = await analizarImagen(png, "image/png", { pregunta: a.pregunta || "Describí esta página web: qué es, qué elementos principales hay y qué acciones se pueden hacer." });
+    const v = await analizarImagen(png, "image/png", { pregunta: a.pregunta || "Describe esta página web: qué es, qué elementos principales hay y qué acciones se pueden hacer." });
     return v.ok ? { ok: true, datos: { archivo_id: arch.id, texto: v.texto }, resumen: `${v.texto}\n(captura archivo_id ${arch.id})` } : { ok: false, error: v.error };
   },
 };

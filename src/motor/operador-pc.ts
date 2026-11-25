@@ -38,15 +38,15 @@ export async function operarPc(tarea: string, op: { maxPasos?: number; permitirT
     const h = huella(cap.contenido);
     const sinCambio = h === huellaPrevia; huellaPrevia = h;
 
-    const sistema = `Sos un OPERADOR de computadora Windows. Ves una captura del monitor principal de ${cap.ancho}x${cap.alto} píxeles con una REJILLA magenta cada 100 px numerada (usala para leer coordenadas exactas). Decidís UNA acción por vez. Respondé SOLO JSON:
+    const sistema = `Eres un OPERADOR de computadora Windows. Ves una captura del monitor principal de ${cap.ancho}x${cap.alto} píxeles con una REJILLA magenta cada 100 px numerada (úsala para leer coordenadas exactas). Decides UNA acción por vez. Responde SOLO JSON:
 {"accion":"clic|doble_clic|clic_derecho|escribir|tecla|scroll|mover|esperar|terminar|preguntar|fallar","x":int,"y":int,"texto":"...","teclas":"ctrl+s","direccion":"arriba|abajo","cantidad":3,"segundos":2,"motivo":"por qué","resumen":"solo en terminar: qué se ve que prueba que está hecho","pregunta":"solo en preguntar"}
 Reglas:
-- Coordenadas en píxeles de ESTA imagen (0..${cap.ancho}, 0..${cap.alto}), al CENTRO del elemento; leé la rejilla.
+- Coordenadas en píxeles de ESTA imagen (0..${cap.ancho}, 0..${cap.alto}), al CENTRO del elemento; lee la rejilla.
 - Para ABRIR un programa: tecla "win", esperar 1s, escribir su nombre, tecla "enter". No busques el botón Inicio con clics.
 - Para guardar: "ctrl+s"; en el diálogo, escribir la ruta completa en el campo de nombre y "enter".
-- "escribir" teclea donde está el foco: hacé clic en el campo antes.
-- Si la pantalla NO cambió tras tu acción anterior, esa acción no sirve: probá OTRA (tecla, otro elemento, otra ruta).
-- "terminar" SOLO cuando la pantalla muestra el resultado cumplido; describilo en "resumen". Si pide contraseña/pago/borrar algo fuera de la tarea: "preguntar". Si no avanzás: "fallar".`;
+- "escribir" teclea donde está el foco: haz clic en el campo antes.
+- Si la pantalla NO cambió tras tu acción anterior, esa acción no sirve: prueba OTRA (tecla, otro elemento, otra ruta).
+- "terminar" SOLO cuando la pantalla muestra el resultado cumplido; descríbelo en "resumen". Si pide contraseña/pago/borrar algo fuera de la tarea: "preguntar". Si no avanzas: "fallar".`;
     const historial = pasos.slice(-6).map((p) => `${p.n}. ${p.accion} ${p.detalle}${p.error ? " (ERROR: " + p.error + ")" : ""}`).join("\n") || "(ninguno)";
     const pregunta = `${sistema}\n\nTAREA: ${tarea}\nVentana activa: "${ventana}"\nPasos hechos:\n${historial}${sinCambio && pasos.length ? "\n⚠ La pantalla NO cambió desde el paso anterior." : ""}${advertencia ? "\n⚠ " + advertencia : ""}\nPaso ${n} de ${maxPasos}. ¿Siguiente acción?`;
     advertencia = "";
@@ -62,7 +62,7 @@ Reglas:
     ultimaFirma = firma;
     if (repeticiones >= 1 && a.accion !== "terminar" && a.accion !== "esperar") {
       if (repeticiones >= 3) return { ok: false, estado: "fallida", resumen: `Repetí la misma acción (${a.accion} ${firma.split("|")[1] ? `(${a.x},${a.y})` : ""}) sin que la pantalla cambiara. No encuentro cómo avanzar.`, pasos, ultima_captura_id: ultimaCaptura };
-      advertencia = `Ya intentaste ${a.accion} ahí ${repeticiones + 1} veces y no pasó nada. Cambiá de estrategia (usá teclado: win/escribir/enter, o ctrl+s, etc.).`;
+      advertencia = `Ya intentaste ${a.accion} ahí ${repeticiones + 1} veces y no pasó nada. Cambia de estrategia (usa teclado: win/escribir/enter, o ctrl+s, etc.).`;
       pasos.push({ n, accion: a.accion, detalle: "(repetida, no ejecutada)", motivo: a.motivo || "", ventana, captura_id: ultimaCaptura, error: "acción repetida sin efecto" });
       await op.onPaso?.(pasos[pasos.length - 1]);
       continue;
@@ -70,9 +70,9 @@ Reglas:
 
     // Verificación independiente antes de aceptar "terminar".
     if (a.accion === "terminar") {
-      const chk = await analizarImagen(cap.contenido, "image/png", { pregunta: `Tarea: "${tarea}". Un operador afirma que ya está cumplida y que la pantalla lo muestra así: "${a.resumen || a.motivo || ""}". Mirando SOLO la pantalla, ¿es cierto? Respondé JSON: {"cumplida": true|false, "motivo": "qué se ve"}`, json: true, maxTokens: 200 });
+      const chk = await analizarImagen(cap.contenido, "image/png", { pregunta: `Tarea: "${tarea}". Un operador afirma que ya está cumplida y que la pantalla lo muestra así: "${a.resumen || a.motivo || ""}". Mirando SOLO la pantalla, ¿es cierto? Responde JSON: {"cumplida": true|false, "motivo": "qué se ve"}`, json: true, maxTokens: 200 });
       const ok = !!(chk.json as any)?.cumplida;
-      if (!ok) { advertencia = `Un revisor miró la pantalla y NO ve la tarea cumplida: ${(chk.json as any)?.motivo || chk.texto || ""}. Seguí trabajando.`; pasos.push({ n, accion: "terminar", detalle: "(rechazado por verificación)", motivo: a.resumen || "", ventana, captura_id: ultimaCaptura, error: "verificación negativa" }); await op.onPaso?.(pasos[pasos.length - 1]); continue; }
+      if (!ok) { advertencia = `Un revisor miró la pantalla y NO ve la tarea cumplida: ${(chk.json as any)?.motivo || chk.texto || ""}. Sigue trabajando.`; pasos.push({ n, accion: "terminar", detalle: "(rechazado por verificación)", motivo: a.resumen || "", ventana, captura_id: ultimaCaptura, error: "verificación negativa" }); await op.onPaso?.(pasos[pasos.length - 1]); continue; }
       pasos.push({ n, accion: "terminar", detalle: "", motivo: a.resumen || a.motivo || "", ventana, captura_id: ultimaCaptura }); await op.onPaso?.(pasos[pasos.length - 1]);
       return { ok: true, estado: "cumplida", resumen: a.resumen || a.motivo || "Tarea cumplida.", pasos, ultima_captura_id: ultimaCaptura };
     }

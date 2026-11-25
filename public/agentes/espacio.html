@@ -119,7 +119,7 @@ function render() {
 
   if (tab === "esqueleto") {
     c.innerHTML = `
-      <p class="sub" style="margin-bottom:10px">El esqueleto de ${agente.nombre}. Arrastrá piezas nuevas desde la izquierda, movelas, y clic para editar. Los cambios se guardan al editar cada pieza.</p>
+      <p class="sub" style="margin-bottom:10px">El esqueleto de ${agente.nombre}. Arrastra piezas nuevas desde la izquierda, movelas, y clic para editar. Los cambios se guardan al editar cada pieza.</p>
       <div style="display:grid;grid-template-columns:190px 1fr;gap:12px;height:calc(100vh - 300px)">
         <div class="izq-esq" id="paletaEsq" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto"></div>
         <div class="lienzo-cont" id="lienzoEsq" style="height:100%">
@@ -166,7 +166,7 @@ function render() {
       </div>
       <div id="pegar-box" style="display:none;margin-bottom:14px">
         <input id="pegar-nombre" placeholder="Nombre (ej. como_funcionan_envios.md)" style="margin-bottom:6px" />
-        <textarea id="pegar-cont" rows="5" placeholder="Pegá acá el contexto: cómo funciona tu negocio, notas, datos que el agente debe conocer…"></textarea>
+        <textarea id="pegar-cont" rows="5" placeholder="Pega acá el contexto: cómo funciona tu negocio, notas, datos que el agente debe conocer…"></textarea>
         <button class="primario" onclick="guardarPegado()" style="margin-top:6px">Guardar</button>
       </div>
       <div id="docs-lista"></div>`;
@@ -175,14 +175,14 @@ function render() {
   else if (tab === "conversaciones") {
     c.innerHTML = `<div style="display:grid;grid-template-columns:240px 1fr;gap:14px;min-height:420px">
       <div id="conv-lista" style="overflow-y:auto"></div>
-      <div id="conv-msgs" style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto;padding:4px"><p class="placeholder">Elegí una conversación.</p></div>
+      <div id="conv-msgs" style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto;padding:4px"><p class="placeholder">Elige una conversación.</p></div>
     </div>`;
     cargarConversaciones();
   }
   else if (tab === "trazas") {
     c.innerHTML = `<div style="display:grid;grid-template-columns:300px 1fr;gap:14px;min-height:420px">
       <div id="ej-lista" style="overflow-y:auto;max-height:65vh"></div>
-      <div id="trazas-cont"><div class="placeholder">Elegí una ejecución.</div></div>
+      <div id="trazas-cont"><div class="placeholder">Elige una ejecución.</div></div>
     </div>`;
     cargarEjecuciones();
   }
@@ -261,7 +261,7 @@ async function cargarDocs() {
         <div><div class="nom">&#9707; ${d.nombre}</div><div class="val">${(d.tam_bytes/1024).toFixed(1)} KB · ${new Date(d.creado_en).toLocaleDateString()}</div></div>
         <button onclick="borrarDoc('${d.id}')" style="font-size:11px;padding:3px 9px">quitar</button>
       </div>`).join("")
-    : `<p style="color:var(--e-text-muted);font-size:13px">Sin documentos todavía. Subí un archivo o pegá texto arriba.</p>`;
+    : `<p style="color:var(--e-text-muted);font-size:13px">Sin documentos todavía. Subí un archivo o pega texto arriba.</p>`;
 }
 
 function mostrarPegar() {
@@ -707,7 +707,7 @@ async function enviarChat() {
     document.getElementById("pensando")?.remove();
     if (r.respuesta) hist.innerHTML += burbuja("agente", r.respuesta);
     if (r.estado === "esperando_aprobacion") nota.innerHTML = `⏸ Esperando tu aprobación — resolvela en <a href="/aprobaciones" style="color:var(--e-accent)">Aprobaciones</a>.`;
-    else if (!r.ok) nota.textContent = "La respuesta tuvo un problema — revisá la pestaña Trazas.";
+    else if (!r.ok) nota.textContent = "La respuesta tuvo un problema — revisa la pestaña Trazas.";
     hist.scrollTop = hist.scrollHeight;
     ultimoConteoMsgs = 0; // que el próximo refresco traiga la versión guardada
   } catch (e) {

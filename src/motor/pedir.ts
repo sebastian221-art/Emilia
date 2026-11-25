@@ -29,7 +29,7 @@ export function programarReflexionNocturna(hora = 3) {
     if (ahora.getHours() !== hora || ultimoDia === dia) return;
     ultimoDia = dia;
     try {
-      const quien = await pedirAAgente("System", "Reflexión nocturna: ejecutá aprender_reflexionar(dias=1, explorar=true) y mandale al jefe el resumen por WhatsApp (whatsapp_enviar_texto) solo si hay hallazgos o propuestas concretas; si el día fue tranquilo, dejá el informe en esta conversación sin molestarlo.", { origen: "api" });
+      const quien = await pedirAAgente("System", "Reflexión nocturna: ejecuta aprender_reflexionar(dias=1, explorar=true) y mandale al jefe el resumen por WhatsApp (whatsapp_enviar_texto) solo si hay hallazgos o propuestas concretas; si el día fue tranquilo, deja el informe en esta conversación sin molestarlo.", { origen: "api" });
       console.log(`[nocturno] reflexión pedida a ${quien}`);
     } catch (e: any) { console.log(`[nocturno] sin reflexión: ${e?.message}`); }
   }, 5 * 60 * 1000);

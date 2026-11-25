@@ -98,13 +98,13 @@ export async function probarPrompt(p: { instrucciones: string; casos: Caso[]; mo
     // Pista JUSTA para experimentos de forma: si el caso trae la respuesta real como referencia (y no un esperado),
     // el modelo de prueba recibe esa información como "datos disponibles" y solo tiene que decirla según la regla.
     // Así el juez compara forma contra forma (misma información), no castiga que el modelo "no sepa" el dato.
-    const entrada = !c.esperado && c.referencia ? `${c.entrada}\n\n[Información disponible para responder (usala, no inventes nada fuera de esto): ${c.referencia}]` : c.entrada;
+    const entrada = !c.esperado && c.referencia ? `${c.entrada}\n\n[Información disponible para responder (úsala, no inventes nada fuera de esto): ${c.referencia}]` : c.entrada;
     try { salida = (await llamarModelo([{ role: "system", content: p.instrucciones }, { role: "user", content: entrada }], [], { modelo: p.modelo, temperatura: 0.2 })).texto; }
     catch (e: any) { salida = `[error: ${e?.message?.slice(0, 100)}]`; }
     let puntaje = 0, motivo = "";
     try {
       const j = await llamarModelo([
-        { role: "system", content: `Sos un juez estricto e insobornable. Evaluá la RESPUESTA según el criterio: ${p.criterio || "cumple lo esperado en fondo y forma"}. ${c.esperado ? "Hay una respuesta ESPERADA: medí si la RESPUESTA logra lo mismo (no exige palabras idénticas)." : c.referencia ? "No hay respuesta esperada; hay una RESPUESTA REAL anterior como referencia y el modelo tuvo esa misma información disponible: juzgá SOLO la forma (según el criterio) comparando la nueva contra la real: ¿la dice mejor, igual o peor? No penalices por información que ambas comparten." : "No hay respuesta esperada: juzgá solo por el criterio."} Penalizá datos inventados. Devolvé SOLO JSON: {"puntaje": 0-100, "motivo": "una línea"}.` },
+        { role: "system", content: `Eres un juez estricto e insobornable. Evaluá la RESPUESTA según el criterio: ${p.criterio || "cumple lo esperado en fondo y forma"}. ${c.esperado ? "Hay una respuesta ESPERADA: mide si la RESPUESTA logra lo mismo (no exige palabras idénticas)." : c.referencia ? "No hay respuesta esperada; hay una RESPUESTA REAL anterior como referencia y el modelo tuvo esa misma información disponible: juzgá SOLO la forma (según el criterio) comparando la nueva contra la real: ¿la dice mejor, igual o peor? No penalices por información que ambas comparten." : "No hay respuesta esperada: juzgá solo por el criterio."} Penalizá datos inventados. Devuelve SOLO JSON: {"puntaje": 0-100, "motivo": "una línea"}.` },
         { role: "user", content: `ENTRADA: ${c.entrada}${c.esperado ? `\n\nESPERADO: ${c.esperado}` : ""}${c.referencia ? `\n\nRESPUESTA REAL ANTERIOR (referencia): ${c.referencia}` : ""}\n\nRESPUESTA: ${salida}` },
       ], [], { modelo: p.juez, temperatura: 0 });
       const m = j.texto.match(/\{[\s\S]*\}/); const o = m ? JSON.parse(m[0]) : {};

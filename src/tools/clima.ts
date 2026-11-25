@@ -52,7 +52,7 @@ export const climaConsultar: DefTool = {
     } catch (e: any) {
       return { ok: false, error: `No se pudo geocodificar "${ciudad}": ${e?.message || String(e)}` };
     }
-    if (!ubicacion) return { ok: false, error: `No encontré la ciudad "${ciudad}". Probá con otro nombre o agregá el país (ej. "París, Francia").` };
+    if (!ubicacion) return { ok: false, error: `No encontré la ciudad "${ciudad}". Prueba con otro nombre o agrega el país (ej. "París, Francia").` };
 
     try {
       const url = `${FORECAST_URL}?latitude=${ubicacion.latitude}&longitude=${ubicacion.longitude}&current_weather=true`;

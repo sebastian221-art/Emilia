@@ -80,7 +80,7 @@
 </nav>
 <main>
   <div class="top">
-    <div><h1>Biblioteca</h1><p class="sub">La red de conocimiento compartida. Todos los agentes la consultan y aportan; Lara la cuida; vos decidís. Clic en un nodo = ficha · arrastrar = mover · rueda = zoom.</p></div>
+    <div><h1>Biblioteca</h1><p class="sub">La red de conocimiento compartida. Todos los agentes la consultan y aportan; Lara la cuida; tú decides. Clic en un nodo = ficha · arrastrar = mover · rueda = zoom.</p></div>
     <div class="pills" id="pills"></div>
   </div>
   <div class="layout">
@@ -98,7 +98,7 @@
         <div class="leyenda"><span><i style="background:#22c55e"></i>verificado</span><span><i style="background:#3b82f6"></i>probable</span><span><i style="background:#f59e0b"></i>dudoso</span><span><i style="background:#ef4444"></i>contradicho</span><span><i style="background:#6b7280"></i>obsoleto</span><span>· tamaño = uso</span></div>
       </div>
     </div>
-    <div class="panel" id="panel"><div class="vacio">Elegí un nodo de la red o buscá algo.</div></div>
+    <div class="panel" id="panel"><div class="vacio">Elige un nodo de la red o busca algo.</div></div>
   </div>
 </main>
 
@@ -189,7 +189,7 @@ async function buscar() {
   const r = await api(`/api/biblioteca/buscar?q=${encodeURIComponent(q)}&limite=10`);
   resaltados = new Set(r.map((n) => n.id)); dibujar();
   box.style.display = "block";
-  box.innerHTML = r.length ? r.map((n) => `<div class="res" onclick="abrirNodo('${n.id}')"><i style="width:9px;height:9px;border-radius:50%;background:${COLOR[n.estado]};display:inline-block"></i>${esc(n.titulo)} <span style="color:var(--e-text-muted)">${esc(n.tipo)}</span><span class="sc">${Math.round((n.score || 0) * 100)}% afín</span></div>`).join("") : `<div class="res" style="color:var(--e-text-muted)">Nada afín. Podés aportarlo o pedirle a Soga que lo investigue.</div>`;
+  box.innerHTML = r.length ? r.map((n) => `<div class="res" onclick="abrirNodo('${n.id}')"><i style="width:9px;height:9px;border-radius:50%;background:${COLOR[n.estado]};display:inline-block"></i>${esc(n.titulo)} <span style="color:var(--e-text-muted)">${esc(n.tipo)}</span><span class="sc">${Math.round((n.score || 0) * 100)}% afín</span></div>`).join("") : `<div class="res" style="color:var(--e-text-muted)">Nada afín. Puedes aportarlo o pedirle a Soga que lo investigue.</div>`;
 }
 document.getElementById("q").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); if (e.key === "Escape") { e.target.value = ""; buscar(); } });
 
@@ -277,7 +277,7 @@ async function verLista(tipo) {
       ${e.length ? e.map((x) => `<div class="item"><div class="t">${esc(x.titulo)}</div><div class="m">${esc(x.origen)} · ${esc(x.agente || "—")} · ${new Date(x.creado_en).toLocaleString("es-CO")}${(x.fuentes || []).length ? ` · ${x.fuentes.length} fuente(s)` : ""}</div><div class="c">${esc(String(x.contenido || "").slice(0, 400))}</div></div>`).join("") : `<div class="vacio">Vacía.</div>`}`;
   } else if (tipo === "propuestas") {
     const e = await api("/api/biblioteca/propuestas");
-    p.innerHTML = `<h2>Propuestas de Lara</h2><p class="sub">Cambios que la guardiana sugiere y que solo vos aprobás.</p>
+    p.innerHTML = `<h2>Propuestas de Lara</h2><p class="sub">Cambios que la guardiana sugiere y que solo tú aprobas.</p>
       <div class="acciones"><button class="btn" onclick="pedirLara('auditar')">Pedirle una auditoría ahora</button></div>
       ${e.length ? e.map((x) => `<div class="item"><div class="t">${esc(x.tipo)}: ${esc(x.nodo_titulo || "")}${x.nodo2_titulo ? ` + ${esc(x.nodo2_titulo)}` : ""}</div><div class="c">${esc(x.motivo)}</div><div class="m">${esc(x.propuesto_por_nombre || "sistema")} · ${new Date(x.creado_en).toLocaleString("es-CO")}</div><div class="acciones"><button class="btn acc" onclick="resolver('${x.id}',true)">Aprobar</button><button class="btn" onclick="resolver('${x.id}',false)">Rechazar</button>${x.nodo_id ? `<button class="btn" onclick="abrirNodo('${x.nodo_id}')">ver nodo</button>` : ""}</div></div>`).join("") : `<div class="vacio">Nada pendiente.</div>`}`;
   } else if (tipo === "papelera") {

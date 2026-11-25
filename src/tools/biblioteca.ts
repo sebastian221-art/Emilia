@@ -29,7 +29,7 @@ export const bibliotecaConsultar: DefTool = {
 
 export const bibliotecaAportar: DefTool = {
   nombre: "biblioteca_aportar", modulo: MODULO,
-  descripcion: "Aporta algo que aprendiste a la biblioteca compartida (va a la bandeja; la guardiana lo verifica e integra). Usalo al terminar una investigación, un experimento, una reparación o cuando descubras algo que otros agentes deberían saber. Incluí fuentes.",
+  descripcion: "Aporta algo que aprendiste a la biblioteca compartida (va a la bandeja; la guardiana lo verifica e integra). Úsalo al terminar una investigación, un experimento, una reparación o cuando descubras algo que otros agentes deberían saber. Incluí fuentes.",
   parametros: { type: "object", properties: { titulo: { type: "string", minLength: 3 }, contenido: { type: "string", description: "Lo aprendido, estructurado: qué es, cómo funciona, para qué sirve, cuándo usar/no usar, trampas, fórmula/receta si la hay.", minLength: 20 }, fuentes: { type: "array", items: { type: "string" }, description: "URLs, rutas, ejecuciones o 'experimento: …'." }, etiquetas: { type: "array", items: { type: "string" } } }, required: ["titulo", "contenido"] },
   riesgo: "escritura", requiereAprobacion: false,
   async ejecutar(a, ctx) {
@@ -40,7 +40,7 @@ export const bibliotecaAportar: DefTool = {
 
 export const bibliotecaUsar: DefTool = {
   nombre: "biblioteca_usar", modulo: MODULO,
-  descripcion: "Registra que aplicaste un conocimiento de la biblioteca y si funcionó o falló. Eso refuerza o debilita ese conocimiento para todos. Usalo cuando apliques algo que leíste en la biblioteca.",
+  descripcion: "Registra que aplicaste un conocimiento de la biblioteca y si funcionó o falló. Eso refuerza o debilita ese conocimiento para todos. Úsalo cuando apliques algo que leíste en la biblioteca.",
   parametros: { type: "object", properties: { slug: { type: "string", minLength: 2 }, resultado: { type: "string", enum: ["funciono", "fallo"] }, nota: { type: "string" } }, required: ["slug", "resultado"] },
   riesgo: "escritura", requiereAprobacion: false,
   async ejecutar(a, ctx) { await B.registrarUso(a.slug, a.resultado, { agenteId: ctx.agenteId, ejecucionId: ctx.ejecucionId, nota: a.nota }); return { ok: true, resumen: `Registrado: ${a.slug} → ${a.resultado}.` }; },
@@ -57,7 +57,7 @@ export const bibliotecaBandeja: DefTool = {
 
 export const bibliotecaIntegrar: DefTool = {
   nombre: "biblioteca_integrar", modulo: MODULO,
-  descripcion: "La guardiana convierte una entrada de la bandeja en un nodo de la red (o lo actualiza): ficha estructurada, estado, etiquetas, conexiones y evidencias. Si ya existe un nodo equivalente, pasá su slug para actualizarlo en vez de duplicar.",
+  descripcion: "La guardiana convierte una entrada de la bandeja en un nodo de la red (o lo actualiza): ficha estructurada, estado, etiquetas, conexiones y evidencias. Si ya existe un nodo equivalente, pasa su slug para actualizarlo en vez de duplicar.",
   parametros: { type: "object", properties: {
     entrada_id: { type: "string", description: "Id (o sus primeros 8 caracteres) de la entrada." },
     slug: { type: "string", description: "Slug del nodo (nuevo o existente)." },
@@ -77,7 +77,7 @@ export const bibliotecaIntegrar: DefTool = {
     const [e] = await query<any>(`SELECT * FROM bib_entradas WHERE id::text LIKE $1 AND estado='pendiente'`, [`${a.entrada_id}%`]);
     if (!e) return { ok: false, error: "No encontré esa entrada pendiente." };
     if (a.descartar) { await query(`UPDATE bib_entradas SET estado='descartada', nota_guardiana=$1, procesado_en=now() WHERE id=$2`, [a.nota ?? null, e.id]); return { ok: true, resumen: `Entrada "${e.titulo}" descartada.` }; }
-    if (!a.titulo || !a.resumen) return { ok: false, error: "Para integrar hacen falta titulo y resumen (y ficha si podés)." };
+    if (!a.titulo || !a.resumen) return { ok: false, error: "Para integrar hacen falta titulo y resumen (y ficha si puedes)." };
     const nodo = await B.crearOActualizarNodo({ slug: a.slug, titulo: a.titulo, tipo: a.tipo, resumen: a.resumen, ficha: a.ficha || {}, estado: a.estado, etiquetas: [...(a.etiquetas || []), ...(e.etiquetas || [])], aprendidoPor: e.agente_id, verificadoPor: ctx.agenteId });
     const fuentes: string[] = Array.isArray(e.fuentes) ? e.fuentes.map((f: any) => typeof f === "string" ? f : f?.url || JSON.stringify(f)) : [];
     for (const f of fuentes.slice(0, 10)) await B.evidenciar(nodo.id, { afirmacion: a.resumen.slice(0, 200), origen: e.origen === "migracion" ? "documento" : "investigacion", fuente: f, agenteId: e.agente_id }).catch(() => {});

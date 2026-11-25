@@ -98,7 +98,7 @@ export async function contextoPara(texto: string, limite = 4): Promise<string> {
     partes.push(`▸ ${n.titulo} [${n.tipo}, ${n.estado}, confianza ${Math.round(n.confianza * 100)}%${aviso}]\n  ${n.resumen}${f.formula ? `\n  Fórmula: ${String(f.formula).slice(0, 300)}` : ""}${f.trampas ? `\n  Trampas: ${String(f.trampas).slice(0, 200)}` : ""}`);
     await query(`UPDATE bib_nodos SET usos=usos+1, ultimo_uso_en=now(), fuerza=LEAST(3, fuerza+0.1) WHERE id=$1`, [n.id]);
   }
-  return `=== LO QUE SABE LA BIBLIOTECA (usalo; si lo aplicás y funciona o falla, registralo con biblioteca_usar) ===\n${partes.join("\n")}\n=== FIN BIBLIOTECA ===`;
+  return `=== LO QUE SABE LA BIBLIOTECA (úsalo; si lo aplicás y funciona o falla, registralo con biblioteca_usar) ===\n${partes.join("\n")}\n=== FIN BIBLIOTECA ===`;
 }
 
 export async function registrarUso(nodo: string, resultado: "consultado" | "funciono" | "fallo", p: { agenteId?: string | null; ejecucionId?: string | null; nota?: string } = {}) {

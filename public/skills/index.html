@@ -42,13 +42,13 @@
   <div class="top">
     <div>
       <h1>Skills</h1>
-      <p class="sub">Procedimientos. Las de <b>código</b> (<code>src/skills/</code>) se registran solas. Las <b>guiadas</b> las escribís acá: un procedimiento en lenguaje natural + las tools que puede usar; el modelo las ejecuta en su propio sub-loop.</p>
+      <p class="sub">Procedimientos. Las de <b>código</b> (<code>src/skills/</code>) se registran solas. Las <b>guiadas</b> las escribes acá: un procedimiento en lenguaje natural + las tools que puede usar; el modelo las ejecuta en su propio sub-loop.</p>
     </div>
     <button class="primario" onclick="nueva()">+ Nueva guiada</button>
   </div>
   <div class="layout">
     <div class="izq" id="lista"></div>
-    <div class="panel" id="panel"><div class="vacio">Elegí una skill o creá una guiada.</div></div>
+    <div class="panel" id="panel"><div class="vacio">Elige una skill o crea una guiada.</div></div>
   </div>
 </main>
 <script src="/comun/espejo.js"></script>
@@ -103,7 +103,7 @@ function formGuiada(s) {
     </div>
     <label>Descripción — qué hace (lo lee el modelo para elegirla)</label><textarea id="g-desc" rows="2">${esc(s?.descripcion || sec.identidad?.descripcion || "")}</textarea>
     <label>Cuándo usarla (señales)</label><input id="g-cuando" value="${esc(sec.identidad?.cuando_usar || "")}" placeholder="Cuando el usuario pide un reporte o resumen de una campaña." />
-    <label>Procedimiento — los pasos en lenguaje natural</label><textarea id="g-proc" rows="6" placeholder="1. Consultá X con la tool tal.&#10;2. Si Y, hacé Z.&#10;3. Devolvé el resultado así.">${esc(sec.procedimiento?.pasos || "")}</textarea>
+    <label>Procedimiento — los pasos en lenguaje natural</label><textarea id="g-proc" rows="6" placeholder="1. Consulta X con la tool tal.&#10;2. Si Y, haz Z.&#10;3. Devuelve el resultado así.">${esc(sec.procedimiento?.pasos || "")}</textarea>
     <div class="dos">
       <div><label>Qué datos necesita para arrancar</label><input id="g-entradas" value="${esc(sec.io?.entradas || "")}" /></div>
       <div><label>Qué devuelve al terminar</label><input id="g-salida" value="${esc(sec.io?.salida || "")}" /></div>
@@ -154,7 +154,7 @@ function leerGuiada() {
 async function guardar(id) {
   const datos = leerGuiada();
   if (!/^[a-z][a-z0-9_]{2,63}$/.test(datos.nombre)) { alert("El nombre debe ser snake_case en minúsculas (ej. reportar_campana)."); return; }
-  if (!datos.secciones.procedimiento.pasos.trim()) { alert("Escribí el procedimiento."); return; }
+  if (!datos.secciones.procedimiento.pasos.trim()) { alert("Escribe el procedimiento."); return; }
   try {
     if (id) await patch(`/api/skills/${id}`, datos); else { const r = await post("/api/skills", datos); id = r.id; }
     await cargar(); editar(id);
@@ -163,7 +163,7 @@ async function guardar(id) {
 async function borrar(id) {
   if (!confirm("¿Borrar esta skill?")) return;
   await del(`/api/skills/${id}`); seleccion = null; await cargar();
-  document.getElementById("panel").innerHTML = `<div class="vacio">Elegí una skill o creá una guiada.</div>`;
+  document.getElementById("panel").innerHTML = `<div class="vacio">Elige una skill o crea una guiada.</div>`;
 }
 async function probar(nombre) {
   const form = document.getElementById("form");

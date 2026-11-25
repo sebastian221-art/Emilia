@@ -43,7 +43,7 @@ export function crearContexto(
       // la aprobación solo existe en el loop del agente y en los flujos. Si la acción la
       // necesita, la skill termina y el agente la pide con su propia llamada.
       if (registro.tool(nombre)?.requiereAprobacion) {
-        return { ok: false, error: `"${nombre}" requiere aprobación del jefe y no puede ejecutarse dentro de una skill. Terminá la skill y llamá ${nombre} directamente para que se pida el OK.` };
+        return { ok: false, error: `"${nombre}" requiere aprobación del jefe y no puede ejecutarse dentro de una skill. Termina la skill y llama ${nombre} directamente para que se pida el OK.` };
       }
       return ejecutarTool(nombre, args, ctx);
     },
@@ -63,7 +63,7 @@ export async function ejecutarTool(
   args: Record<string, unknown>,
   ctx?: ContextoEjecucion,
 ): Promise<ResultadoTool> {
-  if (typeof nombreOFila !== "string") return { ok: false, error: "Las tools ya no se ejecutan por fila: usá el nombre del registro." };
+  if (typeof nombreOFila !== "string") return { ok: false, error: "Las tools ya no se ejecutan por fila: usa el nombre del registro." };
   const nombre = nombreOFila;
   const contexto = ctx || crearContexto(null, null);
 

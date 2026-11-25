@@ -41,8 +41,8 @@ export const capacidadNueva: DefFlujo = {
     { id: "fin_fallo", tipo: "fin", fallo: true, resultado: (c) => ({ nombre: c.nombre, error: "No quedó verificada.", sandbox_id: c.impl?.sandbox_id, informe: c.impl?.informe }) },
   ],
   reporte: (c, r: any) => r?.error
-    ? `⚠ No pude dejar lista la ${c.tipo} ${c.nombre}. Sandbox ${r.sandbox_id}; mirá el diff en Código.`
-    : `✅ Nueva capacidad activa: *${c.nombre}* (${c.tipo}), asignada a ${c.asignar_a || "Emilia"}. ${r?.definicion?.descripcion || ""}${String(r?.informe || "").includes("env") ? "\n(Revisá si el informe pide una variable en el .env.)" : ""}`,
+    ? `⚠ No pude dejar lista la ${c.tipo} ${c.nombre}. Sandbox ${r.sandbox_id}; mira el diff en Código.`
+    : `✅ Nueva capacidad activa: *${c.nombre}* (${c.tipo}), asignada a ${c.asignar_a || "Emilia"}. ${r?.definicion?.descripcion || ""}${String(r?.informe || "").includes("env") ? "\n(Revisa si el informe pide una variable en el .env.)" : ""}`,
 };
 
 export const flujosCapacidad: DefFlujo[] = [capacidadNueva];

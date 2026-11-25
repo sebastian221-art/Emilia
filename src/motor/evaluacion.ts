@@ -31,7 +31,7 @@ export async function correrEvaluacion(evaluacionId: string): Promise<{ corridaI
     const conv = await obtenerOCrearConversacion(ag.id, "evaluacion" as any, `${corrida.id.slice(0, 8)}-${i}`);
     let respuesta = "", tools: string[] = [], error: string | undefined;
     try {
-      const r = await correrTarea(ag.id, caso.mensaje, { conversacionId: conv.id, origen: "evaluacion", simulado: true, contextoCanal: "Esto es una EVALUACIÓN: respondé como si fuera el jefe por WhatsApp. Las acciones sensibles están simuladas." });
+      const r = await correrTarea(ag.id, caso.mensaje, { conversacionId: conv.id, origen: "evaluacion", simulado: true, contextoCanal: "Esto es una EVALUACIÓN: responde como si fuera el jefe por WhatsApp. Las acciones sensibles están simuladas." });
       respuesta = r.respuesta;
       tools = (await query<{ detalle: string }>(`SELECT detalle FROM pasos WHERE ejecucion_id=$1 AND tipo='tool' ORDER BY creado_en`, [r.ejecucionId])).map((p) => p.detalle.replace(/^\[SIMULADO\]\s*/, "").split("(")[0].trim());
     } catch (e: any) { error = e?.message || String(e); }
@@ -44,7 +44,7 @@ export async function correrEvaluacion(evaluacionId: string): Promise<{ corridaI
     let pJuez: number | null = null, juicio = conAcciones ? "(caso con acciones: se puntúa por el camino de tools, no por el texto)" : "";
     if (caso.esperado && respuesta && !conAcciones) {
       try {
-        const j = await llamarModelo([{ role: "user", content: `Sos un evaluador estricto. Pedido del jefe: "${caso.mensaje}"\nCriterio de lo esperado: "${caso.esperado}"\nRespuesta del agente: "${respuesta.slice(0, 2000)}"\nTools que usó: ${tools.join(", ") || "ninguna"}.\nRespondé SOLO JSON: {"puntaje": 0.0-1.0, "juicio": "una frase: qué cumplió y qué no"}.` }], []);
+        const j = await llamarModelo([{ role: "user", content: `Eres un evaluador estricto. Pedido del jefe: "${caso.mensaje}"\nCriterio de lo esperado: "${caso.esperado}"\nRespuesta del agente: "${respuesta.slice(0, 2000)}"\nTools que usó: ${tools.join(", ") || "ninguna"}.\nRespondé SOLO JSON: {"puntaje": 0.0-1.0, "juicio": "una frase: qué cumplió y qué no"}.` }], []);
         const parsed = JSON.parse(j.texto.replace(/```json|```/g, "").trim());
         pJuez = Math.max(0, Math.min(1, Number(parsed.puntaje))); juicio = String(parsed.juicio || "");
       } catch { juicio = "(no se pudo juzgar)"; }

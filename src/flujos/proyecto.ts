@@ -11,7 +11,7 @@ import type { DefFlujo } from "../registro/tipos.js";
 export const proyectoNuevoCompleto: DefFlujo = {
   nombre: "proyecto_nuevo_completo",
   modulo: "proyecto",
-  descripcion: "Crea un proyecto desde cero, le implementa la primera funcionalidad con el Senior (verificada y revisada), la integra con tu aprobación, lo arranca, comprueba salud y, si querés, lo sube a GitHub. Te reporta cada paso.",
+  descripcion: "Crea un proyecto desde cero, le implementa la primera funcionalidad con el Senior (verificada y revisada), la integra con tu aprobación, lo arranca, comprueba salud y, si quieres, lo sube a GitHub. Te reporta cada paso.",
   parametros: {
     type: "object",
     properties: {
@@ -41,10 +41,10 @@ export const proyectoNuevoCompleto: DefFlujo = {
     { id: "a_github",   tipo: "condicion", si: (c) => c.subir_a_github !== false, entonces: "repo", sino: "fin" },
     { id: "repo",       tipo: "tool", tool: "github_crear_repo", args: (c) => ({ proyecto: c.nombre, privado: c.privado !== false, descripcion: c.descripcion }), siFalla: "continuar", guardarEn: "repo" },   // ⏸ automático
     { id: "fin",        tipo: "fin", resultado: (c) => ({ proyecto: c.nombre, ruta: c.creado?.ruta, salud: c.salud, repo: c.repo?.url, informe: c.impl?.informe }) },
-    { id: "fin_sin_integrar", tipo: "fin", fallo: true, resultado: (c) => ({ proyecto: c.nombre, error: "La implementación no quedó verificada; revisá el sandbox.", sandbox_id: c.impl?.sandbox_id, informe: c.impl?.informe }) },
+    { id: "fin_sin_integrar", tipo: "fin", fallo: true, resultado: (c) => ({ proyecto: c.nombre, error: "La implementación no quedó verificada; revisa el sandbox.", sandbox_id: c.impl?.sandbox_id, informe: c.impl?.informe }) },
   ],
   reporte: (c, r: any) => r?.error
-    ? `⚠ ${c.nombre}: se creó el proyecto pero la primera funcionalidad no quedó en verde. Sandbox ${r.sandbox_id}. Mirá el diff en Código.`
+    ? `⚠ ${c.nombre}: se creó el proyecto pero la primera funcionalidad no quedó en verde. Sandbox ${r.sandbox_id}. Mira el diff en Código.`
     : `✅ Proyecto *${c.nombre}* listo en ${r?.ruta}.\nSalud: ${r?.salud?.ok ? `OK (${r.salud.status}, ${r.salud.latencia_ms} ms)` : r?.salud?.error || "sin verificar"}${r?.repo ? `\nGitHub: ${r.repo}` : ""}`,
 };
 

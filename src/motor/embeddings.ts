@@ -17,7 +17,7 @@ async function cargar() {
     t.env.allowLocalModels = true;
     pipe = await t.pipeline("feature-extraction", MODELO, { quantized: true });
     console.log(`[embeddings] modelo ${MODELO} listo.`);
-  } catch (e: any) { console.warn(`[embeddings] sin @xenova/transformers (${e?.message?.slice(0, 80)}); uso hashing. Instalá con: npm install @xenova/transformers`); }
+  } catch (e: any) { console.warn(`[embeddings] sin @xenova/transformers (${e?.message?.slice(0, 80)}); uso hashing. Instala con: npm install @xenova/transformers`); }
   return pipe;
 }
 

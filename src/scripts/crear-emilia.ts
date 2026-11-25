@@ -92,7 +92,7 @@ async function main() {
   console.log(`   canales: whatsapp, panel\n`);
   const faltan = ["GROQ_API_KEY", "WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID", "WHATSAPP_NUMERO_JEFE", "JELCOM_API_KEY"].filter((k) => !process.env[k]);
   if (faltan.length) console.log(`⚠ Faltan en el .env: ${faltan.join(", ")}`);
-  else console.log(`.env completo. Arrancá con npm run dev y escribile por WhatsApp.`);
+  else console.log(`.env completo. Arranca con npm run dev y escribile por WhatsApp.`);
   await db.end();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

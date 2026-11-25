@@ -45,11 +45,11 @@
 <nav></nav>
 <main>
   <h1>Voz</h1>
-  <p class="sub">Hablá con Emilia desde el PC. Hands-free: ella escucha, piensa, contesta con su voz y vuelve a escuchar. Si hablás mientras ella habla, se calla y te escucha.</p>
+  <p class="sub">Habla con Emilia desde el PC. Hands-free: ella escucha, piensa, contesta con su voz y vuelve a escuchar. Si hablas mientras ella habla, se calla y te escucha.</p>
   <div class="esc">
     <div class="centro">
       <div class="orbe" id="orbe" title="Clic: hablar / parar"></div>
-      <div class="estado" id="estado">Tocá el orbe o activá "Escuchar siempre".</div>
+      <div class="estado" id="estado">Toca el orbe o activa "Escuchar siempre".</div>
       <div class="ultimo" id="ultimo"></div>
       <div class="controles">
         <button class="btn acc" id="bManos" onclick="toggleManosLibres()">🎙 Escuchar siempre</button>
@@ -65,7 +65,7 @@
         <div class="ajuste"><span>Sensibilidad del micrófono</span><input type="range" id="umbral" min="3" max="40" value="8"></div>
         <div class="ajuste"><span>Silencio para cortar (ms)</span><input type="range" id="silencio" min="400" max="2500" step="100" value="700"></div>
         <div class="ajuste"><span>Interrumpirla al hablar</span><input type="checkbox" id="bargein" checked></div>
-        <div class="escribir" style="margin-top:10px"><input id="txt" placeholder="o escribí y ella te contesta con voz…"><button class="btn" onclick="enviarTexto()">Enviar</button></div>
+        <div class="escribir" style="margin-top:10px"><input id="txt" placeholder="o escribe y ella te contesta con voz…"><button class="btn" onclick="enviarTexto()">Enviar</button></div>
         <div id="avisoMic" class="aviso" style="display:none;margin-top:8px"></div>
       </div>
     </div>
@@ -83,7 +83,7 @@ const umbral = () => Math.max(Number(document.getElementById("umbral").value), r
 const msSilencio = () => Number(document.getElementById("silencio").value);
 const bargein = () => document.getElementById("bargein").checked;
 function setEstado(t, clase) { estado.textContent = t; orbe.className = "orbe" + (clase ? " " + clase : ""); }
-function agregar(rol, t) { const d = document.createElement("div"); d.className = "msg " + (rol === "u" ? "u" : "a"); d.innerHTML = `<div class="h">${rol === "u" ? "vos" : "Emilia"} · ${new Date().toLocaleTimeString("es-CO")}</div><span class="t">${esc(t)}</span>`; hist.appendChild(d); hist.scrollTop = hist.scrollHeight; return d; }
+function agregar(rol, t) { const d = document.createElement("div"); d.className = "msg " + (rol === "u" ? "u" : "a"); d.innerHTML = `<div class="h">${rol === "u" ? "tú" : "Emilia"} · ${new Date().toLocaleTimeString("es-CO")}</div><span class="t">${esc(t)}</span>`; hist.appendChild(d); hist.scrollTop = hist.scrollHeight; return d; }
 
 async function micro() {
   if (stream) return true;
@@ -125,7 +125,7 @@ async function empezar() {
 function terminar() { if (!grabando) return; grabando = false; try { rec.stop(); } catch {} }
 async function enviarAudio() {
   const blob = new Blob(trozos, { type: "audio/webm" });
-  if (blob.size < 3000) { setEstado(manosLibres ? "Escuchando…" : "Muy corto. Tocá el orbe y hablá.", manosLibres ? "escuchando" : ""); return; }
+  if (blob.size < 3000) { setEstado(manosLibres ? "Escuchando…" : "Muy corto. Toca el orbe y habla.", manosLibres ? "escuchando" : ""); return; }
   pensando = true; setEstado("Pensando…", "pensando");
   try { const r = await fetch("/api/voz/charla", { method: "POST", headers: { "Content-Type": "audio/webm" }, body: blob }); await consumir(r); }
   catch (e) { setEstado("Error: " + e.message, ""); pensando = false; }
@@ -154,7 +154,7 @@ function manejar(ev) {
   if (ev.tipo === "herramienta") { setEstado("Mirando el sistema…", "pensando"); return; }
   if (ev.tipo === "audio") { if (!primerAudio) { primerAudio = performance.now() - t0turno; } colaAudio.push(ev); reproducirCola(); return; }
   if (ev.tipo === "error") { console.warn("voz:", ev.texto); if (!ev.indice && ev.indice !== 0) setEstado("Error: " + ev.texto, ""); return; }
-  if (ev.tipo === "fin") { pensando = false; const fin = () => setEstado(manosLibres ? `Escuchando… (respuesta en ${(primerAudio / 1000).toFixed(1)} s)` : "Tocá el orbe para hablar.", manosLibres ? "escuchando" : ""); if (!reproduciendo && !colaAudio.length) fin(); else alTerminarCola = fin; }
+  if (ev.tipo === "fin") { pensando = false; const fin = () => setEstado(manosLibres ? `Escuchando… (respuesta en ${(primerAudio / 1000).toFixed(1)} s)` : "Toca el orbe para hablar.", manosLibres ? "escuchando" : ""); if (!reproduciendo && !colaAudio.length) fin(); else alTerminarCola = fin; }
 }
 let alTerminarCola = null;
 function reproducirCola() {
@@ -167,7 +167,7 @@ function reproducirCola() {
 function callar() { colaAudio = []; alTerminarCola = null; if (audioActual) { try { audioActual.pause(); } catch {} audioActual = null; } reproduciendo = false; hablando = false; }
 async function toggleManosLibres() {
   manosLibres = !manosLibres; const b = document.getElementById("bManos");
-  if (manosLibres) { if (!(await micro())) { manosLibres = false; return; } b.classList.add("on"); b.textContent = "🎙 Escuchando siempre (clic para parar)"; setEstado("Escuchando… hablá cuando quieras.", "escuchando"); }
+  if (manosLibres) { if (!(await micro())) { manosLibres = false; return; } b.classList.add("on"); b.textContent = "🎙 Escuchando siempre (clic para parar)"; setEstado("Escuchando… habla cuando quieras.", "escuchando"); }
   else { b.classList.remove("on"); b.textContent = "🎙 Escuchar siempre"; terminar(); setEstado("Pausado.", ""); }
 }
 function pushInicio() { if (!manosLibres) empezar(); }

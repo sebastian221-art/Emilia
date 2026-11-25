@@ -14,7 +14,7 @@ export const sistemaDiagnostico: DefSkill = {
   nombre: "sistema_diagnostico",
   modulo: MODULO,
   descripcion: "Corre un diagnóstico del motor: comprueba hora, eco y una espera corta, y devuelve un informe de qué funcionó. Úsala cuando te pidan verificar que el sistema de herramientas está sano.",
-  cuandoUsar: "Cuando el usuario pide 'probá el sistema', 'hacé un diagnóstico' o 'verificá que las herramientas funcionan'.",
+  cuandoUsar: "Cuando el usuario pide 'prueba el sistema', 'haz un diagnóstico' o 'verificá que las herramientas funcionan'.",
   parametros: {
     type: "object",
     properties: {

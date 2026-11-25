@@ -38,7 +38,7 @@ export const proyectoCrear: DefTool = {
 
 export const proyectoInstalar: DefTool = {
   nombre: "proyecto_instalar", modulo: MODULO_P,
-  descripcion: "Instala/actualiza las dependencias del proyecto REAL (cmd_install o npm install). No necesita sandbox. Usalo antes de arrancar un proyecto recién integrado o clonado.",
+  descripcion: "Instala/actualiza las dependencias del proyecto REAL (cmd_install o npm install). No necesita sandbox. Úsalo antes de arrancar un proyecto recién integrado o clonado.",
   parametros: { type: "object", properties: { proyecto: PROY }, required: ["proyecto"] },
   riesgo: "escritura", requiereAprobacion: false, timeoutSeg: 900,
   async ejecutar(a) {
@@ -57,7 +57,7 @@ export const githubCrearRepo: DefTool = {
   async ejecutar(a) {
     const p = await proy(a.proyecto);
     const ya = await fullNameDesdeRemoto(p.ruta);
-    if (ya) return { ok: false, error: `El proyecto ya tiene remoto en GitHub: ${ya}. Usá github_push.` };
+    if (ya) return { ok: false, error: `El proyecto ya tiene remoto en GitHub: ${ya}. Usa github_push.` };
     const u = await usuario();
     const repo = await crearRepo({ nombre: p.nombre, descripcion: a.descripcion || p.notas.split("\n")[0], privado: a.privado !== false });
     const c = await conectarRemoto(p.ruta, repo.clone_url);
@@ -70,14 +70,14 @@ export const githubCrearRepo: DefTool = {
 
 export const githubPush: DefTool = {
   nombre: "github_push", modulo: MODULO_G,
-  descripcion: "Sube a GitHub la rama base del repo real de un proyecto, o la rama de un sandbox si pasás sandbox_id. Requiere aprobación.",
+  descripcion: "Sube a GitHub la rama base del repo real de un proyecto, o la rama de un sandbox si pasas sandbox_id. Requiere aprobación.",
   parametros: { type: "object", properties: { proyecto: PROY, sandbox_id: { type: "string", description: "Subir la rama de este sandbox en vez de la base." } }, required: ["proyecto"] },
   riesgo: "ejecucion", requiereAprobacion: true, timeoutSeg: 300,
   async ejecutar(a) {
     const p = await proy(a.proyecto);
     let cwd = p.ruta, rama = p.rama_base;
     if (a.sandbox_id) { const sb = await obtenerSandbox(a.sandbox_id); if (!sb) return { ok: false, error: "Sandbox no encontrado." }; cwd = sb.ruta; rama = sb.rama; }
-    if (!(await fullNameDesdeRemoto(p.ruta))) return { ok: false, error: "El proyecto no tiene remoto. Usá github_crear_repo primero." };
+    if (!(await fullNameDesdeRemoto(p.ruta))) return { ok: false, error: "El proyecto no tiene remoto. Usa github_crear_repo primero." };
     const r = await pushConToken(cwd, rama, { setUpstream: true });
     return r.codigo === 0 ? { ok: true, resumen: `Rama ${rama} subida.\n${(r.stderr || r.stdout).slice(-400)}` } : { ok: false, error: (r.stderr || r.stdout).slice(-800) };
   },
@@ -94,7 +94,7 @@ export const githubAbrirPr: DefTool = {
     const fullName = await fullNameDesdeRemoto(sb.proyecto.ruta);
     if (!fullName) return { ok: false, error: "El proyecto no tiene remoto en GitHub (github_crear_repo)." };
     const st = await ejecutarComando(sb.ruta, "git status --porcelain", 20);
-    if (st.stdout.trim()) return { ok: false, error: "El sandbox tiene cambios sin commit. Hacé codigo_commit primero." };
+    if (st.stdout.trim()) return { ok: false, error: "El sandbox tiene cambios sin commit. Haz codigo_commit primero." };
     const push = await pushConToken(sb.ruta, sb.rama, { setUpstream: true });
     if (push.codigo !== 0) return { ok: false, error: `Push falló: ${(push.stderr || push.stdout).slice(-600)}` };
     const pr = await abrirPR({ fullName, head: sb.rama, base: sb.proyecto.rama_base, titulo: a.titulo, cuerpo: a.descripcion, borrador: !!a.borrador });

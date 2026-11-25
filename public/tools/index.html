@@ -39,12 +39,12 @@
   <div class="top">
     <div>
       <h1>Tools</h1>
-      <p class="sub">Operaciones tipadas contra sistemas. Se definen en código (<code>src/tools/</code>) y se registran solas al arrancar. Acá las ves y las probás.</p>
+      <p class="sub">Operaciones tipadas contra sistemas. Se definen en código (<code>src/tools/</code>) y se registran solas al arrancar. Acá las ves y las pruebas.</p>
     </div>
   </div>
   <div class="layout">
     <div class="izq" id="lista"></div>
-    <div class="panel" id="panel"><div class="vacio">Elegí una tool a la izquierda.</div></div>
+    <div class="panel" id="panel"><div class="vacio">Elige una tool a la izquierda.</div></div>
   </div>
 </main>
 <script src="/comun/espejo.js"></script>
@@ -84,7 +84,7 @@ function seleccionar(nombre) {
     <div class="sec"><h3>Probar</h3>
       <div id="form">${formEsquema(t.parametros)}</div>
       <button class="primario" style="margin-top:12px" onclick="probar()">▶ Ejecutar ahora</button>
-      ${t.requiereAprobacion ? `<span style="font-size:11px;color:var(--e-text-muted);margin-left:8px">Desde acá se ejecuta directo: la aprobación la estás dando vos.</span>` : ""}
+      ${t.requiereAprobacion ? `<span style="font-size:11px;color:var(--e-text-muted);margin-left:8px">Desde acá se ejecuta directo: la aprobación la estás dando tú.</span>` : ""}
       <div id="resultado"></div>
     </div>
     <div class="sec"><h3>Cómo la ve el modelo</h3>

@@ -68,7 +68,7 @@ export async function escribirDiario(ahora = new Date()): Promise<{ diario: stri
   const titulo = `Diario del ${new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", day: "numeric", month: "long", year: "numeric" }).format(ahora)}`;
   await guardarMomento({ titulo, contenido: r.diario, importancia: 0.45, etiquetas: ["diario"], cuando: ahora.toISOString() });
   let crecio = false;
-  if (r.crecer && Object.keys(r.crecer).some((k) => k !== "motivo")) { const { version } = await leerYo(); crecio = (await crecerYo(r.crecer, r.crecer.motivo || "lo que viví hoy")) !== version; }
+  if (r.crecer && Object.keys(r.crecer).some((k) => k !== "motivo")) { const { version } = await leerYo(); crecio = (await crecerYo(r.crecer, r.crecer.motivo || "lo que vive hoy")) !== version; }
   for (const c of (r.contar || []).slice(0, 2)) await query(`INSERT INTO alma_pendientes (tipo, texto) VALUES ('contar', $1)`, [String(c).slice(0, 300)]);
   if (r.curiosidad) await query(`INSERT INTO alma_pendientes (tipo, texto) VALUES ('curiosidad', $1)`, [String(r.curiosidad).slice(0, 200)]);
   if (r.asentar) await sentirCambio(r.asentar, "Escribir el diario me ayudó a asentar el día", null, ahora);
