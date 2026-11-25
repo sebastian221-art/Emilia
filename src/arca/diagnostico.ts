@@ -79,7 +79,9 @@ async function postgres(): Promise<Omit<Chequeo, "ms">> {
     const m = String(e?.message || e);
     const pasos = /ECONNREFUSED|connect/i.test(m) ? ["PostgreSQL no está corriendo: abre «Servicios» de Windows y arranca postgresql-x64-16 (o reinstálalo con Arca)"]
       : /password|autentica/i.test(m) ? ["La clave de DATABASE_URL no es la del usuario postgres"]
-      : /does not exist|no existe/i.test(m) ? ["Falta crear la base: npm run crear-base"] : ["Revisa DATABASE_URL"];
+      : /does not exist|no existe/i.test(m) ? ["Falta crear la base: npm run crear-base"]
+      : /timeout|ETIMEDOUT/i.test(m) ? [`No contestó nadie en ${(() => { try { const u = new URL(process.env.DATABASE_URL!); return `${u.hostname}:${u.port || 5432}`; } catch { return "esa dirección"; } })()}`, "Si es local: el servicio de PostgreSQL está apagado. En PowerShell: Get-Service *postgres* (y Start-Service con el nombre que salga, como administrador)", "Si usas «localhost», prueba con 127.0.0.1 en DATABASE_URL", "Si es una base en la nube (Railway), revisa que la URL sea la pública"]
+      : ["Revisa DATABASE_URL"];
     return { ...base, estado: "error", detalle: m.slice(0, 200), pasos, instalable: /ECONNREFUSED/.test(m) ? "postgres" : undefined };
   } finally { await c.end().catch(() => {}); }
 }

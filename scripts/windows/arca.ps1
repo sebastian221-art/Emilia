@@ -27,9 +27,12 @@ if (-not (Tiene "git")) {
   $r = Read-Host "Git no está (lo uso para las actualizaciones). ¿Lo instalo? (s/n)"
   if ($r -match "^[sS]") { winget install --id Git.Git -e --silent --accept-source-agreements --accept-package-agreements; Refrescar-Path }
 }
-if (-not (Test-Path (Join-Path $raiz "node_modules\tsx"))) {
+# ¿Faltan paquetes? (también después de un git pull que trajo dependencias nuevas)
+$pkg = Get-Content (Join-Path $raiz "package.json") -Raw | ConvertFrom-Json
+$faltan = @($pkg.dependencies.PSObject.Properties.Name + $pkg.devDependencies.PSObject.Properties.Name | Where-Object { -not (Test-Path (Join-Path $raiz "node_modules\$_")) })
+if ($faltan.Count -gt 0) {
   Write-Host "Instalando los paquetes de Emilia (unos minutos la primera vez)…" -ForegroundColor Cyan
-  npm ci --no-audit --no-fund
-  if ($LASTEXITCODE -ne 0) { Write-Host "npm ci falló. Copia el error y pásaselo a Arca o a Sage." -ForegroundColor Red; exit 1 }
+  npm install --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) { Write-Host "npm install falló. Copia el error y pásaselo a Arca o a Sage." -ForegroundColor Red; exit 1 }
 }
 npm run arca
