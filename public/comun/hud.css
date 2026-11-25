@@ -1,0 +1,55 @@
+/* ═══ EMILIA OS — HUD holográfico (tema común de todo el panel) ═══ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --h-bg: #04070d; --h-bg2: #070c16;
+  --h-glass: rgba(10, 18, 32, 0.62); --h-glass-2: rgba(14, 24, 42, 0.78);
+  --h-line: rgba(110, 220, 255, 0.16); --h-line-2: rgba(110, 220, 255, 0.32);
+  --h-cyan: #5ee7ff; --h-cyan-2: #22d3ee; --h-violet: #a78bfa; --h-pink: #f9a8d4;
+  --h-text: #e6f6ff; --h-text-2: #9fb6c8; --h-muted: #5f7a90;
+  --h-ok: #34d399; --h-warn: #fbbf24; --h-bad: #f87171; --h-meet: #a78bfa;
+  --h-font: 'Space Grotesk', system-ui, sans-serif; --h-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* compatibilidad con estilos.css de las páginas existentes */
+  --e-bg: var(--h-bg); --e-bg2: var(--h-bg2); --e-surface: rgba(12, 20, 36, 0.72); --e-surface-1: rgba(16, 28, 48, 0.85);
+  --e-border: var(--h-line); --e-border-strong: var(--h-line-2); --e-text: var(--h-text); --e-text-sec: var(--h-text-2); --e-text-muted: var(--h-muted);
+  --e-accent: var(--h-cyan); --e-accent2: #0891b2; --e-accent-bg: rgba(94, 231, 255, 0.10); --e-star: #bae6fd; --syne: var(--h-font);
+}
+html, body { background: var(--h-bg) !important; }
+body { font-family: var(--h-font) !important; color: var(--h-text); }
+body::before { background:
+  radial-gradient(1200px 600px at 50% -10%, rgba(34, 211, 238, 0.10), transparent 70%),
+  radial-gradient(900px 500px at 100% 110%, rgba(167, 139, 250, 0.09), transparent 70%),
+  linear-gradient(rgba(94,231,255,0.025) 1px, transparent 1px) 0 0 / 100% 4px !important; }
+body.con-dock { padding-left: 76px; }
+body.con-dock > nav { display: none !important; }
+h1, h2, h3, .marca { font-family: var(--h-font) !important; letter-spacing: .01em; }
+h1 { font-weight: 600; }
+
+/* ── Dock lateral ── */
+.dock { position: fixed; left: 12px; top: 12px; bottom: 12px; width: 56px; z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0;
+  background: var(--h-glass); border: 1px solid var(--h-line); border-radius: 18px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 10px 40px rgba(0,0,0,.5), inset 0 0 24px rgba(94,231,255,.04); }
+.dock .logo { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 8px; font-weight: 700; font-size: 17px; color: #04121a;
+  background: conic-gradient(from 210deg, var(--h-cyan), var(--h-violet), var(--h-pink), var(--h-cyan)); box-shadow: 0 0 22px rgba(94,231,255,.45); }
+.dock a { position: relative; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--h-text-2); text-decoration: none; transition: .18s; }
+.dock a svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.dock a:hover { color: var(--h-cyan); background: rgba(94,231,255,.08); }
+.dock a.activo { color: var(--h-cyan); background: rgba(94,231,255,.12); box-shadow: inset 0 0 0 1px var(--h-line-2), 0 0 16px rgba(94,231,255,.25); }
+.dock a.activo::before { content: ''; position: absolute; left: -11px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--h-cyan); box-shadow: 0 0 10px var(--h-cyan); }
+.dock a .tip { position: absolute; left: 52px; top: 50%; transform: translateY(-50%) translateX(-4px); white-space: nowrap; pointer-events: none; opacity: 0; transition: .15s;
+  font-size: 12px; padding: 5px 10px; border-radius: 8px; background: var(--h-glass-2); border: 1px solid var(--h-line); color: var(--h-text); }
+.dock a:hover .tip { opacity: 1; transform: translateY(-50%); }
+.dock a .num { position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px; font: 600 10px/16px var(--h-mono); color: #1a0f00; background: var(--h-warn); box-shadow: 0 0 10px rgba(251,191,36,.6); }
+.dock .sep { width: 26px; height: 1px; background: var(--h-line); margin: 6px 0; }
+.dock .abajo { margin-top: auto; }
+@media (max-width: 720px) { body.con-dock { padding-left: 0; padding-bottom: 70px; } .dock { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; height: 56px; flex-direction: row; justify-content: space-around; padding: 0 8px; } .dock .logo, .dock .sep, .dock a .tip { display: none; } .dock .abajo { margin-top: 0; } .dock a.activo::before { display: none; } }
+
+/* ── Piezas comunes en el nuevo estilo ── */
+.vidrio { background: var(--h-glass); border: 1px solid var(--h-line); border-radius: 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 var(--h-mono); padding: 5px 9px; border-radius: 999px; border: 1px solid var(--h-line); color: var(--h-text-2); background: rgba(255,255,255,.02); }
+.pill i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.mono { font-family: var(--h-mono); }
+button.h-btn { font: 500 12px var(--h-font); color: var(--h-text); background: rgba(94,231,255,.08); border: 1px solid var(--h-line-2); border-radius: 10px; padding: 7px 12px; cursor: pointer; transition: .15s; }
+button.h-btn:hover { background: rgba(94,231,255,.16); box-shadow: 0 0 14px rgba(94,231,255,.2); }
+button.h-btn.ok { border-color: rgba(52,211,153,.5); color: #a7f3d0; background: rgba(52,211,153,.12); }
+button.h-btn.no { border-color: rgba(248,113,113,.45); color: #fecaca; background: rgba(248,113,113,.10); }
+::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: rgba(94,231,255,.15); border-radius: 8px; } ::-webkit-scrollbar-track { background: transparent; }

@@ -32,6 +32,7 @@ import { rutasEventos } from "./rutas/eventos.js";
 import { recibirWebhook } from "./motor/eventos.js";
 import { rutasBiblioteca } from "./rutas/biblioteca.js";
 import { rutasVoz } from "./rutas/voz.js";
+import { rutasOficina } from "./rutas/oficina.js";
 import { rutasActividad } from "./rutas/actividad.js";
 import { iniciarReloj } from "./motor/eventos.js";
 import { limpiarArchivosViejos } from "./dominio/archivos.js";
@@ -51,6 +52,8 @@ app.use(rutasInterno);      // solo procesos lanzados por Emilia (token interno)
 app.use(rutasEsqueleto);
 app.get(/\.html$/, (req, res, next) => { const f = path.join(PUB, path.normalize(req.path)); if (f.startsWith(PUB) && existsSync(f)) return enviarHtml(res, f); next(); });
 app.use(express.static(PUB, { index: false }));
+// three.js para la oficina 3D (local: funciona sin internet).
+app.use("/vendor/three", express.static(path.resolve("node_modules/three"), { index: false, maxAge: "7d" }));
 
 // ── Rutas de API ──────────────────────────────────────────────────────────
 app.use(rutasCrear);
@@ -68,6 +71,7 @@ app.use(rutasEventos);
 app.use(rutasBiblioteca);
 app.use(rutasVoz);
 app.use(rutasActividad);
+app.use(rutasOficina);
 
 // ── Webhook de WhatsApp ──
 app.get("/webhook/whatsapp", verificarWebhook);
@@ -77,30 +81,46 @@ app.post("/webhook/whatsapp", recibirMensaje);
 // La lista vive acá (una sola vez). /comun/menu.js se genera desde esta lista y
 // cada HTML que el servidor entrega recibe ese script inyectado: no hay que
 // tocar el <nav> de ninguna página para agregar una nueva.
-const MENU: { ruta: string; titulo: string }[] = [
-  { ruta: "/crear", titulo: "Crear agente" },
-  { ruta: "/agentes", titulo: "Ver agentes" },
-  { ruta: "/empresa", titulo: "Empresa" },
-  { ruta: "/biblioteca", titulo: "Biblioteca" },
-  { ruta: "/voz", titulo: "Voz" },
-  { ruta: "/skills", titulo: "Skills" },
-  { ruta: "/tools", titulo: "Tools" },
-  { ruta: "/flujos", titulo: "Flujos" },
-  { ruta: "/codigo", titulo: "Código" },
-  { ruta: "/actividad", titulo: "Actividad" },
-  { ruta: "/aprobaciones", titulo: "Aprobaciones" },
+const MENU: { ruta: string; titulo: string; icono: string; abajo?: boolean }[] = [
+  { ruta: "/oficina", titulo: "Oficina", icono: "oficina" },
+  { ruta: "/aprobaciones", titulo: "Aprobaciones", icono: "ok" },
+  { ruta: "/actividad", titulo: "Actividad en vivo", icono: "pulso" },
+  { ruta: "/biblioteca", titulo: "Cerebro (Lara)", icono: "cerebro" },
+  { ruta: "/codigo", titulo: "Código (Sage)", icono: "codigo" },
+  { ruta: "/voz", titulo: "Hablar con Emilia", icono: "voz" },
+  { ruta: "/flujos", titulo: "Flujos", icono: "flujo", abajo: true },
+  { ruta: "/skills", titulo: "Skills", icono: "skill" },
+  { ruta: "/tools", titulo: "Herramientas", icono: "tool" },
 ];
+const ICONOS: Record<string, string> = {
+  oficina: '<path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-5h6v5"/>',
+  ok: '<path d="M20 6 9 17l-5-5"/><circle cx="12" cy="12" r="10" opacity=".35"/>',
+  pulso: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  cerebro: '<path d="M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 3 3V3zM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-3 3V3z"/>',
+  codigo: '<path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 4l-4 16"/>',
+  voz: '<path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  flujo: '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 6h8M18 8v8M6 8c0 6 4 10 10 10"/>',
+  skill: '<path d="m12 3 2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/>',
+  tool: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+};
 app.get("/comun/menu.js", (_req, res) => {
-  res.type("application/javascript").set("Cache-Control", "no-cache").send(`// Generado por el servidor desde MENU en src/server.ts
+  const items = MENU.map((m) => ({ ...m, svg: ICONOS[m.icono] || "" }));
+  res.type("application/javascript").set("Cache-Control", "no-cache").send(`// Generado por el servidor desde MENU en src/server.ts: el dock lateral de todas las páginas.
 (function(){
-  var MENU=${JSON.stringify(MENU)};
+  var MENU=${JSON.stringify(items)};
+  if(!document.querySelector('link[href="/comun/hud.css"]')){ var l=document.createElement("link"); l.rel="stylesheet"; l.href="/comun/hud.css"; document.head.appendChild(l); }
   function pintar(){
-    var nav=document.querySelector("nav"); if(!nav){ nav=document.createElement("nav"); document.body.insertBefore(nav, document.body.firstChild); }
+    document.body.classList.add("con-dock");
     var aqui=location.pathname.replace(/\\/+$/,"")||"/";
-    nav.innerHTML='<span class="marca">Emilia</span>'+MENU.map(function(m){
+    var d=document.querySelector(".dock"); if(!d){ d=document.createElement("aside"); d.className="dock"; document.body.insertBefore(d, document.body.firstChild); }
+    var html='<a href="/oficina" class="logo" title="Emilia">E</a>', abajo=false;
+    MENU.forEach(function(m){
+      if(m.abajo && !abajo){ html+='<div class="sep abajo"></div>'; abajo=true; }
       var act = aqui===m.ruta || aqui.indexOf(m.ruta+"/")===0;
-      return '<a href="'+m.ruta+'"'+(act?' class="activo"':'')+'>'+m.titulo+'</a>';
-    }).join("");
+      html+='<a href="'+m.ruta+'"'+(act?' class="activo"':'')+' data-ruta="'+m.ruta+'"><svg viewBox="0 0 24 24">'+m.svg+'</svg><span class="tip">'+m.titulo+'</span></a>';
+    });
+    d.innerHTML=html;
+    fetch("/api/aprobaciones").then(function(r){return r.json()}).then(function(xs){ var n=(xs||[]).length; if(!n) return; var a=d.querySelector('a[data-ruta="/aprobaciones"]'); if(a){ var b=document.createElement("span"); b.className="num"; b.textContent=n; a.appendChild(b); } }).catch(function(){});
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",pintar); else pintar();
 })();`);
@@ -124,9 +144,14 @@ for (const p of PAGINAS) {
     else res.send(`<link rel="stylesheet" href="/comun/estilos.css"><script src="/comun/menu.js"></script><nav></nav><main style="max-width:1100px;margin:0 auto;padding:24px"><h1>Página "${p}"</h1><p class="sub">Todavía no construida — la armamos en su turno según el plan.</p></main>`);
   });
 }
-app.get("/", (_req, res) => res.redirect("/crear"));
+app.get("/", (_req, res) => res.redirect("/oficina"));
+// Lo viejo (crear agentes por UI, empresa, lista de agentes) ahora vive en la oficina.
+for (const viejo of ["/crear", "/empresa", "/agentes"]) app.get([viejo, `${viejo}/`], (_req, res) => res.redirect("/oficina"));
 
-app.get("/agentes/:id", (req, res) => {
+app.get("/agentes/:id", (req, res, next) => {
+  if (req.query.clasico !== "1") return res.redirect(`/oficina?agente=${encodeURIComponent(req.params.id)}`);   // la estación de trabajo vive en la oficina
+  next();
+}, (req, res) => {
   const idx = path.join(PUB, "agentes", "espacio.html");
   if (existsSync(idx)) enviarHtml(res, idx);
   else res.send(`<link rel="stylesheet" href="/comun/estilos.css"><script src="/comun/menu.js"></script><nav></nav><main style="max-width:1100px;margin:0 auto;padding:24px"><h1>Espacio del agente</h1><p class="sub">Agente ${req.params.id}.</p></main>`);
