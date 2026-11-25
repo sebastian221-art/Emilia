@@ -46,7 +46,7 @@ async function main() {
   await iniciarRegistro();
   const tools = registro.tools().map((t) => t.nombre).filter((n) =>
     n.startsWith("codigo_") || n.startsWith("publicar_") || n.startsWith("guardia_") || n.startsWith("web_") || n.startsWith("archivo_") || n.startsWith("conocimiento_") || n.startsWith("observar_") ||
-    ["pc_operar", "pc_perfiles", "pc_perfil_guardar", "pc_sesiones", "pc_detener", "registro_verificar", "runtime_estado", "runtime_salud", "runtime_logs", "runtime_reiniciar", "github_push", "github_estado", "whatsapp_enviar_texto", "whatsapp_enviar_documento", "sistema_ahora", "flujo_activos", "flujo_cancelar"].includes(n));
+    ["mcp_servidores", "mcp_agregar", "mcp_recargar", "pc_operar", "pc_perfiles", "pc_perfil_guardar", "pc_sesiones", "pc_detener", "registro_verificar", "runtime_estado", "runtime_salud", "runtime_logs", "runtime_reiniciar", "github_push", "github_estado", "whatsapp_enviar_texto", "whatsapp_enviar_documento", "sistema_ahora", "flujo_activos", "flujo_cancelar"].includes(n));
   const skills = registro.skills().map((s) => s.nombre).filter((n) => n.startsWith("senior_") || n.startsWith("guardia_"));
   const flujos = registro.flujos().map((f) => f.nombre).filter((n) => n.startsWith("senior_") || n.startsWith("capacidad_") || n.startsWith("proyecto_") || n.startsWith("entregar_"));
 

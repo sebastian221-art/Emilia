@@ -45,6 +45,9 @@ export function registrarTool(def: DefTool) {
   tools.set(def.nombre, def);
 }
 
+/** Herramientas que llegan en caliente (servidores MCP): se pueden quitar y volver a registrar. */
+export function quitarTool(nombre: string) { tools.delete(nombre); }
+
 export function registrarSkill(def: DefSkill) {
   validarNombre(def.nombre, def.modulo, "Skill");
   validarEsquema(def.parametros, `Skill "${def.nombre}"`);

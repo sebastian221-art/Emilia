@@ -87,3 +87,22 @@ CREATE TABLE IF NOT EXISTS sys_estudio (
   ultima_vez     TIMESTAMPTZ,
   creado_en      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── Motor: servidores MCP conectados (sus herramientas aparecen como mcp_<servidor>_<tool>) ──
+CREATE TABLE IF NOT EXISTS mcp_servidores (
+  nombre        TEXT PRIMARY KEY,                 -- slug: github, notion, postgres…
+  tipo          TEXT NOT NULL CHECK (tipo IN ('stdio','http')),
+  comando       TEXT,                             -- stdio: npx, uvx, node…
+  args          JSONB NOT NULL DEFAULT '[]',
+  env           JSONB NOT NULL DEFAULT '{}',      -- valores como "${GITHUB_TOKEN}": se leen del .env, nunca se guardan secretos aquí
+  url           TEXT,                             -- http
+  headers       JSONB NOT NULL DEFAULT '{}',      -- igual: "Bearer ${NOTION_TOKEN}"
+  agentes       TEXT[] NOT NULL DEFAULT '{Emilia}',   -- quién puede usarlo ('*' = todos)
+  aprobar       TEXT NOT NULL DEFAULT 'auto' CHECK (aprobar IN ('auto','todas','ninguna')),   -- auto: lo que no es solo-lectura pide OK
+  activo        BOOLEAN NOT NULL DEFAULT true,
+  estado        TEXT NOT NULL DEFAULT 'desconectado',
+  error         TEXT,
+  herramientas  JSONB NOT NULL DEFAULT '[]',
+  creado_en     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+);

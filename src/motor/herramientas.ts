@@ -41,6 +41,19 @@ export async function herramientasDeAgente(agenteId: string): Promise<{ definici
     // Tools de la UI vieja: ya no se ofrecen al modelo (no hay ejecutor para ellas).
   }
 
+  // ── Herramientas de servidores MCP conectados (según a qué agentes se les dio cada servidor). ──
+  try {
+    const { query } = await import("../db/cliente.js");
+    const [ag] = await query<{ nombre: string }>(`SELECT nombre FROM agentes WHERE id = $1`, [agenteId]);
+    if (ag) {
+      const { herramientasMcpDe } = await import("./mcp.js");
+      for (const nombre of await herramientasMcpDe(ag.nombre)) {
+        const def = registro.tool(nombre);
+        if (def && !invocables.has(nombre)) invocables.set(nombre, { nombre, tipo: "tool", origen: "codigo", riesgo: def.riesgo, requiereAprobacion: !!def.requiereAprobacion, descripcion: def.descripcion, parametros: def.parametros });
+      }
+    }
+  } catch { /* sin MCP: sigue */ }
+
   // ── Herramientas universales: la biblioteca compartida es de TODOS los agentes (consultar, aportar, registrar uso). ──
   for (const nombre of ["biblioteca_consultar", "biblioteca_aportar", "biblioteca_usar"]) {
     const def = registro.tool(nombre);

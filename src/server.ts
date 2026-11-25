@@ -171,6 +171,7 @@ publico.use((err: any, _req: Request, res: Response, _next: NextFunction) => { c
 // o una referencia está rota, el servidor no arranca y el error dice qué es.
 iniciarRegistro()
   .then(() => {
+    import("./motor/mcp.js").then((m) => m.iniciarMcp()).catch((e) => console.warn("[mcp]", e?.message || e));   // servidores MCP: sus herramientas se registran solas
     publico.listen(PORT_PUBLICO, "127.0.0.1", () => console.log(`Puerta pública (solo webhooks) en 127.0.0.1:${PORT_PUBLICO}`));
     app.listen(PORT, PANEL_HOST, async () => {
       console.log(`Emilia en http://localhost:${PORT}${PANEL_HOST === "127.0.0.1" ? " (solo esta máquina)" : ` (escuchando en ${PANEL_HOST})`}`);

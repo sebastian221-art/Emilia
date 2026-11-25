@@ -43,7 +43,7 @@ async function main() {
   const MODO_TODO = process.argv.includes("--todo");
   // Administradora: dirige y delega; lo operativo lo hace su equipo.
   const ADMIN = (n: string) =>
-    n.startsWith("agente_") || n.startsWith("empresa_") || n.startsWith("memoria_") || n.startsWith("observar_") || n.startsWith("registro_") || n.startsWith("flujo_") ||
+    n.startsWith("agente_") || n.startsWith("mcp_") || n.startsWith("empresa_") || n.startsWith("memoria_") || n.startsWith("observar_") || n.startsWith("registro_") || n.startsWith("flujo_") ||
     n.startsWith("evaluacion_") || n === "presupuesto_estado" || n === "evento_recientes" || n === "disparador_listar" || n.startsWith("conocimiento_") ||
     n === "web_buscar" || n === "pc_sesiones" || n === "pc_detener" || n.startsWith("voz_") || n === "vision_analizar" || n === "whatsapp_enviar_texto" || n === "whatsapp_enviar_documento" || n === "whatsapp_listar_adjuntos" || n === "sistema_ahora" ||
     ["jelcom_listar_campanas", "jelcom_listar_envios", "jelcom_ver_envio", "jelcom_estado_envio", "jelcom_listar_cuentas_sms", "jelcom_listar_cuentas_whatsapp", "runtime_estado", "runtime_salud", "codigo_listar_proyectos"].includes(n);
