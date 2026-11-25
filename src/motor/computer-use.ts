@@ -124,6 +124,7 @@ interface Salida { contenido: string | Bloque[]; error?: boolean; fin?: { estado
 
 // ── Sesión ───────────────────────────────────────────────────────────────────
 export async function usarComputador(op: OpcionesUsoPc): Promise<ResultadoUsoPc> {
+  { const { verificarTopeGlobal } = await import("../seguridad/gasto.js"); const { contextoActual } = await import("../seguridad/contexto.js"); await verificarTopeGlobal(contextoActual().prioridad || "normal"); }
   const perfil: PerfilPc = { ...(await obtenerPerfil(op.perfil || "general")), textos_permitidos: op.textosPermitidos || [] };
   const yaEscritos = new Set<string>();
   const modelo = resolverModeloClaude(op.modelo || perfil.modelo || process.env.COMPUTER_USE_MODELO || "claude:sonnet");

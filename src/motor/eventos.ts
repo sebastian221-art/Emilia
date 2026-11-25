@@ -63,7 +63,7 @@ export async function ejecutarDisparador(d: Disparador, evento: { nombre: string
       const instruccion = String(plantilla(d.accion.instruccion || d.accion.nombre, ctx));
       const conv = padre ? await obtenerOCrearConversacion(agenteId, "delegacion", padre) : await obtenerOCrearConversacion(agenteId, "panel", "panel");
       const r = await encolar(conv.id, async () => {
-        const r = await correrTarea(agenteId!, `[Evento ${evento.nombre}] ${instruccion}`, { conversacionId: conv.id, origen: "api", contextoCanal: `Esta orden la disparó automáticamente el evento "${evento.nombre}" (datos: ${JSON.stringify(evento.datos || {}).slice(0, 800)}). Lo que respondas le llega al jefe por WhatsApp firmado con tu nombre.` });
+        const r = await correrTarea(agenteId!, `[Evento ${evento.nombre}] ${instruccion}`, { conversacionId: conv.id, origen: "api", contaminada: `datos del evento ${evento.nombre}`, contextoCanal: `Esta orden la disparó automáticamente el evento "${evento.nombre}" (datos: ${JSON.stringify(evento.datos || {}).slice(0, 800)}). Lo que respondas le llega al jefe por WhatsApp firmado con tu nombre.` });
         await entregarRespuesta(conv, r); return r;
       });
       resultado = `agente → ${r.estado}`;

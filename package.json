@@ -11,7 +11,9 @@
         "lab:preparar": "tsx src/scripts/preparar-laboratorio.ts",
         "pc:probar": "tsx src/scripts/probar-pantalla.ts",
         "google:conectar": "tsx src/scripts/conectar-google.ts",
-        "cerebro:llave": "tsx src/scripts/cerebro-llave.ts"
+        "cerebro:llave": "tsx src/scripts/cerebro-llave.ts",
+        "secretos": "tsx src/scripts/escanear-secretos.ts",
+        "seguridad": "tsx src/scripts/seguridad.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.131.0",

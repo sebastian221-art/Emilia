@@ -214,6 +214,7 @@ async function usoHoy(motor: string): Promise<{ n: number; costo: number }> {
 
 /** Le pregunta a Claude con búsqueda web: respuesta corta, con citas y fechas. */
 export async function buscarConClaude(pregunta: string, op: { maxUsos?: number; dominios?: string[]; agenteId?: string | null; instruccion?: string } = {}): Promise<RespuestaClaude> {
+  { const { verificarTopeGlobal } = await import("../seguridad/gasto.js"); const { contextoActual } = await import("../seguridad/contexto.js"); await verificarTopeGlobal(contextoActual().prioridad || "normal"); }
   if (!claudeBusquedaActiva()) throw new ErrorBuscador("La búsqueda de Claude no está activa (falta ANTHROPIC_API_KEY o SOGA_CLAUDE_BUSQUEDA=false).");
   const usadas = (await usoHoy("claude")).n, tope = topeClaudeDia();
   if (usadas >= tope) throw new ErrorBuscador(`Llegué al tope diario de búsquedas de Claude (${tope}). Mañana se renueva; mientras tanto uso los buscadores gratis.`);

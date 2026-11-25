@@ -37,6 +37,7 @@ export function costoClaude(modelo: string, tokensIn: number, tokensOut: number,
 
 export async function registrarConsumo(p: { agenteId: string | null; ejecucionId?: string | null; proveedor: string; modelo?: string; tokensIn?: number; tokensOut?: number; cacheLectura?: number; cacheEscritura?: number; costoUsd?: number }) {
   const costo = p.costoUsd ?? (p.proveedor === "anthropic" ? costoClaude(p.modelo || "", p.tokensIn || 0, p.tokensOut || 0, p.cacheLectura || 0, p.cacheEscritura || 0) : p.proveedor.startsWith("groq") ? costoGroq(p.tokensIn || 0, p.tokensOut || 0) : 0);
+  import("../seguridad/gasto.js").then((g) => g.sumarGasto(costo)).catch(() => {});
   await query(`INSERT INTO consumo (agente_id, ejecucion_id, proveedor, modelo, tokens_in, tokens_out, costo_usd) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [p.agenteId, p.ejecucionId ?? null, p.proveedor, p.modelo ?? null, p.tokensIn || 0, p.tokensOut || 0, costo]).catch(() => {});
 }
@@ -44,9 +45,9 @@ export async function registrarConsumo(p: { agenteId: string | null; ejecucionId
 /** Gasto de un agente (o de todos) en una ventana. Incluye Claude Code (sesiones_codigo.costo_usd). */
 export async function gasto(agenteId: string | null, desde: "hoy" | "semana" | "mes" = "hoy") {
   const intervalo = desde === "hoy" ? "date_trunc('day', now())" : desde === "semana" ? "now() - interval '7 days'" : "now() - interval '30 days'";
-  const [g] = await query<any>(`SELECT COALESCE(SUM(costo_usd) FILTER (WHERE proveedor LIKE 'groq%'),0)::float AS groq, COALESCE(SUM(costo_usd) FILTER (WHERE proveedor='anthropic'),0)::float AS api_claude, COALESCE(SUM(tokens_in),0)::int AS tokens_in, COALESCE(SUM(tokens_out),0)::int AS tokens_out, COUNT(*)::int AS llamadas, COUNT(*) FILTER (WHERE proveedor='anthropic')::int AS llamadas_claude FROM consumo WHERE creado_en >= ${intervalo} ${agenteId ? "AND agente_id=$1" : ""}`, agenteId ? [agenteId] : []);
+  const [g] = await query<any>(`SELECT COALESCE(SUM(costo_usd) FILTER (WHERE proveedor LIKE 'groq%'),0)::float AS groq, COALESCE(SUM(costo_usd) FILTER (WHERE proveedor='anthropic'),0)::float AS api_claude, COALESCE(SUM(costo_usd) FILTER (WHERE proveedor NOT LIKE 'groq%' AND proveedor NOT IN ('anthropic','claude_code')),0)::float AS otros, COALESCE(SUM(tokens_in),0)::int AS tokens_in, COALESCE(SUM(tokens_out),0)::int AS tokens_out, COUNT(*)::int AS llamadas, COUNT(*) FILTER (WHERE proveedor='anthropic')::int AS llamadas_claude FROM consumo WHERE creado_en >= ${intervalo} ${agenteId ? "AND agente_id=$1" : ""}`, agenteId ? [agenteId] : []);
   const [c] = await query<any>(`SELECT COALESCE(SUM(costo_usd),0)::float AS claude, COUNT(*)::int AS sesiones FROM sesiones_codigo WHERE inicio >= ${intervalo} ${agenteId ? "AND agente_id=$1" : ""}`, agenteId ? [agenteId] : []);
-  const total = g.groq + g.api_claude + c.claude;
+  const total = g.groq + g.api_claude + g.otros + c.claude;   // otros: búsqueda web de Claude, etc.
   return { groq_usd: +g.groq.toFixed(4), api_claude_usd: +g.api_claude.toFixed(4), claude_code_usd: +c.claude.toFixed(4), claude_usd: +(g.api_claude + c.claude).toFixed(4), total_usd: +total.toFixed(4), tokens_in: g.tokens_in, tokens_out: g.tokens_out, llamadas_groq: g.llamadas - g.llamadas_claude, llamadas_claude: g.llamadas_claude, sesiones_claude: c.sesiones };
 }
 

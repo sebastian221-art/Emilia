@@ -21,8 +21,10 @@ import { ejecutarTool, ejecutarSkill, crearContexto } from "./ejecutor.js";
 import { herramientasDeAgente, type Invocable } from "./herramientas.js";
 import { iniciarFlujo } from "./flujo.js";
 import { textoAprobacion, detalleAprobacion } from "./aprobacion-texto.js";
+import { esFuenteExterna, tieneEfectoExterno, marcarExterno, marcarEjecucion, REGLA_EXTERNO } from "../seguridad/contaminacion.js";
 import { historialParaModelo, resumirSiHaceFalta } from "./memoria.js";
-import { dentroDePresupuesto, registrarConsumo } from "./presupuesto.js";
+import { dentroDePresupuesto } from "./presupuesto.js";
+import { conContexto, fijarEjecucion } from "../seguridad/contexto.js";
 import { elegirModulos, definicionesActivas, esPseudoToolModulo, moduloDe, resumenModulos } from "./enrutador.js";
 import { cancelada } from "./cancelacion.js";
 import { entregarTexto } from "./entrega.js";
@@ -53,6 +55,8 @@ export interface OpcionesTarea {
   contextoCanal?: string;
   /** Modo conversación: cada turno lo lleva el planificador (el cerebro bueno), temperatura más alta, sin empujones de "actuá". */
   conversacion?: boolean;
+  /** La tarea nace con contenido externo (mensaje de un tercero, evento de afuera, delegación de una tarea contaminada): las acciones hacia afuera piden OK. */
+  contaminada?: string | null;
 }
 
 interface ToolCallPendiente {
@@ -99,6 +103,7 @@ interface Estado {
   simulado?: boolean;
   modulosActivos?: Set<string>;
   soloTexto?: boolean;
+  contaminada?: string | null;
   firmasRecientes?: string[];
   repeticionesSeguidas?: number;
   empujonHonestidad?: boolean;
@@ -106,6 +111,12 @@ interface Estado {
 
 // ─── Arranque ────────────────────────────────────────────────────────────────
 export async function correrTarea(agenteId: string, mensajeUsuario: string, op: OpcionesTarea = {}): Promise<ResultadoTarea> {
+  // Lo que tú pides directo (panel o tu WhatsApp, sin contenido de afuera) tiene prioridad ante el tope global de gasto.
+  const prioridad = (op.origen === "panel" || op.origen === "whatsapp") && !op.contaminada ? "jefe" : "normal";
+  return conContexto({ agenteId, ejecucionId: null, prioridad }, () => correrTareaInterna(agenteId, mensajeUsuario, op));
+}
+
+async function correrTareaInterna(agenteId: string, mensajeUsuario: string, op: OpcionesTarea): Promise<ResultadoTarea> {
   const ag = await obtenerAgente(agenteId);
   if (!ag) throw new Error("Agente no encontrado");
   if (ag.estado !== "activo") throw new Error(`El agente está en estado '${ag.estado}'. Activalo para que trabaje.`);
@@ -127,8 +138,9 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
   const sistema = await armarSistema(ag, invocables, conv, op.contextoCanal, mensajeUsuario);
 
   const [ej] = await query<{ id: string }>(
-    `INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen) VALUES ($1,'en_curso',$2,$3) RETURNING id`,
-    [agenteId, conv?.id ?? null, op.origen || "panel"]);
+    `INSERT INTO ejecuciones (agente_id, estado, conversacion_id, origen, contaminada) VALUES ($1,'en_curso',$2,$3,$4) RETURNING id`,
+    [agenteId, conv?.id ?? null, op.origen || "panel", op.contaminada ? String(op.contaminada).slice(0, 300) : null]);
+  fijarEjecucion(ej.id);
 
   const mensajes: ChatCompletionMessageParam[] = [{ role: "system", content: sistema }];
   if (conv) mensajes.push(...await historialParaModelo(conv, ag.memoria));
@@ -142,6 +154,7 @@ export async function correrTarea(agenteId: string, mensajeUsuario: string, op: 
     maxTurnos: Number(ag.cerebro?.turnos) || 20,
     maxToolCalls: Number(ag.gobierno?.max_tool_calls) || 30,
     mensajes, pendientes: [], turnos: 0, toolCalls: 0, mensajesEnviados: [], simulado: !!op.simulado, modulosActivos,
+    contaminada: op.contaminada || null,
   };
   const ctx = crearContexto(agenteId, ej.id, null, conv?.id ?? null);
 
@@ -192,7 +205,7 @@ export async function reanudarEjecucion(ejecucionId: string, aprobada: boolean):
     throw new Error(`La ejecución está '${actual.estado}', no esperando aprobación (¿ya la retomó otro canal?).`);
   }
   try {
-    return await reanudarReclamada(fila, aprobada);
+    return await conContexto({ agenteId: fila.agente_id, ejecucionId: fila.id, prioridad: "jefe" }, () => reanudarReclamada(fila, aprobada));
   } catch (e) {
     // Si falla antes de entrar al bucle, que no quede "en_curso" para siempre.
     await query(`UPDATE ejecuciones SET estado='fallida' WHERE id=$1 AND estado='en_curso'`, [ejecucionId]).catch(() => {});
@@ -223,6 +236,7 @@ async function reanudarReclamada(fila: any, aprobada: boolean): Promise<Resultad
     mensajes: fila.mensajes || [], pendientes,
     turnos: fila.turnos_usados || 0, toolCalls: fila.tool_calls || 0,
     mensajesEnviados: fila.mensajes_enviados || [], modulosActivos,
+    contaminada: fila.contaminada || null,
   };
   const ctx = crearContexto(estado.agenteId, estado.ejId, null, estado.conversacionId);
   await ctx.traza("aprobacion", aprobada ? `Aprobado: ${pendientes[0].nombre}. Continúa.` : `Rechazado: ${pendientes[0].nombre}. Continúa sin ejecutarla.`);
@@ -273,7 +287,7 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       const r = await llamarModelo(e.mensajes, e.soloTexto ? [] : tools, { modelo: modeloTurno, temperatura: e.temperatura });
       if (e.soloTexto) e.soloTexto = false;
       if (dosCerebros) await ctx.traza("pensamiento", `[cerebro: ${usaPlanificador ? "planificador" : "ejecutor"} · ${modeloTurno}]`);
-      if (r.uso) registrarConsumo({ agenteId: e.agenteId, ejecucionId: e.ejId, proveedor: proveedorDe(modeloTurno), modelo: r.uso.modelo, tokensIn: r.uso.entrada, tokensOut: r.uso.salida, cacheLectura: r.uso.cacheLectura, cacheEscritura: r.uso.cacheEscritura }).catch(() => {});
+      // El consumo lo registra llamarModelo (con el agente y la ejecución del contexto).
       // Cierre: si el ejecutor cree que terminó (sin más tools) tras haber trabajado, la respuesta final la escribe el planificador.
       if (dosCerebros && !usaPlanificador && !r.toolCalls.length && e.toolCalls > 0 && !e.cierreHecho) {
         e.cierreHecho = true; e.escalar = true;
@@ -417,12 +431,23 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
     }
 
     let pideOk = inv.requiereAprobacion && tc.decision !== "aprobada";
-    const defTool = pideOk ? registro.tool(inv.nombre) : undefined;
+    const defTool = registro.tool(inv.nombre);
     if (pideOk && defTool?.necesitaAprobacion) pideOk = await defTool.necesitaAprobacion(tc.argumentos || {}).catch(() => true);
+    // Contaminación: tras leer contenido externo, nada sale hacia afuera sin tu OK.
+    const porContaminacion = !pideOk && !!e.contaminada && tc.decision !== "aprobada" && !e.simulado
+      && tieneEfectoExterno(inv.nombre, tc.argumentos || {}, { riesgo: inv.riesgo, tipo: inv.tipo, toolsDeSkill: inv.tipo === "skill" ? (registro.skill(inv.nombre)?.tools || []) : undefined });
+    if (porContaminacion) {
+      pideOk = true;
+      query(`INSERT INTO seguridad_eventos (tipo, detalle) VALUES ('contaminacion', $1)`, [`${inv.nombre} tras ${e.contaminada}`]).catch(() => {});
+    }
     if (pideOk) {
       // ── PAUSA ──
-      const vista = defTool?.vistaAprobacion ? await defTool.vistaAprobacion(tc.argumentos || {}).catch(() => null) : null;
-      const detalle = detalleAprobacion(inv.nombre, tc.argumentos);
+      const vistaBase = defTool?.vistaAprobacion ? await defTool.vistaAprobacion(tc.argumentos || {}).catch(() => null) : null;
+      const avisoExt = porContaminacion ? `⚠️ Te pido OK porque en esta tarea leí contenido de afuera (${e.contaminada}). Revisa que esto lo quieras tú y no lo esté pidiendo ese contenido.
+
+` : "";
+      const vista = porContaminacion ? avisoExt + (vistaBase || textoAprobacion(inv.nombre, tc.argumentos)) : vistaBase;
+      const detalle = (porContaminacion ? "[contenido externo] " : "") + detalleAprobacion(inv.nombre, tc.argumentos);
       const ap = await crearAprobacionTool({ agenteEjecucionId: e.ejId, agenteId: e.agenteId, conversacionId: e.conversacionId, tool: inv.nombre, args: tc.argumentos, detalle });
       await ctx.traza("aprobacion", `Esperando tu aprobación: ${detalle}`);
       import("./eventos.js").then(({ emitir }) => emitir("aprobacion.pendiente", { tool: inv.nombre, agente_id: e.agenteId, aprobacion_id: ap.id })).catch(() => {});
@@ -494,7 +519,16 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       const textoEnviado = String(tc.argumentos.mensaje ?? tc.argumentos.texto ?? "");
       if (textoEnviado && inv.nombre.startsWith("whatsapp_enviar")) e.mensajesEnviados.push(textoEnviado);
     }
-    e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(resultado).slice(0, 4000) });
+    let contenido = JSON.stringify(resultado).slice(0, 4000);
+    if (esFuenteExterna(inv.nombre)) {
+      contenido = marcarExterno(inv.nombre, contenido);
+      if (resultado.ok && !e.contaminada) {
+        e.contaminada = `${inv.nombre}`;
+        await marcarEjecucion(e.ejId, e.contaminada);
+        await ctx.traza("verificacion", `Leí contenido externo (${inv.nombre}): desde ahora, toda acción hacia afuera pide OK.`);
+      }
+    }
+    e.mensajes.push({ role: "tool", tool_call_id: tc.id, content: contenido });
     e.pendientes.shift();
   }
   return null;
@@ -521,6 +555,7 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
     "Usas tus herramientas de verdad cuando hacen falta. Nunca afirmes haber hecho algo (enviar, consultar) sin haber llamado la herramienta correspondiente. Si una herramienta devuelve error, léelo y corrige los argumentos o explica el problema. Sé honesto.",
     "REGLA DE ESTADO ACTUAL: cualquier pregunta sobre cómo están las cosas AHORA (qué hay en pantalla, qué archivos hay, qué campañas/envíos/procesos existen, cómo va algo) se responde llamando la herramienta en ESTE turno. Lo que viste en turnos anteriores ya no vale. Y el resultado es lo que la herramienta DEVUELVE, nunca lo que tú pusiste en sus argumentos: no inventes datos en los argumentos.",
     "REGLA DE APROBACIONES: no pidas permiso por texto. Si una acción requiere aprobación, llama la herramienta igual: el sistema pausa y le pide el OK al jefe por su canal. Preguntar '¿procedo?' y no llamar nada deja la tarea a medias.",
+    REGLA_EXTERNO,
     "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que crees recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
   ].filter(Boolean).join("\n");
 

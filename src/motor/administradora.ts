@@ -80,7 +80,7 @@ export async function reintentarEncargo(id: string, automatico = false, otroAgen
  * Delegar con registro. modo "normal": la respuesta del agente le llega al jefe como siempre.
  * modo "mision": solo le llega lo que necesita su OK; el resultado lo usa la misión.
  */
-export async function delegar(p: { agente: string; tarea: string; convPadre: string | null; misionId?: string | null; paso?: number | null; intentos?: number; contextoCanal?: string; esperar?: boolean }): Promise<{ encargoId: string; promesa: Promise<any> }> {
+export async function delegar(p: { agente: string; tarea: string; convPadre: string | null; misionId?: string | null; paso?: number | null; intentos?: number; contextoCanal?: string; esperar?: boolean; contaminada?: string | null }): Promise<{ encargoId: string; promesa: Promise<any> }> {
   const [ag] = await query<any>(`SELECT id, nombre, estado FROM agentes WHERE lower(nombre) = lower($1) LIMIT 1`, [p.agente]);
   if (!ag) throw new Error(`No existe el agente ${p.agente}.`);
   if (ag.estado !== "activo") throw new Error(`${ag.nombre} está ${ag.estado}.`);
@@ -95,7 +95,7 @@ export async function delegar(p: { agente: string; tarea: string; convPadre: str
   const promesa = encolar(conv.id, async () => {
     await guardarMensajeEn(conv, "usuario", p.tarea);
     let r: any;
-    try { r = await correrTarea(ag.id, p.tarea, { conversacionId: conv.id, origen: "api", contextoCanal: contexto }); }
+    try { r = await correrTarea(ag.id, p.tarea, { conversacionId: conv.id, origen: "api", contextoCanal: contexto, contaminada: p.contaminada || null }); }
     catch (err: any) { r = { ok: false, estado: "fallida", respuesta: `Error: ${err?.message || err}` }; }
     await cerrarEncargo(encargoId, r);
     if (!p.misionId || r.estado === "esperando_aprobacion") await entregarRespuesta(conv, r);   // la aprobación siempre le llega al jefe
@@ -119,12 +119,12 @@ export function lineaEncargo(e: any): string {
 // ═══════════════════════════ MISIONES ═══════════════════════════
 export interface Paso { n: number; agente: string; tarea: string; depende_de: number[]; estado: "pendiente" | "en_curso" | "esperando_jefe" | "hecho" | "fallido" | "saltado"; resultado?: string; encargo_id?: string; intentos?: number }
 
-export async function crearMision(p: { objetivo: string; pasos: { agente: string; tarea: string; depende_de?: number[] }[]; convPadre: string | null }): Promise<{ id: string; ref: string }> {
+export async function crearMision(p: { objetivo: string; pasos: { agente: string; tarea: string; depende_de?: number[] }[]; convPadre: string | null; contaminada?: string | null }): Promise<{ id: string; ref: string }> {
   if (!p.pasos?.length) throw new Error("Una misión necesita al menos un paso.");
   if (p.pasos.length > 8) throw new Error("Máximo 8 pasos por misión: divídela.");
   const pasos: Paso[] = p.pasos.map((x, i) => ({ n: i + 1, agente: x.agente, tarea: x.tarea, depende_de: (x.depende_de || []).filter((d) => d >= 1 && d <= i), estado: "pendiente" }));
   for (const x of pasos) { const [a] = await query(`SELECT 1 FROM agentes WHERE lower(nombre) = lower($1) AND estado = 'activo'`, [x.agente]); if (!a) throw new Error(`Paso ${x.n}: no hay un agente activo llamado ${x.agente}.`); }
-  const [m] = await query<{ id: string }>(`INSERT INTO misiones (objetivo, pasos, conv_padre) VALUES ($1,$2,$3) RETURNING id`, [p.objetivo, JSON.stringify(pasos), p.convPadre]);
+  const [m] = await query<{ id: string }>(`INSERT INTO misiones (objetivo, pasos, conv_padre, contaminada) VALUES ($1,$2,$3,$4) RETURNING id`, [p.objetivo, JSON.stringify(pasos), p.convPadre, p.contaminada || null]);
   await avanzarMision(m.id);
   return { id: m.id, ref: refMision(m.id) };
 }
@@ -168,7 +168,10 @@ export async function avanzarMision(id: string): Promise<void> {
       const tarea = `MISIÓN ${refMision(id)}: ${m.objetivo}\nTU PASO (${x.n} de ${pasos.length}): ${x.tarea}${previos ? `\n\nLO QUE YA HICIERON LOS PASOS ANTERIORES (úsalo):\n${previos}` : ""}`;
       x.estado = "en_curso";
       await query(`UPDATE misiones SET pasos = $2, actualizado_en = now() WHERE id = $1`, [id, JSON.stringify(pasos)]);
-      await delegar({ agente: x.agente, tarea, convPadre: m.conv_padre, misionId: id, paso: x.n });
+      // Si la misión o un paso del que depende leyó contenido externo, este paso también queda marcado.
+      const [cont] = x.depende_de.length ? await query<{ contaminada: string }>(`SELECT x.contaminada FROM encargos e JOIN ejecuciones x ON x.id = e.ejecucion_id WHERE e.mision_id = $1 AND e.paso = ANY($2::int[]) AND x.contaminada IS NOT NULL LIMIT 1`, [id, x.depende_de]).catch(() => [] as any) : [];
+      const contaminada = m.contaminada || (cont?.contaminada ? `paso previo tras ${cont.contaminada}` : null);
+      await delegar({ agente: x.agente, tarea, convPadre: m.conv_padre, misionId: id, paso: x.n, contaminada });
     }
     await query(`UPDATE misiones SET pasos = $2, actualizado_en = now() WHERE id = $1`, [id, JSON.stringify(pasos)]);
     // ¿Terminó?

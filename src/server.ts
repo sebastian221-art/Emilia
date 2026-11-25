@@ -37,11 +37,16 @@ import { rutasActividad } from "./rutas/actividad.js";
 import { iniciarReloj } from "./motor/eventos.js";
 import { limpiarArchivosViejos } from "./dominio/archivos.js";
 import { retomarProcesos } from "./motor/runtime.js";
+import { guardiaPanel, ENVOLTORIO_FETCH } from "./seguridad/panel.js";
+import { instalarRedaccionLogs } from "./seguridad/secretos.js";
+instalarRedaccionLogs();   // ninguna llave del .env sale en los logs
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUB = path.join(__dirname, "..", "public");
 
 const app = express();
+app.disable("x-powered-by");
+app.use(guardiaPanel);   // Host local + X-Emilia/Origin en todo lo que cambia algo (DNS rebinding y CSRF)
 app.use(express.json({
   limit: "2mb",
   verify: (req, _res, buf) => { (req as any).rawBody = buf; },
@@ -106,6 +111,7 @@ const ICONOS: Record<string, string> = {
 app.get("/comun/menu.js", (_req, res) => {
   const items = MENU.map((m) => ({ ...m, svg: ICONOS[m.icono] || "" }));
   res.type("application/javascript").set("Cache-Control", "no-cache").send(`// Generado por el servidor desde MENU en src/server.ts: el dock lateral de todas las páginas.
+${ENVOLTORIO_FETCH}
 (function(){
   var MENU=${JSON.stringify(items)};
   if(!document.querySelector('link[href="/comun/hud.css"]')){ var l=document.createElement("link"); l.rel="stylesheet"; l.href="/comun/hud.css"; document.head.appendChild(l); }

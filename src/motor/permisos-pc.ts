@@ -75,8 +75,16 @@ export function normalizarPerfil(p: Partial<PerfilPc> & { nombre: string }): Per
     terminales: lista(p.terminales, base.terminales), credenciales: Array.isArray(p.credenciales) ? p.credenciales.map(String) : base.credenciales,
     comandos: (["riesgo", "aprobar_todos", "solo_lectura"] as const).includes(p.comandos as any) ? p.comandos! : base.comandos,
     escritura: (["libre", "nada", "solo_lista"] as const).includes(p.escritura as any) ? p.escritura : base.escritura,
+    // El hospital tiene candados que NINGÚN cambio de perfil afloja (Habeas Data, contrato 053-26).
+    ...(p.nombre === PERFIL_HOSPITAL.nombre ? CANDADOS_HOSPITAL : {}),
   };
 }
+
+/** Lo que nunca cambia en el perfil del hospital, aunque se guarde otra cosa. */
+export const CANDADOS_HOSPITAL = {
+  comandos: "solo_lectura" as const, aprobar_comandos: true, aprobar_texto_remoto: true,
+  enviar_capturas: false, datos_sensibles: true, aprobar_inicio: true,
+};
 
 const coincide = (proceso: string, lista: string[]) => lista.some((a) => a === "*" || proceso === a || proceso.startsWith(a));
 export const esTerminal = (proceso: string, perfil: PerfilPc) => coincide(proceso, perfil.terminales);

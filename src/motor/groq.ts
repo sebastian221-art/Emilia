@@ -38,7 +38,18 @@ export async function llamarModelo(
   const op: OpcionesModelo = typeof modeloUOpciones === "string" ? { modelo: modeloUOpciones, forzarTool: forzarToolLegado } : modeloUOpciones;
   // Solo pruebas: un modelo falso inyectado (nunca se define en producción).
   if ((globalThis as any).__modeloPrueba) return (globalThis as any).__modeloPrueba(mensajes, tools, op);
-  return conResiliencia(mensajes, tools, op);
+  const { verificarTopeGlobal } = await import("../seguridad/gasto.js");
+  const { contextoActual } = await import("../seguridad/contexto.js");
+  const c = contextoActual();
+  await verificarTopeGlobal(c.prioridad || "normal");
+  const r = await conResiliencia(mensajes, tools, op);
+  // Todo lo que pasa por acá queda contado (también lo de fondo: alma, Lyra, System…).
+  if (r.uso) {
+    const { registrarConsumo } = await import("./presupuesto.js");
+    const m = r.uso.modelo || op.modelo || MODELO_POR_DEFECTO;
+    registrarConsumo({ agenteId: c.agenteId ?? null, ejecucionId: c.ejecucionId ?? null, proveedor: /claude|anthropic/i.test(m) ? "anthropic" : "groq", modelo: m, tokensIn: r.uso.entrada, tokensOut: r.uso.salida, cacheLectura: r.uso.cacheLectura, cacheEscritura: r.uso.cacheEscritura }).catch(() => {});
+  }
+  return r;
 }
 
 // ═══════════ RESILIENCIA: reintentos, plan B entre proveedores y cortacircuitos ═══════════

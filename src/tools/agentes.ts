@@ -68,10 +68,12 @@ export const agenteDelegar: DefTool = {
     // Encargo: queda registrado (para "¿en qué quedó lo de…?", demoras y reintentos).
     const { registrarEncargo, cerrarEncargo, refEncargo } = await import("../motor/administradora.js");
     const encargoId = await registrarEncargo({ agente: ag.nombre, tarea: tareaCompleta, convPadre: ctx.conversacionId, convDelegacion: conv.id }).catch(() => null);
+    const { contaminacionDe } = await import("../seguridad/contaminacion.js");
+    const contaminada = await contaminacionDe(ctx.ejecucionId);   // si yo leí algo de afuera, el delegado también queda marcado
     const trabajo = async () => {
       await guardarMensajeEn(conv, "usuario", tareaCompleta);
       let r: any;
-      try { r = await correrTarea(ag.id, tareaCompleta, { conversacionId: conv.id, origen: "api", contextoCanal }); }
+      try { r = await correrTarea(ag.id, tareaCompleta, { conversacionId: conv.id, origen: "api", contextoCanal, contaminada: contaminada ? `delegación tras ${contaminada}` : null }); }
       catch (e: any) { if (encargoId) await cerrarEncargo(encargoId, { estado: "fallida", respuesta: `Error: ${e?.message || e}` }); throw e; }
       if (encargoId) await cerrarEncargo(encargoId, r).catch(() => {});
       await entregarRespuesta(conv, r);   // → reenvía a la conversación padre
@@ -121,7 +123,8 @@ export const agenteMision: DefTool = {
   async ejecutar(a, ctx) {
     try {
       const A = await import("../motor/administradora.js");
-      const m = await A.crearMision({ objetivo: a.objetivo, pasos: a.pasos, convPadre: ctx?.conversacionId ?? null });
+      const { contaminacionDe } = await import("../seguridad/contaminacion.js");
+      const m = await A.crearMision({ objetivo: a.objetivo, pasos: a.pasos, convPadre: ctx?.conversacionId ?? null, contaminada: await contaminacionDe(ctx?.ejecucionId) });
       return { ok: true, datos: m, resumen: `🧭 Misión ${m.ref} en marcha (${a.pasos.length} pasos: ${a.pasos.map((p: any, i: number) => `${i + 1}. ${p.agente}`).join(", ")}). Dile al jefe que le avisas cuando esté todo.` };
     } catch (e: any) { return { ok: false, error: e?.message || String(e) }; }
   },

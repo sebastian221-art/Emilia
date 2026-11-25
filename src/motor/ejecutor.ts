@@ -10,6 +10,7 @@
 //  No hay heurísticas por string acá. Si el nombre no existe, se dice.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { redactar } from "../seguridad/secretos.js";
 import { registro, validarArgs } from "../registro/registro.js";
 import type { ContextoEjecucion, ResultadoTool } from "../registro/tipos.js";
 import { llamarModelo } from "./groq.js";
@@ -33,7 +34,7 @@ export function crearContexto(
     conversacionId,
     async traza(tipo, detalle) {
       if (!ejecucionId) { console.log(`[traza sin ejecución] ${tipo}: ${detalle}`); return; }
-      await query(`INSERT INTO pasos (ejecucion_id, tipo, detalle) VALUES ($1,$2,$3)`, [ejecucionId, tipo, (detalle || "").slice(0, 2000)]);
+      await query(`INSERT INTO pasos (ejecucion_id, tipo, detalle) VALUES ($1,$2,$3)`, [ejecucionId, tipo, redactar(detalle || "").slice(0, 2000)]);
     },
     async ejecutarTool(nombre, args) {
       if (toolsPermitidas && !toolsPermitidas.includes(nombre)) {

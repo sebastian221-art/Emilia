@@ -146,6 +146,7 @@ export async function llamarClaude(
 
 /** Igual que llamarClaude pero SOLO texto y en streaming: llama onDelta con cada trozo. Para la charla por voz. */
 export async function streamClaude(mensajes: ChatCompletionMessageParam[], op: { modelo: string; maxTokens?: number; onDelta: (t: string) => void }): Promise<{ texto: string; uso: any }> {
+  { const { verificarTopeGlobal } = await import("../seguridad/gasto.js"); const { contextoActual } = await import("../seguridad/contexto.js"); await verificarTopeGlobal(contextoActual().prioridad || "normal"); }
   const modelo = resolverModeloClaude(op.modelo);
   const { system, messages } = convertir(mensajes);
   const stream = get().messages.stream({

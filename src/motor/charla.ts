@@ -34,6 +34,11 @@ function partirFrases(buffer: string): { frases: string[]; resto: string } {
 
 /** Charla por voz: streaming de frases con audio. Devuelve el texto completo. */
 export async function charlar(p: { agenteId: string; conversacionId: string; texto: string; contextoCanal: string; emitir: (e: EventoCharla) => void; conVoz?: boolean }): Promise<string> {
+  const { conContexto } = await import("../seguridad/contexto.js");
+  return conContexto({ agenteId: p.agenteId, prioridad: "jefe" }, () => charlarInterno(p));
+}
+
+async function charlarInterno(p: { agenteId: string; conversacionId: string; texto: string; contextoCanal: string; emitir: (e: EventoCharla) => void; conVoz?: boolean }): Promise<string> {
   const t0 = Date.now();
   const [ag] = await query<any>(`SELECT * FROM agentes WHERE id=$1`, [p.agenteId]);
   const conv = await obtenerConversacion(p.conversacionId);
