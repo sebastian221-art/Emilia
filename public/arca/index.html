@@ -79,6 +79,7 @@ pre.log { white-space: pre-wrap; font-family: var(--h-mono); font-size: 11.5px; 
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const NOMBRES = { node: "Node.js", git: "Git", npm: "Paquetes de Emilia", env: "Archivo .env", postgres: "PostgreSQL", pgvector: "pgvector", migraciones: "Tablas de Emilia", groq: "Llave de Groq", anthropic: "Llave de Claude", cerebro_llave: "Llave de la memoria personal", wa_token: "Token y número de WhatsApp", wa_seguridad: "App Secret, verify token y tu número", wa_plantillas: "Plantillas aprobadas", tunel: "Túnel", webhook: "Webhook de punta a punta", equipo: "El PC", docker: "Docker", wa_escritorio: "WhatsApp de escritorio", playwright: "Navegador de los agentes", claude_code: "Claude Code", google: "Google", correo: "Correos", railway: "Railway", github: "GitHub", any: "Any", arranque: "Arranca con Windows", energia: "Que el PC no se duerma", pg_dump: "pg_dump (copias)", copias: "Copias y respaldo de llaves" };
 const ICON = { ok: "✅", falta: "⬜", error: "❌", aviso: "⚠️", omitido: "➖" };
 let T = null, abierta = null;
 async function api(ruta, cuerpo) {
@@ -99,7 +100,7 @@ function objetivos(p) {
   const por = Object.fromEntries(p.pendientes.map((c) => [c.id, c]));
   return p.mision.chequeos.map((id) => {
     const c = por[id];
-    if (!c) return `<div class="obj"><div class="t">✅ <span>${esc(id)}</span></div></div>`;
+    if (!c) return `<div class="obj"><div class="t">✅ <span>${esc(NOMBRES[id] || id)}</span></div></div>`;
     return `<div class="obj"><div class="t">${ICON[c.estado] || "⬜"} <b>${esc(c.nombre)}</b></div><div class="d">${esc(c.detalle)}</div>
       ${c.pasos?.length ? `<ol>${c.pasos.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
       ${c.instalable ? `<div class="llave"><button class="btn" data-instalar="${c.instalable}">Instalar ${esc(c.instalable)} (winget)</button><span class="ok"></span></div>` : ""}

@@ -144,9 +144,15 @@ async function cerebroLlave(): Promise<Omit<Chequeo, "ms">> {
   const base = { id: "cerebro_llave", mision: "cerebro", nombre: "Llave de la memoria personal" };
   if (process.env.CEREBRO_LLAVE) { const ok = Buffer.from(process.env.CEREBRO_LLAVE, "base64").length === 32; return ok ? { ...base, estado: "ok", detalle: "En el .env." } : { ...base, estado: "error", detalle: "CEREBRO_LLAVE no tiene 32 bytes.", pasos: ["Bórrala del .env y deja que Emilia cree una (se protege con tu usuario de Windows)"] }; }
   const f = path.resolve(process.env.DATA_DIR || "data", "cerebro.llave");
-  const plano = fs.existsSync(f) && fs.readFileSync(f, "utf8").startsWith("plano:");
-  return fs.existsSync(f) ? { ...base, estado: "ok", detalle: plano ? "En data/cerebro.llave (sin la protección de Windows, pero separada de la base)." : esWin ? "Protegida con tu usuario de Windows (DPAPI)." : "En data/cerebro.llave." }
-    : { ...base, estado: "aviso", detalle: "Se crea sola la primera vez que arranca Emilia.", pasos: ["Arranca Emilia una vez", "Después haz el respaldo: npm run respaldo:llaves"] };
+  // Se prueba de verdad: abrir (o crear) la llave y cifrar/descifrar con ella.
+  try {
+    const { obtenerLlave, cifrar, descifrar } = await import("../motor/cifrado.js");
+    const k = await obtenerLlave();
+    if (!k) return { ...base, estado: "error", detalle: `No pude abrir ni crear la llave (${f}).`, pasos: ["Mándale a Sebastián/Sage las líneas [cifrado] del log de Emilia"] };
+    if (descifrar(cifrar("prueba", k), k) !== "prueba") throw new Error("cifra pero no descifra");
+    const plano = fs.existsSync(f) && fs.readFileSync(f, "utf8").startsWith("plano:");
+    return { ...base, estado: "ok", detalle: `${plano ? "Guardada aparte de la base (sin la protección de Windows)" : esWin ? "Protegida con tu usuario de Windows (DPAPI)" : "Guardada aparte de la base"} · ${f}` };
+  } catch (e: any) { return { ...base, estado: "error", detalle: `La llave falla: ${String(e?.message || e).slice(0, 150)}`, pasos: ["Mándale el error a Sage"] }; }
 }
 
 // ─── Misión 3: WhatsApp ─────────────────────────────────────────────────────
