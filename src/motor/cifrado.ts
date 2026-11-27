@@ -24,10 +24,15 @@ let llave: Buffer | null | undefined;
 let avisado = false;
 
 async function dpapi(modo: "Protect" | "Unprotect", b64: string): Promise<string> {
-  const ps = `Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String('${b64}'); [Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::${modo}($b, [Text.Encoding]::UTF8.GetBytes('Emilia-cerebro'), 'CurrentUser'))`;
-  const { stdout } = await ejec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { timeout: 20_000, windowsHide: true });
-  return stdout.trim();
+  // -EncodedCommand (UTF-16LE en base64): sin problemas de comillas ni de $ al pasar por la línea de comandos.
+  const ps = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String('${b64}'); [Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::${modo}($b, [Text.Encoding]::UTF8.GetBytes('Emilia-cerebro'), [System.Security.Cryptography.DataProtectionScope]::CurrentUser))`;
+  try {
+    const { stdout } = await ejec("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Buffer.from(ps, "utf16le").toString("base64")], { timeout: 30_000, windowsHide: true });
+    const r = stdout.trim(); if (!r) throw new Error("PowerShell no devolvió nada"); return r;
+  } catch (e: any) { throw new Error(`DPAPI: ${String(e?.stderr || e?.message || e).split("\n").find((l: string) => l.trim()) || "falló"}`); }
 }
+// Si DPAPI no funciona en este Windows, la llave queda en el archivo (como en Linux), marcada así:
+const PLANO = "plano:";
 
 /** La llave de 32 bytes (o null si no se pudo: entonces lo personal queda marcado privado pero sin cifrar, y se avisa). */
 export async function obtenerLlave(): Promise<Buffer | null> {
@@ -38,14 +43,19 @@ export async function obtenerLlave(): Promise<Buffer | null> {
   try {
     const guardada = (await fs.readFile(RUTA(), "utf8").catch(() => "")).trim();
     if (guardada) {
-      const b64 = process.platform === "win32" ? await dpapi("Unprotect", guardada) : guardada;
+      const b64 = guardada.startsWith(PLANO) ? guardada.slice(PLANO.length) : process.platform === "win32" ? await dpapi("Unprotect", guardada) : guardada;
       const b = Buffer.from(b64, "base64"); if (b.length === 32) return (llave = b);
       throw new Error("la llave guardada está dañada");
     }
     const nueva = crypto.randomBytes(32);
     await fs.mkdir(path.dirname(RUTA()), { recursive: true });
-    await fs.writeFile(RUTA(), process.platform === "win32" ? await dpapi("Protect", nueva.toString("base64")) : nueva.toString("base64"), { mode: 0o600 });
-    console.log(`[cifrado] Llave nueva de la memoria personal en ${RUTA()}${process.platform === "win32" ? " (protegida con tu usuario de Windows)" : ""}. Haz un respaldo con: npm run cerebro:llave`);
+    let contenido = nueva.toString("base64"), protegida = false;
+    if (process.platform === "win32") {
+      try { contenido = await dpapi("Protect", contenido); protegida = true; }
+      catch (e: any) { console.warn(`[cifrado] ${e?.message || e}. Guardo la llave en el archivo sin la protección de Windows (sigue separada de la base).`); contenido = PLANO + contenido; }
+    }
+    await fs.writeFile(RUTA(), contenido, { mode: 0o600 });
+    console.log(`[cifrado] Llave nueva de la memoria personal en ${RUTA()}${protegida ? " (protegida con tu usuario de Windows)" : ""}. Haz el respaldo: npm run respaldo:llaves`);
     return (llave = nueva);
   } catch (e: any) {
     if (!avisado) { avisado = true; console.warn(`[cifrado] No pude obtener la llave (${e?.message || e}): lo personal se guarda sin cifrar.`); }
