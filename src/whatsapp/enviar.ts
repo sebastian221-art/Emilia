@@ -36,13 +36,33 @@ export function destinoPermitido(numero: string): boolean {
  * Ventana de 24 h de WhatsApp: fuera de ella Meta acepta el texto pero NUNCA lo
  * entrega. Se mira el último mensaje que esa persona nos escribió (a cualquier agente).
  */
+// Último mensaje que nos escribió cada número (lo marca el webhook apenas llega, antes de procesarlo).
+const entrantes = new Map<string, number>();
+let tablaLista = false;
+async function tablaVentana() {
+  if (tablaLista) return; const { query } = await import("../db/cliente.js");
+  await query(`CREATE TABLE IF NOT EXISTS wa_ventana (numero TEXT PRIMARY KEY, ultimo_entrante TIMESTAMPTZ NOT NULL)`); tablaLista = true;
+}
+export async function marcarEntrante(numero: string) {
+  const n = limpiar(numero).slice(-10); if (!n) return;
+  entrantes.set(n, Date.now());
+  try { await tablaVentana(); const { query } = await import("../db/cliente.js"); await query(`INSERT INTO wa_ventana (numero, ultimo_entrante) VALUES ($1, now()) ON CONFLICT (numero) DO UPDATE SET ultimo_entrante = now()`, [n]); } catch {}
+}
+
 export async function ventanaAbierta(to: string): Promise<boolean> {
+  const n = to.slice(-10), LIM = 23.5 * 3600_000;
+  const mem = entrantes.get(n);
+  if (mem && Date.now() - mem < LIM) return true;
   try {
     const { query } = await import("../db/cliente.js");
+    await tablaVentana();
+    const [v] = await query<{ ultimo: string | null }>(`SELECT ultimo_entrante AS ultimo FROM wa_ventana WHERE numero = $1`, [n]);
+    if (v?.ultimo && Date.now() - new Date(v.ultimo).getTime() < LIM) return true;
+    // Respaldo: el historial de conversaciones (por si el webhook no alcanzó a marcar).
     const [f] = await query<{ ultimo: string | null }>(
       `SELECT max(m.creado_en) AS ultimo FROM mensajes m JOIN conversaciones c ON c.id = m.conversacion_id
-        WHERE c.canal = 'whatsapp' AND right(regexp_replace(c.contacto, '\D', '', 'g'), 10) = $1 AND m.rol = 'usuario'`, [to.slice(-10)]);
-    return !!f?.ultimo && Date.now() - new Date(f.ultimo).getTime() < 23.5 * 3600_000;
+        WHERE c.canal = 'whatsapp' AND right(regexp_replace(c.contacto, '\D', '', 'g'), 10) = $1 AND m.rol = 'usuario'`, [n]);
+    return !!f?.ultimo && Date.now() - new Date(f.ultimo).getTime() < LIM;
   } catch { return true; }   // si no se puede saber, se intenta como texto
 }
 

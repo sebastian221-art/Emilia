@@ -105,6 +105,7 @@ export async function recibirMensaje(req: Request, res: Response) {
         const mensajes: any[] = cambio.value?.messages || [];
         for (const m of mensajes) {
           if (!(await esNuevo(m.id))) { console.log(`[whatsapp] Duplicado ignorado (${m.id})`); continue; }
+          if (m.from) import("./enviar.js").then((w) => w.marcarEntrante(String(m.from))).catch(() => {});   // abre la ventana de 24 h de ese número
           procesarEntrante(m).catch((e) => console.error("[whatsapp] Error procesando:", e));
         }
       }
