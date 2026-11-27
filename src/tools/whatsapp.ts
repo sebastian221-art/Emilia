@@ -48,7 +48,7 @@ export const whatsappEnviarPlantilla: DefTool = {
   requiereAprobacion: false,
   async ejecutar(a) {
     const b = bloqueado(a.numero); if (b) return b;
-    const r = await enviarPlantillaWhatsapp(a.numero, a.plantilla || "recordatorio_emilia", a.variable, a.idioma || "es");
+    const r = await enviarPlantillaWhatsapp(a.numero, a.plantilla || "recordatorio_emilia", a.variable, a.idioma || undefined);
     return r.ok ? { ok: true, datos: { id: r.id }, resumen: `Plantilla ${a.plantilla || "recordatorio_emilia"} enviada a ${a.numero}.` } : { ok: false, error: r.error };
   },
 };

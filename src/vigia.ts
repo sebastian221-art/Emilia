@@ -62,7 +62,7 @@ export async function avisarDirecto(texto: string): Promise<boolean> {
   // Plantilla primero (funciona fuera de la ventana de 24 h); si no existe, texto.
   const plantilla = process.env.WHATSAPP_PLANTILLA_AVISO || "recordatorio_emilia";
   const linea = texto.replace(/\s*\n+\s*/g, " · ").slice(0, 1000);
-  let r = await post({ messaging_product: "whatsapp", to: jefe, type: "template", template: { name: plantilla, language: { code: process.env.WHATSAPP_PLANTILLA_AVISO_IDIOMA || "es" }, components: [{ type: "body", parameters: [{ type: "text", text: linea }] }] } });
+  let r = await post({ messaging_product: "whatsapp", to: jefe, type: "template", template: { name: plantilla, language: { code: process.env.WHATSAPP_PLANTILLA_IDIOMA || process.env.WHATSAPP_PLANTILLA_AVISO_IDIOMA || "es" }, components: [{ type: "body", parameters: [{ type: "text", text: linea }] }] } });
   if (!r.ok) r = await post({ messaging_product: "whatsapp", to: jefe, type: "text", text: { body: texto.slice(0, 4000) } });
   if (!r.ok) log(`[vigía] no pude avisarte por WhatsApp: ${JSON.stringify(r.j).slice(0, 200)}`);
   return r.ok;

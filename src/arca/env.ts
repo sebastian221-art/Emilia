@@ -20,6 +20,7 @@ export const VARIABLES: Variable[] = [
   { nombre: "WHATSAPP_APP_SECRET", pregunta: "App Secret de tu app de Meta", secreto: true, chequeo: "wa_seguridad" },
   { nombre: "WHATSAPP_VERIFY_TOKEN", pregunta: "Verify token (Enter = te genero uno)", secreto: false, chequeo: "wa_seguridad", generar: () => `emilia-${crypto.randomBytes(9).toString("base64url")}` },
   { nombre: "WHATSAPP_NUMERO_JEFE", pregunta: "Tu número de WhatsApp (57…)", secreto: false, chequeo: "wa_seguridad", validar: digitos },
+  { nombre: "WHATSAPP_PLANTILLA_IDIOMA", pregunta: "Idioma con el que Meta aprobó tus plantillas (es, en, es_MX…)", secreto: false, chequeo: "wa_plantillas", validar: (v) => (/^[a-z]{2}(_[A-Z]{2})?$/.test(v) ? null : "Ej: es, en, es_MX") },
   { nombre: "NGROK_AUTHTOKEN", pregunta: "Authtoken de ngrok", secreto: true, chequeo: "tunel" },
   { nombre: "NGROK_DOMAIN", pregunta: "Tu dominio fijo de ngrok (algo.ngrok-free.app)", secreto: false, chequeo: "tunel", validar: (v) => (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(v) ? null : "Solo el dominio, sin https://") },
   { nombre: "GOOGLE_CLIENT_ID", pregunta: "ID de cliente OAuth de Google", secreto: false, chequeo: "google" },

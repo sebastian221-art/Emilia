@@ -168,10 +168,13 @@ async function waPlantillas(): Promise<Omit<Chequeo, "ms">> {
   if (vacio(waba)) return { ...base, estado: "aviso", detalle: "Sin WHATSAPP_WABA_ID no puedo revisarlas.", pasos: ["WhatsApp → Configuración de la API: copia el «Identificador de la cuenta de WhatsApp Business» a WHATSAPP_WABA_ID", ...pasosCrear] };
   const r = await fetchJ(`https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || "v21.0"}/${waba}/message_templates?fields=name,status,language&limit=200`, { headers: { Authorization: `Bearer ${t}` } });
   if (!r.ok) return { ...base, estado: "error", detalle: String(r.j?.error?.message || r.status).slice(0, 160) };
-  const est = Object.fromEntries((r.j.data || []).map((p: any) => [p.name, p.status]));
+  const idioma = process.env.WHATSAPP_PLANTILLA_IDIOMA || process.env.WHATSAPP_PLANTILLA_AVISO_IDIOMA || "es";
+  const todas: any[] = r.j.data || [];
+  const est: Record<string, string> = {};
+  for (const n of nombres) { const xs = todas.filter((p) => p.name === n); const enIdioma = xs.find((p) => p.language === idioma); est[n] = enIdioma ? enIdioma.status : xs.length ? `aprobada en ${xs.map((p) => p.language).join("/")} pero Emilia la pide en ${idioma}: pon WHATSAPP_PLANTILLA_IDIOMA=${xs[0].language}` : ""; }
   const mal = nombres.filter((n) => est[n] !== "APPROVED");
   return !mal.length ? { ...base, estado: "ok", detalle: `${nombres.join(" y ")}: aprobadas.` }
-    : { ...base, estado: "falta", detalle: mal.map((n) => `${n}: ${est[n] ? est[n].toLowerCase() : "no existe"}`).join(" · "), pasos: pasosCrear };
+    : { ...base, estado: "falta", detalle: mal.map((n) => `${n}: ${est[n] ? (/^[A-Z_]+$/.test(est[n]) ? est[n].toLowerCase() : est[n]) : "no existe"}`).join(" · "), pasos: pasosCrear };
 }
 async function waSeguridad(): Promise<Omit<Chequeo, "ms">> {
   const base = { id: "wa_seguridad", mision: "whatsapp", nombre: "App Secret, verify token y tu número" };
