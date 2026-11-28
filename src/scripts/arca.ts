@@ -25,6 +25,15 @@ const preguntar = (q: string, secreto = false) => new Promise<string>((res) => {
 function npm(args: string[]) { const r = spawnSync(esWin ? "npm.cmd" : "npm", args, { stdio: "inherit", shell: esWin }); return r.status === 0; }
 
 async function main() {
+  // npm run arca -- probar  → directo a la prueba final (también cuando todo ya está instalado)
+  if (process.argv.includes("probar")) {
+    dotenv.config({ path: RUTA_ENV(), override: true });
+    const { probarTodo } = await import("../arca/pruebas.js");
+    const env = (await preguntar("¿Te mando un WhatsApp real de prueba? (s/n) › ")).toLowerCase().startsWith("s");
+    const inf = await probarTodo({ enviarWhatsapp: env, avance: (x) => console.log(`${C.d}${x}${C.r}`) });
+    console.log("\n" + sinMarkdown(inf.texto) + "\n");
+    rl.close(); process.exit(0);
+  }
   console.log(`\n${C.m}${C.b}  ⚙  ARCA${C.r} ${C.d}— tu técnica. Te guío para dejar a Emilia instalada, probada y cuidándose sola.${C.r}\n`);
   if (asegurarEnv()) console.log(`${C.g}Creé tu .env a partir de .env.example (${RUTA_ENV()}).${C.r}\n`);
   const saltados = new Set<string>();
