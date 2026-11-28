@@ -171,15 +171,32 @@ async function waPlantillas(): Promise<Omit<Chequeo, "ms">> {
   const nombres = [process.env.WHATSAPP_PLANTILLA_AVISO || "recordatorio_emilia", process.env.WHATSAPP_PLANTILLA_TERCEROS || "mensaje_de_sebastian"];
   const pasosCrear = ["business.facebook.com → WhatsApp Manager → Plantillas → Crear", `«${nombres[0]}» (Utilidad, español): cuerpo «{{1}}»`, `«${nombres[1]}» (Utilidad, español): cuerpo «Mensaje de Sebastián: {{1}}»`, "Espera la aprobación (suele tardar minutos)"];
   if (vacio(t)) return { ...base, estado: "omitido", detalle: "Primero el token." };
-  if (vacio(waba)) return { ...base, estado: "aviso", detalle: "Sin WHATSAPP_WABA_ID no puedo revisarlas.", pasos: ["WhatsApp → Configuración de la API: copia el «Identificador de la cuenta de WhatsApp Business» a WHATSAPP_WABA_ID", ...pasosCrear] };
-  const r = await fetchJ(`https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || "v21.0"}/${waba}/message_templates?fields=name,status,language&limit=200`, { headers: { Authorization: `Bearer ${t}` } });
-  if (!r.ok) return { ...base, estado: "error", detalle: String(r.j?.error?.message || r.status).slice(0, 160) };
+  const v = process.env.WHATSAPP_API_VERSION || "v21.0";
+  const plantillas = (id: string) => fetchJ(`https://graph.facebook.com/${v}/${id}/message_templates?fields=name,status,language&limit=200`, { headers: { Authorization: `Bearer ${t}` } });
+  let r = vacio(waba) ? null : await plantillas(waba!);
+  let corregido = "";
+  if (!r || !r.ok) {
+    // ¿El ID es otro (de la app o del portafolio)? El token sabe a qué cuenta de WhatsApp Business tiene acceso.
+    const d = await fetchJ(`https://graph.facebook.com/${v}/debug_token?input_token=${encodeURIComponent(t!)}`, { headers: { Authorization: `Bearer ${t}` } }).catch(() => null);
+    const ids: string[] = [...new Set<string>(((d?.j?.data?.granular_scopes || []) as any[]).filter((g) => /whatsapp_business_(management|messaging)/.test(g.scope)).flatMap((g) => g.target_ids || []))];
+    for (const id of ids) {
+      if (id === waba) continue;
+      const rr = await plantillas(id);
+      if (rr.ok) {
+        r = rr; corregido = id;
+        try { const { escribirVariable } = await import("./env.js"); escribirVariable("WHATSAPP_WABA_ID", id); } catch { process.env.WHATSAPP_WABA_ID = id; }
+        break;
+      }
+    }
+  }
+  if (!r) return { ...base, estado: "aviso", detalle: "Sin WHATSAPP_WABA_ID no puedo revisarlas (y no lo pude averiguar con el token).", pasos: ["developers.facebook.com → tu app → WhatsApp → Configuración de la API: copia el «Identificador de la cuenta de WhatsApp Business» a WHATSAPP_WABA_ID", ...pasosCrear] };
+  if (!r.ok) return { ...base, estado: "error", detalle: `${String(r.j?.error?.message || r.status).slice(0, 120)} — ese WHATSAPP_WABA_ID no es el de la cuenta de WhatsApp Business.`, pasos: ["developers.facebook.com → tu app → WhatsApp → Configuración de la API: debajo del número sale «Identificador de la cuenta de WhatsApp Business». Ese va en WHATSAPP_WABA_ID"] };
   const idioma = process.env.WHATSAPP_PLANTILLA_IDIOMA || process.env.WHATSAPP_PLANTILLA_AVISO_IDIOMA || "es";
   const todas: any[] = r.j.data || [];
   const est: Record<string, string> = {};
   for (const n of nombres) { const xs = todas.filter((p) => p.name === n); const enIdioma = xs.find((p) => p.language === idioma); est[n] = enIdioma ? enIdioma.status : xs.length ? `aprobada en ${xs.map((p) => p.language).join("/")} pero Emilia la pide en ${idioma}: pon WHATSAPP_PLANTILLA_IDIOMA=${xs[0].language}` : ""; }
   const mal = nombres.filter((n) => est[n] !== "APPROVED");
-  return !mal.length ? { ...base, estado: "ok", detalle: `${nombres.join(" y ")}: aprobadas.` }
+  return !mal.length ? { ...base, estado: "ok", detalle: `${nombres.join(" y ")}: aprobadas.${corregido ? ` (Corregí WHATSAPP_WABA_ID a ${corregido}: el que tenías no era el de la cuenta.)` : ""}` }
     : { ...base, estado: "falta", detalle: mal.map((n) => `${n}: ${est[n] ? (/^[A-Z_]+$/.test(est[n]) ? est[n].toLowerCase() : est[n]) : "no existe"}`).join(" · "), pasos: pasosCrear };
 }
 async function waSeguridad(): Promise<Omit<Chequeo, "ms">> {
