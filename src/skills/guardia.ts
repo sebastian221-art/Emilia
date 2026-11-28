@@ -142,7 +142,8 @@ async function ronda(a: any, ctx: ContextoEjecucion) {
   }
   const resumen = `🛡 Ronda de guardia (${new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}):\n${lineas.join("\n") || "Nada que vigilar todavía (guardia_configurar)."}`;
   await ctx.traza("skill", resumen.slice(0, 1500)).catch(() => {});
-  return { ok: true, datos: { graves_nuevos: graves.length, resueltos: resueltosGraves.length }, resumen };
+  // Si no hubo nada grave ni resuelto, la ronda no te escribe (queda en la traza y en el panel).
+  return { ok: true, datos: { graves_nuevos: graves.length, resueltos: resueltosGraves.length, silencio: !graves.length && !resueltosGraves.length }, resumen };
 }
 
 /** Arregla los graves de un objetivo en una sola pasada (proyecto: sandbox + pedir OK; publicado: corrige y republica). */

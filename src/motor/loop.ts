@@ -77,6 +77,14 @@ function cerebros(ag: any): { planificador: string; ejecutor: string } {
 }
 function proveedorDe(modelo: string) { return /^(claude|anthropic):/i.test(modelo) ? "anthropic" : "groq"; }
 
+/** ¿El texto está en español? (el ejecutor a veces piensa o escribe en inglés). */
+export function pareceEspanol(t: string): boolean {
+  const x = ` ${t.toLowerCase()} `;
+  const es = (x.match(/\b(el|la|los|las|de|que|en|tu|tienes|para|con|no|hay|está|son|un|una|por|del|se)\b/g) || []).length;
+  const en = (x.match(/\b(the|we|need|you|is|are|have|to|and|of|with|this|that)\b/g) || []).length;
+  return /[áéíóúñ¿¡]/.test(t) ? es >= en : es > en * 1.5 && es >= 2;
+}
+
 interface Estado {
   ejId: string;
   agenteId: string;
@@ -86,6 +94,7 @@ interface Estado {
   planificador?: string;     // el que decide (primer turno, fallos, cierre). Si no hay, = modelo.
   escalar?: boolean;         // el próximo turno lo toma el planificador
   cierreHecho?: boolean;
+  fallos?: number;
   temperatura: number;
   maxTurnos: number;
   maxToolCalls: number;
@@ -289,7 +298,11 @@ async function bucle(e: Estado, toolsIniciales: ChatCompletionTool[], invocables
       if (dosCerebros) await ctx.traza("pensamiento", `[cerebro: ${usaPlanificador ? "planificador" : "ejecutor"} · ${modeloTurno}]`);
       // El consumo lo registra llamarModelo (con el agente y la ejecución del contexto).
       // Cierre: si el ejecutor cree que terminó (sin más tools) tras haber trabajado, la respuesta final la escribe el planificador.
-      if (dosCerebros && !usaPlanificador && !r.toolCalls.length && e.toolCalls > 0 && !e.cierreHecho) {
+      // Tarea simple y limpia (1-2 herramientas, sin fallos, borrador en español): el borrador del ejecutor ya sirve;
+      // no se paga otra vuelta del planificador. Emilia siempre cierra con su cerebro bueno (su voz es ella).
+      const borrador = (r.texto || "").trim();
+      const simple = e.toolCalls <= 2 && !e.fallos && borrador.length >= 15 && pareceEspanol(borrador) && String(e.ag?.nombre || "").toLowerCase() !== "emilia";
+      if (dosCerebros && !usaPlanificador && !r.toolCalls.length && e.toolCalls > 0 && !e.cierreHecho && !simple) {
         e.cierreHecho = true; e.escalar = true;
         e.mensajes.push({ role: "system", content: `Borrador del ejecutor (no se mostró al jefe): "${(r.texto || "").slice(0, 800)}". Escribe tú la respuesta final para el jefe con lo que realmente pasó, o llama la herramienta que falte.` });
         await ctx.traza("pensamiento", "[cerebro: el ejecutor dio por terminado; el planificador redacta el cierre]");
@@ -519,10 +532,13 @@ async function procesarPendientes(e: Estado, invocables: Map<string, Invocable>,
       const textoEnviado = String(tc.argumentos.mensaje ?? tc.argumentos.texto ?? "");
       if (textoEnviado && inv.nombre.startsWith("whatsapp_enviar")) e.mensajesEnviados.push(textoEnviado);
     }
+    if (!resultado.ok) e.fallos = (e.fallos || 0) + 1;
     let contenido = JSON.stringify(resultado).slice(0, 4000);
     if (esFuenteExterna(inv.nombre)) {
       contenido = marcarExterno(inv.nombre, contenido);
-      if (resultado.ok && !e.contaminada) {
+      // Un resultado vacío ("nadie ha escrito", "no hay correos") no trae texto de nadie: no contamina.
+      const vacio = (Array.isArray(resultado.datos) && !resultado.datos.length) || /^(nadie|no hay|nada|sin |ningún|ninguna|0 )/i.test(String(resultado.resumen || "").trim()) && String(resultado.resumen || "").length < 160;
+      if (resultado.ok && !e.contaminada && !vacio) {
         e.contaminada = `${inv.nombre}`;
         await marcarEjecucion(e.ejId, e.contaminada);
         await ctx.traza("verificacion", `Leí contenido externo (${inv.nombre}): desde ahora, toda acción hacia afuera pide OK.`);
@@ -556,6 +572,7 @@ export async function armarSistema(ag: any, invocables: Map<string, Invocable>, 
     "REGLA DE ESTADO ACTUAL: cualquier pregunta sobre cómo están las cosas AHORA (qué hay en pantalla, qué archivos hay, qué campañas/envíos/procesos existen, cómo va algo) se responde llamando la herramienta en ESTE turno. Lo que viste en turnos anteriores ya no vale. Y el resultado es lo que la herramienta DEVUELVE, nunca lo que tú pusiste en sus argumentos: no inventes datos en los argumentos.",
     "REGLA DE APROBACIONES: no pidas permiso por texto. Si una acción requiere aprobación, llama la herramienta igual: el sistema pausa y le pide el OK al jefe por su canal. Preguntar '¿procedo?' y no llamar nada deja la tarea a medias.",
     REGLA_EXTERNO,
+    "IDIOMA: todo lo que escribas va en español, también tus notas internas entre una herramienta y otra (no pienses en inglés).",
     "REGLA DE FUENTE: cuando una herramienta devuelve un resultado (informe, datos, estado), tu respuesta se basa SOLO en ese resultado. No mezcles con lo que dijiste antes en la conversación ni con lo que crees recordar del sistema: lo anterior puede estar desactualizado; el resultado de la herramienta es la verdad actual.",
   ].filter(Boolean).join("\n");
 

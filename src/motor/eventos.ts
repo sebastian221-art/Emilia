@@ -57,7 +57,7 @@ export async function ejecutarDisparador(d: Disparador, evento: { nombre: string
     } else if (d.accion.tipo === "skill") {
       const r = await ejecutarSkill(d.accion.nombre, args, crearContexto(agenteId, null, null, padre));
       resultado = `skill ${d.accion.nombre} → ${r.ok ? "ok" : "error: " + r.error}`;
-      if (padre && r.resumen) await entregarTexto(padre, `⚡ ${d.nombre}: ${r.resumen.slice(0, 1500)}`);
+      if (padre && r.resumen && !(r.datos as any)?.silencio) await entregarTexto(padre, `⚡ ${d.nombre}: ${r.resumen.slice(0, 1500)}`);
     } else {
       if (!agenteId) throw new Error("no hay agente para la orden");
       const instruccion = String(plantilla(d.accion.instruccion || d.accion.nombre, ctx));

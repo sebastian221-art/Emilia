@@ -19,7 +19,7 @@ const libre = () => (process.env.PC_CONTROL_LIBRE || "").toLowerCase() === "true
 
 export const pcOperar: DefTool = {
   nombre: "pc_operar", modulo: MODULO,
-  descripcion: "OPERA el computador como una persona: Claude ve la pantalla y usa mouse y teclado para cumplir una tarea en lenguaje natural (cualquier app de Windows, páginas, AnyDesk, PuTTY…). Respeta un PERFIL de seguridad: 'general' (tu PC) o p. ej. 'hospital_lectura' (solo AnyDesk+PuTTY, comandos de solo lectura, cada uno con tu OK por WhatsApp). Ej: 'en la calculadora haz 2x2 y dime el resultado', 'abre el Excel de ventas y dime el total de marzo', 'entra por AnyDesk al PC del hospital y revisa en PuTTY el espacio en disco del servidor' (perfil hospital_lectura). Se detiene y pregunta ante contraseñas que no tenga autorizadas, pagos o decisiones.",
+  descripcion: "NO lo uses para solo MIRAR o describir la pantalla: para eso está pc_ver_pantalla (sin OK, más rápido y gratis). OPERA el computador como una persona: Claude ve la pantalla y usa mouse y teclado para cumplir una tarea en lenguaje natural (cualquier app de Windows, páginas, AnyDesk, PuTTY…). Respeta un PERFIL de seguridad: 'general' (tu PC) o p. ej. 'hospital_lectura' (solo AnyDesk+PuTTY, comandos de solo lectura, cada uno con tu OK por WhatsApp). Ej: 'en la calculadora haz 2x2 y dime el resultado', 'abre el Excel de ventas y dime el total de marzo', 'entra por AnyDesk al PC del hospital y revisa en PuTTY el espacio en disco del servidor' (perfil hospital_lectura). Se detiene y pregunta ante contraseñas que no tenga autorizadas, pagos o decisiones.",
   parametros: {
     type: "object",
     properties: {

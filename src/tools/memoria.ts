@@ -27,6 +27,13 @@ export async function conversacionDelJefe(conversacionId?: string | null): Promi
 }
 const fecha = (d: string | null) => (d ? new Date(d).toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "numeric", month: "short", year: "numeric" }) : "");
 
+/** La carpeta "emilia" (su diario, su historia) es solo de Emilia. Para cualquier otro agente, "emilia" es el PROYECTO Emilia. */
+async function carpetaSegura(carpeta: string | undefined, ctx: any): Promise<string | undefined> {
+  if (carpeta !== "emilia") return carpeta;
+  const [a] = ctx?.agenteId ? await query<{ nombre: string }>(`SELECT nombre FROM agentes WHERE id = $1`, [ctx.agenteId]).catch(() => [] as any[]) : [];
+  return a && a.nombre.toLowerCase() === "emilia" ? "emilia" : "proyecto:emilia";
+}
+
 export const memoriaRecordar: DefTool = {
   nombre: "memoria_recordar", modulo: MODULO,
   descripcion: "Busca en el cerebro compartido (memoria y conocimiento del equipo) por significado y palabras: hechos, lo que pasó, cómo se hace algo, personas, lecciones, y lo que se sabe del jefe. Para 'te acuerdas de…', 'qué sabemos de…', 'qué pasó con…', 'cómo se arregló…'.",
@@ -40,6 +47,7 @@ export const memoriaRecordar: DefTool = {
   async ejecutar(a, ctx) {
     const delJefe = await conversacionDelJefe(ctx?.conversacionId);
     if (a.carpeta === "personal" && !delJefe) return { ok: false, error: "Lo personal del jefe no se consulta en conversaciones con otras personas." };
+    a.carpeta = await carpetaSegura(a.carpeta, ctx);
     const xs = await recordar(a.texto, { espacios: a.carpeta ? [a.carpeta] : ["*"], clases: a.clase ? [a.clase as Clase] : undefined, max: a.limite || 10, incluirPrivado: delJefe });
     const { abrirResumen } = await import("../motor/cifrado.js");
     const lineas = [];
@@ -68,7 +76,7 @@ export const memoriaGuardar: DefTool = {
     const titulo = a.titulo || (a.clave ? `${sujeto ? `${sujeto}: ` : ""}${String(a.clave).replace(/_/g, " ")}` : String(a.contenido).slice(0, 60));
     const porCategoria: Record<string, Clase> = { personal: "perfil", preferencia: "perfil", persona: "persona", contacto: "persona", decision: "hecho", trabajo: "hecho", proyecto: "hecho", general: "hecho" };
     const clase: Clase = a.clase || (a.categoria && porCategoria[a.categoria]) || (sujeto ? "persona" : a.sujeto === "jefe" ? "perfil" : "hecho");
-    const carpeta = a.carpeta || (clase === "perfil" || clase === "persona" ? "personal" : "general");
+    const carpeta = (await carpetaSegura(a.carpeta, ctx)) || (clase === "perfil" || clase === "persona" ? "personal" : "general");
     if (carpeta === "personal" && !(await conversacionDelJefe(ctx?.conversacionId))) return { ok: false, error: "No guardo cosas personales del jefe desde conversaciones con otras personas." };
     const r = await guardarRecuerdo({ titulo, contenido: a.contenido, clase, espacio: carpeta, importancia: a.importancia, ocurrioEn: a.cuando || null, confianza: 0.95, origenRef: ctx?.conversacionId ? `conversacion:${ctx.conversacionId}` : null, agenteId: ctx?.agenteId ?? null });
     return { ok: true, datos: { slug: r.nodo.slug, accion: r.accion }, resumen: r.accion === "reforzado" ? `Ya lo sabía ("${r.parecido?.titulo}"); lo reforcé.` : `${r.accion === "creado" ? "Guardado" : "Actualizado"}: ${r.nodo.titulo}${r.parecido && r.accion === "actualizado" ? ` (junto con lo que ya sabía)` : ""}.` };
