@@ -23,10 +23,12 @@ export interface Chequeo {
 const esWin = process.platform === "win32";
 const RAIZ = process.cwd();
 
-export function correr(cmd: string, args: string[], seg = 20): Promise<{ codigo: number; salida: string }> {
+export function correr(cmd: string, args: string[], seg = 20, reintento = true): Promise<{ codigo: number; salida: string; tardo?: boolean }> {
   return new Promise((res) => {
     execFile(cmd, args, { timeout: seg * 1000, windowsHide: true, maxBuffer: 8 << 20, shell: esWin && !/\.exe$/i.test(cmd) }, (err: any, out, errOut) => {
-      res({ codigo: err ? (typeof err.code === "number" ? err.code : 127) : 0, salida: `${out || ""}${errOut || ""}`.trim() });
+      // Con muchas revisiones en paralelo, Windows a veces tarda en arrancar un programa: eso no es "no está instalado".
+      if (err?.killed && reintento) return correr(cmd, args, seg * 2, false).then(res);
+      res({ codigo: err ? (typeof err.code === "number" ? err.code : 127) : 0, salida: `${out || ""}${errOut || ""}`.trim(), tardo: !!err?.killed });
     });
   });
 }
@@ -231,6 +233,7 @@ async function webhook(): Promise<Omit<Chequeo, "ms">> {
 async function docker(): Promise<Omit<Chequeo, "ms">> {
   const base = { id: "docker", mision: "manos", nombre: "Docker (laboratorio de System)" };
   const v = await correr("docker", ["--version"]);
+  if (v.tardo) return { ...base, estado: "aviso", detalle: "Docker no respondió a tiempo (el PC estaba ocupado). Vuelve a revisar." };
   if (v.codigo !== 0) return { ...base, estado: "falta", detalle: "No está instalado.", pasos: ["Instala Docker Desktop (Arca puede hacerlo)", "Ábrelo una vez y acepta los términos", "Activa «Start Docker Desktop when you sign in»"], instalable: "docker" };
   const i = await correr("docker", ["info", "--format", "{{.ServerVersion}}"], 20);
   return i.codigo === 0 ? { ...base, estado: "ok", detalle: `Corriendo (motor ${i.salida}).` } : { ...base, estado: "aviso", detalle: "Instalado pero apagado.", pasos: ["Abre Docker Desktop"] };
@@ -253,6 +256,7 @@ async function navegadores(): Promise<Omit<Chequeo, "ms">> {
 async function claudeCode(): Promise<Omit<Chequeo, "ms">> {
   const base = { id: "claude_code", mision: "manos", nombre: "Claude Code (las manos de Sage)" };
   const r = await correr(process.env.CLAUDE_CODE_BIN || "claude", ["--version"]);
+  if (r.tardo) return { ...base, estado: "aviso", detalle: "Claude Code no respondió a tiempo (el PC estaba ocupado). Vuelve a revisar." };
   return r.codigo === 0 ? { ...base, estado: "ok", detalle: r.salida.split("\n")[0] }
     : { ...base, estado: "falta", detalle: "No está instalado: Sage no puede programar.", pasos: ["npm install -g @anthropic-ai/claude-code", "Corre «claude» una vez e inicia sesión"], instalable: "claude_code" };
 }
