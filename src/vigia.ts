@@ -32,9 +32,10 @@ const esWin = process.platform === "win32";
 fs.mkdirSync(DATA, { recursive: true }); fs.mkdirSync(LOGS, { recursive: true });
 
 // ── Estado persistente (para que el servidor y Arca lo lean) ──
-interface EstadoVigia { inicio: string; reinicios: { t: string; motivo: string }[]; version: string | null; actualizacion?: { t: string; de: string; a: string; ok: boolean; detalle: string }; pendiente?: { hash: string; commits: number; avisado: string } }
+interface EstadoVigia { inicio: string; pid?: number; reinicios: { t: string; motivo: string }[]; version: string | null; actualizacion?: { t: string; de: string; a: string; ok: boolean; detalle: string }; pendiente?: { hash: string; commits: number; avisado: string } }
 let estado: EstadoVigia = (() => { try { return JSON.parse(fs.readFileSync(ESTADO, "utf8")); } catch { return { inicio: new Date().toISOString(), reinicios: [], version: null }; } })();
 estado.inicio = new Date().toISOString();
+estado.pid = process.pid;
 const guardar = () => { try { fs.writeFileSync(ESTADO, JSON.stringify(estado, null, 2)); } catch {} };
 
 // ── Logs con rotación ──

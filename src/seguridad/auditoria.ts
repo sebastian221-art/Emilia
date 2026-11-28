@@ -1,6 +1,8 @@
 // ARCHIVO: src/seguridad/auditoria.ts
 // Revisión de seguridad en código (no en el modelo): la corre Arca, el panel y
 // `npm run seguridad`. Cada chequeo dice ok / atención / grave y qué hacer.
+import fs from "node:fs";
+import path from "node:path";
 import { query } from "../db/cliente.js";
 
 export type Nivel = "ok" | "atencion" | "grave";
@@ -45,7 +47,13 @@ export async function auditarSeguridad(): Promise<Chequeo[]> {
     : { id: "cerebro_llave", nombre: "Memoria personal cifrada", nivel: "grave", detalle: "No hay llave del cerebro.", arreglo: "npm run cerebro:llave" });
 
   // ── Autonomía: vigía y respaldo de llaves ──
-  add(env.EMILIA_VIGIA === "1"
+  const vigiaVivo = env.EMILIA_VIGIA === "1" || (() => {
+    try {
+      const e = JSON.parse(fs.readFileSync(path.resolve(env.DATA_DIR || "data", "vigia.json"), "utf8"));
+      if (!e.pid) return false; process.kill(e.pid, 0); return true;   // señal 0: solo pregunta si el proceso existe
+    } catch { return false; }
+  })();
+  add(vigiaVivo
     ? { id: "vigia", nombre: "Corre con el vigía", nivel: "ok", detalle: "Si se cae o se cuelga, se levanta sola." }
     : { id: "vigia", nombre: "Corre con el vigía", nivel: "atencion", detalle: "Corre sin vigía: si se cae, se queda caída.", arreglo: "npm run inicio:instalar (arranca con Windows) o npm run vigia." });
   const { ultimoRespaldo } = await import("./respaldo-llaves.js");

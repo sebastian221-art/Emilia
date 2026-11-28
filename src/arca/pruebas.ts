@@ -37,7 +37,11 @@ async function motor(): Promise<Componente> {
       if (!/ok/i.test(r.texto)) throw new Error(`respondió «${r.texto.slice(0, 40)}»`); return r.uso?.modelo || "OK";
     }));
   } else ps.push({ nombre: "Claude", ok: false, detalle: "Sin ANTHROPIC_API_KEY: Emilia, el alma y Sage van con Groq (más flojo)." });
-  ps.push(await medir("Plan B configurado", async () => { if (!process.env.MODELO_RESPALDO_GROQ && !process.env.MODELO_RESPALDO_CLAUDE) throw new Error("sin MODELO_RESPALDO_*"); return "sí"; }));
+  ps.push(await medir("Plan B (si un proveedor falla, usa el otro)", async () => {
+    if (!process.env.GROQ_API_KEY || !process.env.ANTHROPIC_API_KEY) throw new Error("con una sola llave no hay a quién pasarse si ese proveedor se cae");
+    if (process.env.MODELO_RESPALDO_CLAUDE === "no") throw new Error("MODELO_RESPALDO_CLAUDE=no lo desactiva");
+    return `Claude → ${process.env.MODELO_RESPALDO_GROQ || "Groq"} · Groq → ${process.env.MODELO_RESPALDO_CLAUDE || "claude:haiku"}`;
+  }));
   for (const p of ps) if (p.ok && (p.ms || 0) > 20_000) { p.ok = false; p.detalle = `respondió, pero tardó ${Math.round(p.ms! / 1000)} s`; }
   return { id: "motor", nombre: "Motor (modelos)", nota: nota(ps), pruebas: ps, arreglo: ps.some((p) => !p.ok) ? "Revisa las llaves con «Arca, revisa el cerebro»." : undefined };
 }
@@ -102,6 +106,13 @@ const CASOS: Record<string, { pedido: string; espera: RegExp }> = {
 };
 
 async function agentes(): Promise<Componente[]> {
+  // Desde la terminal (npm run arca) el registro de herramientas no está cargado: sin él los agentes no tienen tools.
+  const { registro } = await import("../registro/registro.js");
+  if (!registro.tools().length) {
+    const { iniciarRegistro } = await import("../registro/cargar.js");
+    const log = console.log; console.log = () => {};
+    try { await iniciarRegistro(); } finally { console.log = log; }
+  }
   const { correrTarea } = await import("../motor/loop.js");
   const { obtenerOCrearConversacion } = await import("../dominio/conversaciones.js");
   const ags = await query<{ id: string; nombre: string }>(`SELECT id, nombre FROM agentes WHERE estado = 'activo' AND lower(nombre) <> 'arca' ORDER BY nombre`);
