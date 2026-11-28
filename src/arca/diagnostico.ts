@@ -196,7 +196,7 @@ async function waPlantillas(): Promise<Omit<Chequeo, "ms">> {
   const idioma = process.env.WHATSAPP_PLANTILLA_IDIOMA || process.env.WHATSAPP_PLANTILLA_AVISO_IDIOMA || "es";
   const todas: any[] = r.j.data || [];
   const est: Record<string, string> = {};
-  for (const n of nombres) { const xs = todas.filter((p) => p.name === n); const enIdioma = xs.find((p) => p.language === idioma); est[n] = enIdioma ? enIdioma.status : xs.length ? `aprobada en ${xs.map((p) => p.language).join("/")} pero Emilia la pide en ${idioma}: pon WHATSAPP_PLANTILLA_IDIOMA=${xs[0].language}` : ""; }
+  for (const n of nombres) { const xs = todas.filter((p) => p.name === n); const enIdioma = xs.find((p) => !p.language || p.language === idioma); est[n] = enIdioma ? enIdioma.status : xs.length ? `aprobada en ${xs.map((p) => p.language).join("/")} pero Emilia la pide en ${idioma}: pon WHATSAPP_PLANTILLA_IDIOMA=${xs[0].language}` : ""; }
   const mal = nombres.filter((n) => est[n] !== "APPROVED");
   return !mal.length ? { ...base, estado: "ok", detalle: `${nombres.join(" y ")}: aprobadas.${corregido ? ` (Corregí WHATSAPP_WABA_ID a ${corregido}: el que tenías no era el de la cuenta.)` : ""}` }
     : { ...base, estado: "falta", detalle: mal.map((n) => `${n}: ${est[n] ? (/^[A-Z_]+$/.test(est[n]) ? est[n].toLowerCase() : est[n]) : "no existe"}`).join(" · "), pasos: pasosCrear };
