@@ -227,6 +227,12 @@ async function revisarPedido() {
 
 // ── Arranque ──
 if (process.argv[1] && /vigia\.(ts|js|mjs)$/.test(process.argv[1]) && !process.env.VIGIA_NO_ARRANCAR) {
+  // ¿Ya hay una Emilia corriendo (por ejemplo, la que arranca sola con Windows)? Entonces no se arranca otra.
+  const yaCorre = await fetch(`http://127.0.0.1:${PORT}/api/salud`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok || r.status === 503).catch(() => false);
+  if (yaCorre) {
+    console.log(`\n✅ Emilia ya está corriendo (en segundo plano, arrancó con Windows). No hace falta "npm run vigia".\n   Panel: http://127.0.0.1:${PORT}\n   Para reiniciarla: Stop-ScheduledTask Emilia; Start-ScheduledTask Emilia\n`);
+    process.exit(0);
+  }
   log(`[vigía] Vigía arriba (pid ${process.pid}). Panel en http://127.0.0.1:${PORT}`);
   arrancar("inicio");
   setInterval(revisarSalud, CADA_MS);
